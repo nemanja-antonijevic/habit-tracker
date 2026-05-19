@@ -1,22 +1,22 @@
-  # IntelliJ
-  .idea/
-  *.iml
-  out/
+# IntelliJ
+.idea/
+*.iml
+out/
 
-  # Build
-  target/
-  build/
-  *.jar
-  *.war
+# Build
+target/
+build/
+*.jar
+*.war
 
-  # OS
-  .DS_Store
-  Thumbs.db
+# OS
+.DS_Store
+Thumbs.db
 
-  # Logs
-  *.log
-  logs/
+# Logs
+*.log
+logs/
 
-  # Spring
-  application-local.yml
-  application-secret.yml
+# Spring
+application-local.yml
+application-secret.yml

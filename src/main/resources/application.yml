@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: habit-tracker
+  datasource:
+    url: jdbc:mysql://localhost:3306/habits
+    username: habits
+    password: habits
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQLDialect
+    show-sql: true
+  flyway:
+    enabled: true
+
+server:
+  port: 8080
+
+logging:
+  level:
+    com.nantonijevic.habits: DEBUG
