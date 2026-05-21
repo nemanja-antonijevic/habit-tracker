@@ -37,7 +37,16 @@ public class HabitController {
     @GetMapping("/{id}")
     public HabitResponse getById(@PathVariable Long id) {
         var habit = repository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));;
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         return HabitResponse.from(habit);
     }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable Long id) {
+        var habit = repository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        repository.delete(habit);
+    }
+
 }

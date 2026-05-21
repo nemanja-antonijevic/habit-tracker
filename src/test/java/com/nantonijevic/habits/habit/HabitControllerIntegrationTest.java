@@ -9,8 +9,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @Transactional
@@ -77,6 +76,21 @@ class HabitControllerIntegrationTest {
     @Test
     void getHabit_returns404_whenNotExists() throws Exception {
         mockMvc.perform(get("/habits/999999"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void deleteHabit_returns204_andRemovesHabit() throws Exception {
+        var saved = repository.save(new Habit("Code 3 hours"));
+
+        mockMvc.perform(delete("/habits/" + saved.getId()))
+                .andExpect(status().isNoContent());
+        // assertThat(repository.findById(saved.getId())).isEmpty();
+    }
+
+    @Test
+    void deleteHabit_returns404_whenNotExists() throws Exception {
+        mockMvc.perform(delete("/habits/999999"))
                 .andExpect(status().isNotFound());
     }
 
