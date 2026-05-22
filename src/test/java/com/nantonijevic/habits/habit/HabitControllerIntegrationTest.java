@@ -94,5 +94,24 @@ class HabitControllerIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    void updateHabit_returns200_andUpdatesHabit() throws Exception {
+        var saved = repository.save(new Habit("Code 3 hours"));
+        String jsonBody = "{\"name\": \"Code 6 hours\"}";
+
+        mockMvc.perform(put("/habits/" + saved.getId()).content(jsonBody).contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(saved.getId()))
+                .andExpect(jsonPath("$.name").value("Code 6 hours"));
+    }
+
+    @Test
+    void updateHabit_returns404_whenNotExists() throws Exception {
+        String jsonBody = "{\"name\": \"Code 6 hours\"}";
+
+        mockMvc.perform(put("/habits/999999").content(jsonBody).contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNotFound());
+    }
+
 
 }

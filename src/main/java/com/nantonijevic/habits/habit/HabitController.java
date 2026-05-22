@@ -49,4 +49,11 @@ public class HabitController {
         repository.delete(habit);
     }
 
+    @PutMapping("/{id}")
+    public Habit update(@PathVariable Long id, @Valid @RequestBody UpdateHabitRequest request) {
+        var habit = repository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        habit.setName(request.name());
+        return repository.save(habit);
+    }
 }

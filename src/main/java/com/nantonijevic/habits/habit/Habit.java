@@ -37,4 +37,8 @@ public class Habit {
     public Instant getCreatedAt() {
         return createdAt;
     }
+
+    public void setName(String name) {
+        this.name = name;
+    }
 }
