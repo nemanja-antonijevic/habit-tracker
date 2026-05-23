@@ -40,6 +40,34 @@ class HabitControllerIntegrationTest {
     }
 
     @Test
+    void createHabit_returns400_whenNameIsBlank() throws Exception {
+        var request = new CreateHabitRequest("");
+
+        mockMvc.perform(post("/habits")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void createHabit_returns400_whenNameIsTooLong() throws Exception {
+        var request = new CreateHabitRequest("a".repeat(256));
+        mockMvc.perform(post("/habits")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void createHabit_returns400_whenNameIsWhitespaceOnly() throws Exception {
+        var request = new CreateHabitRequest("    ");
+        mockMvc.perform(post("/habits")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void listHabits_returnsEmptyArray_whenNoHabits() throws Exception{
         mockMvc.perform(get("/habits"))
                 .andExpect(status().is(200))
@@ -80,6 +108,17 @@ class HabitControllerIntegrationTest {
     }
 
     @Test
+    void getHabit_returnsCorrectHabit_whenMultipleExists() throws Exception {
+        var saved1 = repository.save(new Habit("Sport"));
+        var saved2 = repository.save(new Habit("Reading"));
+
+        mockMvc.perform(get("/habits/" + saved1.getId()))
+                .andExpect(status().is(200))
+                .andExpect(jsonPath("$.id").value(saved1.getId()))
+                .andExpect(jsonPath("$.name").value("Sport"));
+    }
+
+    @Test
     void deleteHabit_returns204_andRemovesHabit() throws Exception {
         var saved = repository.save(new Habit("Code 3 hours"));
 
@@ -113,5 +152,28 @@ class HabitControllerIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    void updateHabit_returns400_whenNameIsBlank_evenIfIdNotFound() throws Exception {
+        String jsonBody = "{\"name\": \"\"}";
 
+        mockMvc.perform(put("/habits/999999").content(jsonBody).contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+    }
+
+
+    @Test
+    void updateHabit_returns400_whenNameIsTooLong() throws Exception {
+        String jsonBody = "{\"name\": \""+ "a".repeat(256) +"\"}";
+
+        mockMvc.perform(put("/habits/999999").content(jsonBody).contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void updateHabit_returns400_whenNameIsWhitespaceOnly() throws Exception {
+        String jsonBody = "{\"name\": \"        \"}";
+
+        mockMvc.perform(put("/habits/999999").content(jsonBody).contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+    }
 }
