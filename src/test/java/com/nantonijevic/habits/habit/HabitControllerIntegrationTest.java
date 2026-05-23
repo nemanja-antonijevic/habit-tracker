@@ -124,7 +124,9 @@ class HabitControllerIntegrationTest {
 
         mockMvc.perform(delete("/habits/" + saved.getId()))
                 .andExpect(status().isNoContent());
-        // assertThat(repository.findById(saved.getId())).isEmpty();
+
+        mockMvc.perform(get("/habits/" + saved.getId()))
+                .andExpect(status().isNotFound());
     }
 
     @Test
