@@ -1,0 +1,15 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: habits-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: habits
+      MYSQL_USER: habits
+      MYSQL_PASSWORD: habits
+    volumes:
+      - habits_data:/var/lib/mysql
+volumes:
+  habits_data:
