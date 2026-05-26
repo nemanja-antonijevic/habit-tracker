@@ -176,4 +176,43 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
         mockMvc.perform(put("/habits/999999").content(jsonBody).contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void completeHabit_returns200_andIncrementsCount() throws Exception {
+        var saved = repository.save(new Habit("Read 30 min"));
+
+        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.completionCount").value(1));
+
+        mockMvc.perform(get("/habits/" + saved.getId()))
+                .andExpect(jsonPath("$.completionCount").value(1));
+    }
+
+    @Test
+    void completeHabit_returns404_whenNotExists() throws Exception {
+        mockMvc.perform(post("/habits/999/complete"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void completeHabit_canBeCalledMultipleTimes() throws Exception {
+        var saved = repository.save(new Habit("Read"));
+
+        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"));
+        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"));
+        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"));
+
+        mockMvc.perform(get("/habits/" + saved.getId()))
+                .andExpect(jsonPath("$.completionCount").value(3));
+    }
+
+    @Test
+    void createHabit_startsWithCompletionCountZero() throws Exception {
+        mockMvc.perform(post("/habits")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"New habit\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.completionCount").value(0));
+    }
 }

@@ -56,4 +56,13 @@ public class HabitController {
         habit.setName(request.name());
         return repository.save(habit);
     }
+
+    @PostMapping("/{id}/complete")
+    public HabitResponse complete(@PathVariable Long id) {
+        var habit = repository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        habit.incrementCompletionCount();
+        repository.save(habit);
+        return HabitResponse.from(habit);
+    }
 }

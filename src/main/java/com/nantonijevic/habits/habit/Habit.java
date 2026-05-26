@@ -15,6 +15,9 @@ public class Habit {
     @Column(nullable = false)
     private String name;
 
+    @Column(name = "completion_count", nullable = false)
+    private int completionCount;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -40,5 +43,13 @@ public class Habit {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public int getCompletionCount() {
+        return completionCount;
+    }
+
+    public void incrementCompletionCount() {
+        this.completionCount++;
     }
 }

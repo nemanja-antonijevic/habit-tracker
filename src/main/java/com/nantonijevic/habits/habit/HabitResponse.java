@@ -5,9 +5,10 @@ import java.time.Instant;
 public record HabitResponse(
         Long id,
         String name,
+        int completionCount,
         Instant createdAt
 ) {
     public static HabitResponse from(Habit habit) {
-        return new HabitResponse(habit.getId(), habit.getName(), habit.getCreatedAt());
+        return new HabitResponse(habit.getId(), habit.getName(), habit.getCompletionCount(), habit.getCreatedAt());
     }
 }
