@@ -65,4 +65,12 @@ public class HabitController {
         repository.save(habit);
         return HabitResponse.from(habit);
     }
+
+    @GetMapping("/{id}/stats")
+    public StatsResponse getStats(@PathVariable Long id) {
+        var habit = repository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        return StatsResponse.from(habit);
+    }
+
 }

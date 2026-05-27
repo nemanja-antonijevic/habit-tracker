@@ -215,4 +215,32 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.completionCount").value(0));
     }
+
+    @Test
+    void getStats_returns404_whenHabitNotExists() throws Exception {
+        mockMvc.perform(get("/habits/999/stats"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getStats_returnsZeroCountAndNullLastCompleted_forNewHabit() throws Exception {
+        var saved = repository.save(new Habit("Read 30 min"));
+
+        mockMvc.perform(get("/habits/" + saved.getId() + "/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.completionCount").value(0))
+                .andExpect(jsonPath("$.lastCompletedAt").isEmpty());
+    }
+
+    @Test
+    void getStats_returnsCorrectCountAndTimestamp_afterComplete() throws Exception {
+        var saved = repository.save(new Habit("Read 30 min"));
+        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"));
+        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"));
+
+        mockMvc.perform(get("/habits/" + saved.getId() + "/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.completionCount").value(2))
+                .andExpect(jsonPath("$.lastCompletedAt").isNotEmpty());
+    }
 }

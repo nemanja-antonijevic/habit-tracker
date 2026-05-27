@@ -18,6 +18,9 @@ public class Habit {
     @Column(name = "completion_count", nullable = false)
     private int completionCount;
 
+    @Column(name = "last_completed_at")
+    private Instant lastCompletedAt;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -49,7 +52,12 @@ public class Habit {
         return completionCount;
     }
 
+    public Instant getLastCompletedAt() {
+        return lastCompletedAt;
+    }
+
     public void incrementCompletionCount() {
         this.completionCount++;
+        this.lastCompletedAt = Instant.now();
     }
 }
