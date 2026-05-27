@@ -73,4 +73,16 @@ public class HabitController {
         return StatsResponse.from(habit);
     }
 
+    @PostMapping("/{id}/uncomplete")
+    public HabitResponse uncomplete(@PathVariable Long id) {
+        var habit = repository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        try {
+            habit.decrementCompletionCount();
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+        repository.save(habit);
+        return HabitResponse.from(habit);
+    }
 }

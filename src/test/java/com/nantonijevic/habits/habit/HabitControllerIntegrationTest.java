@@ -243,4 +243,48 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
                 .andExpect(jsonPath("$.completionCount").value(2))
                 .andExpect(jsonPath("$.lastCompletedAt").isNotEmpty());
     }
+
+    @Test
+    void uncomplete_returns404_whenHabitNotExists() throws Exception {
+        mockMvc.perform(post("/habits/999/uncomplete"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void uncomplete_returns400_whenCountIsZero() throws Exception {
+        var saved = repository.save(new Habit("Read 30 min"));
+        mockMvc.perform(post("/habits/" + saved.getId() + "/uncomplete"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void uncomplete_returns200_andDecrementsCount_andClearsTimestamp() throws Exception {
+        var saved = repository.save(new Habit("Read 30 min"));
+        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"));
+        mockMvc.perform(post("/habits/" + saved.getId() + "/uncomplete"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.completionCount").value(0));
+        mockMvc.perform(get("/habits/" + saved.getId() + "/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.completionCount").value(0))
+                .andExpect(jsonPath("$.lastCompletedAt").isEmpty());
+    }
+
+    @Test
+    void uncomplete_decrementsOnlyByOne() throws Exception {
+        var saved = repository.save(new Habit("Read 30 min"));
+        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"));
+        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"));
+        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"));
+
+        mockMvc.perform(post("/habits/" + saved.getId() + "/uncomplete"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.completionCount").value(2));
+
+        mockMvc.perform(get("/habits/" + saved.getId() + "/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.completionCount").value(2))
+                .andExpect(jsonPath("$.lastCompletedAt").isEmpty());
+    }
+
 }
