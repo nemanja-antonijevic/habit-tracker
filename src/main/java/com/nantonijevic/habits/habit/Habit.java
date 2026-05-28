@@ -3,6 +3,8 @@ package com.nantonijevic.habits.habit;
 import jakarta.persistence.*;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 
 @Entity
 @Table(name = "habits")
@@ -67,5 +69,15 @@ public class Habit {
         }
         this.completionCount--;
         this.lastCompletedAt = null;
+    }
+
+    public void complete(LocalDate today) {
+        ZoneId zone = ZoneId.systemDefault();
+        if (lastCompletedAt != null
+                && LocalDate.ofInstant(lastCompletedAt, zone).equals(today)) {
+            return;
+        }
+        lastCompletedAt = today.atStartOfDay(zone).toInstant();
+        completionCount++;
     }
 }

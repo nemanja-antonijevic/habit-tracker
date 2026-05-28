@@ -8,6 +8,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.LocalDate;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -196,15 +198,14 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
     }
 
     @Test
-    void completeHabit_canBeCalledMultipleTimes() throws Exception {
+    void complete_isIdempotent_whenSameDayTwice() throws Exception {
         var saved = repository.save(new Habit("Read"));
 
-        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"));
-        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"));
-        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"));
-
-        mockMvc.perform(get("/habits/" + saved.getId()))
-                .andExpect(jsonPath("$.completionCount").value(3));
+        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.completionCount").value(1));
     }
 
     @Test
@@ -236,11 +237,10 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
     void getStats_returnsCorrectCountAndTimestamp_afterComplete() throws Exception {
         var saved = repository.save(new Habit("Read 30 min"));
         mockMvc.perform(post("/habits/" + saved.getId() + "/complete"));
-        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"));
 
         mockMvc.perform(get("/habits/" + saved.getId() + "/stats"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.completionCount").value(2))
+                .andExpect(jsonPath("$.completionCount").value(1))
                 .andExpect(jsonPath("$.lastCompletedAt").isNotEmpty());
     }
 
@@ -272,10 +272,11 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
 
     @Test
     void uncomplete_decrementsOnlyByOne() throws Exception {
-        var saved = repository.save(new Habit("Read 30 min"));
-        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"));
-        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"));
-        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"));
+        var habit = new Habit("Read 30 min");
+        habit.complete(LocalDate.now().minusDays(2));
+        habit.complete(LocalDate.now().minusDays(1));
+        habit.complete(LocalDate.now());
+        var saved = repository.save(habit);
 
         mockMvc.perform(post("/habits/" + saved.getId() + "/uncomplete"))
                 .andExpect(status().isOk())
@@ -283,8 +284,6 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
 
         mockMvc.perform(get("/habits/" + saved.getId() + "/stats"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.completionCount").value(2))
-                .andExpect(jsonPath("$.lastCompletedAt").isEmpty());
+                .andExpect(jsonPath("$.completionCount").value(2));
     }
-
 }

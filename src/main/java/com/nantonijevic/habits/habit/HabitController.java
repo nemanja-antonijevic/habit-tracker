@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -61,7 +62,7 @@ public class HabitController {
     public HabitResponse complete(@PathVariable Long id) {
         var habit = repository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        habit.incrementCompletionCount();
+        habit.complete(LocalDate.now());
         repository.save(habit);
         return HabitResponse.from(habit);
     }
