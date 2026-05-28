@@ -58,11 +58,6 @@ public class Habit {
         return lastCompletedAt;
     }
 
-    public void incrementCompletionCount() {
-        this.completionCount++;
-        this.lastCompletedAt = Instant.now();
-    }
-
     public void decrementCompletionCount() {
         if (this.completionCount == 0) {
             throw new IllegalStateException("Cannot uncomplete: count is already zero");
