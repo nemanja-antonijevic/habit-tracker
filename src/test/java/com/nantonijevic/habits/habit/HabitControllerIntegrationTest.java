@@ -110,7 +110,6 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
     @Test
     void getHabit_returnsCorrectHabit_whenMultipleExists() throws Exception {
         var saved1 = repository.save(new Habit("Sport"));
-        var saved2 = repository.save(new Habit("Reading"));
 
         mockMvc.perform(get("/habits/" + saved1.getId()))
                 .andExpect(status().is(200))
@@ -138,7 +137,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
     @Test
     void updateHabit_returns200_andUpdatesHabit() throws Exception {
         var saved = repository.save(new Habit("Code 3 hours"));
-        String jsonBody = "{\"name\": \"Code 6 hours\"}";
+        String jsonBody = "{\"name\": \"Code 6 hours\",\"version\": 0}";
 
         mockMvc.perform(put("/habits/" + saved.getId()).content(jsonBody).contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
@@ -148,7 +147,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
 
     @Test
     void updateHabit_returns404_whenNotExists() throws Exception {
-        String jsonBody = "{\"name\": \"Code 6 hours\"}";
+        String jsonBody = "{\"name\": \"Code 6 hours\",\"version\": 0}";
 
         mockMvc.perform(put("/habits/999999").content(jsonBody).contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound());
@@ -177,6 +176,33 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
 
         mockMvc.perform(put("/habits/999999").content(jsonBody).contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void updateHabit_returns200_whenVersionMatches() throws Exception {
+        var saved = repository.save(new Habit("Code 3 hours"));
+
+        String jsonBody = "{\"name\": \"Sleep\",\"version\": 0}";
+
+        mockMvc.perform(put("/habits/" + saved.getId()).content(jsonBody).contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/habits/" + saved.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(saved.getId()))
+                .andExpect(jsonPath("$.name").value("Sleep"));
+    }
+
+    @Test
+    void updateHabit_returns409_whenVersionStale() throws Exception {
+        var saved = repository.save(new Habit("Code 3 hours"));
+        String jsonBody1 = "{\"name\": \"Sleep\",\"version\": 0}";
+        String jsonBody2 = "{\"name\": \"Eat\",\"version\": 0}";
+
+        mockMvc.perform(put("/habits/" + saved.getId()).content(jsonBody1).contentType(MediaType.APPLICATION_JSON));
+        repository.flush();
+        mockMvc.perform(put("/habits/" + saved.getId()).content(jsonBody2).contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isConflict());
     }
 
     @Test

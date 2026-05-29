@@ -14,6 +14,9 @@ public class Habit {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Version
+    private Long version;
+
     @Column(nullable = false)
     private String name;
 
@@ -32,6 +35,10 @@ public class Habit {
     public Habit(String name) {
         this.name = name;
         this.createdAt = Instant.now();
+    }
+
+    public Long getVersion() {
+        return version;
     }
 
     public Long getId() {

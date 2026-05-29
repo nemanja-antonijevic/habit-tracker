@@ -54,6 +54,11 @@ public class HabitController {
     public Habit update(@PathVariable Long id, @Valid @RequestBody UpdateHabitRequest request) {
         var habit = repository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+
+        if (!habit.getVersion().equals(request.version())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT);
+        }
+
         habit.setName(request.name());
         return repository.save(habit);
     }
