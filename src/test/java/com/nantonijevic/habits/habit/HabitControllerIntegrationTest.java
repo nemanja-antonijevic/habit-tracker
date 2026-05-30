@@ -300,6 +300,18 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
     }
 
     @Test
+    void getStats_returnsCurrentStreak_afterConsecutiveCompletions() throws Exception {
+        var habit = repository.save(new Habit("Read"));
+        habit.complete(LocalDate.now().minusDays(2));
+        habit.complete(LocalDate.now().minusDays(1));
+        repository.save(habit);
+        mockMvc.perform(post("/habits/" + habit.getId() + "/complete"));
+        mockMvc.perform(get("/habits/" + habit.getId() + "/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.currentStreak").value(3));
+    }
+
+    @Test
     void uncomplete_returns404_whenHabitNotExists() throws Exception {
         mockMvc.perform(post("/habits/999/uncomplete"))
                 .andExpect(status().isNotFound());
