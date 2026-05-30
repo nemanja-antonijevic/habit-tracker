@@ -235,6 +235,35 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
     }
 
     @Test
+    void completeHabit_startsStreakAtOne_whenFirstCompletion() throws Exception {
+        var saved = repository.save(new Habit("Read"));
+        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"));
+        mockMvc.perform(get("/habits/" + saved.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.currentStreak").value(1));
+    }
+
+    @Test
+    void completeHabit_continuesStreak_whenCompletedYesterday() throws Exception {
+        var habit = repository.save(new Habit("Read"));
+        habit.complete(LocalDate.now().minusDays(1));
+        repository.save(habit);
+        mockMvc.perform(post("/habits/" + habit.getId() + "/complete"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.currentStreak").value(2));
+    }
+
+    @Test
+    void completeHabit_resetsStreakToOne_whenLastCompletedMoreThanOneDayAgo() throws Exception {
+        var habit = repository.save(new Habit("Read"));
+        habit.complete(LocalDate.now().minusDays(17));
+        repository.save(habit);
+        mockMvc.perform(post("/habits/" + habit.getId() + "/complete"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.currentStreak").value(1));
+    }
+
+    @Test
     void createHabit_startsWithCompletionCountZero() throws Exception {
         mockMvc.perform(post("/habits")
                         .contentType(MediaType.APPLICATION_JSON)

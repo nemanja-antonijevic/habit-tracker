@@ -23,6 +23,9 @@ public class Habit {
     @Column(name = "completion_count", nullable = false)
     private int completionCount;
 
+    @Column(name = "current_streak")
+    private int currentStreak;
+
     @Column(name = "last_completed_at")
     private Instant lastCompletedAt;
 
@@ -47,6 +50,10 @@ public class Habit {
 
     public String getName() {
         return name;
+    }
+
+    public int getCurrentStreak() {
+        return currentStreak;
     }
 
     public Instant getCreatedAt() {
@@ -75,10 +82,23 @@ public class Habit {
 
     public void complete(LocalDate today) {
         ZoneId zone = ZoneId.systemDefault();
-        if (lastCompletedAt != null
-                && LocalDate.ofInstant(lastCompletedAt, zone).equals(today)) {
-            return;
+
+        if (lastCompletedAt != null) {
+            LocalDate lastDate = LocalDate.ofInstant(lastCompletedAt, zone);
+
+            if (lastDate.isEqual(today)) {
+                return;
+            }
+
+            if (lastDate.isEqual(today.minusDays(1))) {
+                currentStreak++;
+            } else {
+                currentStreak = 1;
+            }
+        } else {
+            currentStreak = 1;
         }
+
         lastCompletedAt = today.atStartOfDay(zone).toInstant();
         completionCount++;
     }
