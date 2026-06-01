@@ -353,4 +353,31 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.completionCount").value(2));
     }
+
+    @Test
+    void firstCompleteSetsLongestStreakToOne() throws Exception {
+        var habit = new Habit("Read 30 min");
+        repository.save(habit);
+        mockMvc.perform(post("/habits/" + habit.getId() + "/complete"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/habits/" + habit.getId()  + "/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.currentStreak").value(1))
+                .andExpect(jsonPath("$.longestStreak").value(1));
+    }
+
+    @Test
+    void streakResetDoesNotLowerLongestStreak() throws Exception {
+        var habit = new Habit("Read 30 min");
+        habit.complete(LocalDate.now().minusDays(4));
+        habit.complete(LocalDate.now().minusDays(3));
+        habit.complete(LocalDate.now().minusDays(2));
+        repository.save(habit);
+        mockMvc.perform(post("/habits/" + habit.getId() + "/complete"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/habits/" + habit.getId() + "/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.currentStreak").value(1))
+                .andExpect(jsonPath("$.longestStreak").value(3));
+    }
 }
