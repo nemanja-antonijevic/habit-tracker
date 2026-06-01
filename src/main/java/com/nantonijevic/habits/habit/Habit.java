@@ -23,6 +23,9 @@ public class Habit {
     @Column(name = "completion_count", nullable = false)
     private int completionCount;
 
+    @Column(name = "longest_streak")
+    private int longestStreak;
+
     @Column(name = "current_streak")
     private int currentStreak;
 
@@ -50,6 +53,10 @@ public class Habit {
 
     public String getName() {
         return name;
+    }
+
+    public int getLongestStreak() {
+        return longestStreak;
     }
 
     public int getCurrentStreak() {
@@ -98,6 +105,8 @@ public class Habit {
         } else {
             currentStreak = 1;
         }
+
+        if (currentStreak > longestStreak) longestStreak = currentStreak;
 
         lastCompletedAt = today.atStartOfDay(zone).toInstant();
         completionCount++;
