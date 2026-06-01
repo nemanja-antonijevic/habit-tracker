@@ -264,6 +264,17 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
     }
 
     @Test
+    void completingArchivedHabitReturnsConflict() throws Exception {
+        var saved = repository.save(new Habit("Read"));
+
+        mockMvc.perform(post( "/habits/" + saved.getId() + "/archive"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
     void createHabit_startsWithCompletionCountZero() throws Exception {
         mockMvc.perform(post("/habits")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -379,5 +390,37 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.currentStreak").value(1))
                 .andExpect(jsonPath("$.longestStreak").value(3));
+    }
+
+    @Test
+    void archivedHabitIsExcludedFromList() throws Exception {
+        var habit1 = new Habit("Read");
+        var habit2 = new Habit("Eat");
+
+        repository.save(habit1);
+        repository.save(habit2);
+
+        mockMvc.perform(post("/habits/" + habit1.getId() + "/archive"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/habits"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value("Eat"));
+    }
+
+    @Test
+    void unarchivedHabitReappearsInList() throws Exception {
+        var habit1 = new Habit("Eat");
+        repository.save(habit1);
+
+        mockMvc.perform(post("/habits/" + habit1.getId() + "/archive"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/habits/" + habit1.getId() + "/unarchive"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/habits"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value("Eat"));
     }
 }
