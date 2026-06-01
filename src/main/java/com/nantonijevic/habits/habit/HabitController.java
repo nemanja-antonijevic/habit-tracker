@@ -31,6 +31,7 @@ public class HabitController {
     public List<HabitResponse> list() {
         return repository.findAll()
                 .stream()
+                .filter(habit -> !habit.isArchived())
                 .map(habit -> HabitResponse.from(habit))
               .toList();
     }
@@ -67,7 +68,29 @@ public class HabitController {
     public HabitResponse complete(@PathVariable Long id) {
         var habit = repository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        habit.complete(LocalDate.now());
+        try {
+            habit.complete(LocalDate.now());
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
+        }
+        repository.save(habit);
+        return HabitResponse.from(habit);
+    }
+
+    @PostMapping("/{id}/archive")
+    public HabitResponse archive(@PathVariable Long id) {
+        var habit = repository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        habit.archive();
+        repository.save(habit);
+        return HabitResponse.from(habit);
+    }
+
+    @PostMapping("/{id}/unarchive")
+    public HabitResponse unarchive(@PathVariable Long id) {
+        var habit = repository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        habit.unarchive();
         repository.save(habit);
         return HabitResponse.from(habit);
     }

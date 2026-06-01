@@ -23,6 +23,9 @@ public class Habit {
     @Column(name = "completion_count", nullable = false)
     private int completionCount;
 
+    @Column(nullable = false)
+    private boolean archived;
+
     @Column(name = "longest_streak")
     private int longestStreak;
 
@@ -54,6 +57,8 @@ public class Habit {
     public String getName() {
         return name;
     }
+
+    public boolean isArchived() { return  archived; }
 
     public int getLongestStreak() {
         return longestStreak;
@@ -90,6 +95,8 @@ public class Habit {
     public void complete(LocalDate today) {
         ZoneId zone = ZoneId.systemDefault();
 
+        if(this.archived) throw new IllegalStateException("Cannot complete: archived");
+
         if (lastCompletedAt != null) {
             LocalDate lastDate = LocalDate.ofInstant(lastCompletedAt, zone);
 
@@ -110,5 +117,13 @@ public class Habit {
 
         lastCompletedAt = today.atStartOfDay(zone).toInstant();
         completionCount++;
+    }
+
+    public void archive(){
+        this.archived = true;
+    }
+
+    public void unarchive(){
+        this.archived = false;
     }
 }
