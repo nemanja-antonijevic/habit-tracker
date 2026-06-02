@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 
@@ -17,7 +18,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @Transactional
 @AutoConfigureMockMvc
-class HabitControllerIntegrationTest extends AbstractIntegrationTest{
+class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -73,7 +74,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
     }
 
     @Test
-    void listHabits_returnsEmptyArray_whenNoHabits() throws Exception{
+    void listHabits_returnsEmptyArray_whenNoHabits() throws Exception {
         mockMvc.perform(get("/habits"))
                 .andExpect(status().is(200))
                 .andExpect(jsonPath("$.length()").value(0));
@@ -103,7 +104,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
         mockMvc.perform(get("/habits/" + saved.getId()))
                 .andExpect(status().is(200))
                 .andExpect(jsonPath("$.id").value(saved.getId()))
-              .andExpect(jsonPath("$.name").value("Code 3 hours"));
+                .andExpect(jsonPath("$.name").value("Code 3 hours"));
     }
 
     @Test
@@ -169,7 +170,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
 
     @Test
     void updateHabit_returns400_whenNameIsTooLong() throws Exception {
-        String jsonBody = "{\"name\": \""+ "a".repeat(256) +"\"}";
+        String jsonBody = "{\"name\": \"" + "a".repeat(256) + "\"}";
 
         mockMvc.perform(put("/habits/999999").content(jsonBody).contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isBadRequest());
@@ -272,7 +273,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
     void completingArchivedHabitReturnsConflict() throws Exception {
         var saved = repository.save(new Habit("Read"));
 
-        mockMvc.perform(post( "/habits/" + saved.getId() + "/archive"))
+        mockMvc.perform(post("/habits/" + saved.getId() + "/archive"))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/habits/" + saved.getId() + "/complete"))
@@ -287,13 +288,13 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.completionCount").value(1));
         var rows = completionRepository.findByHabitIdOrderByCompletedOnDesc(saved.getId());
-        assertThat(rows).hasSize(1  );
+        assertThat(rows).hasSize(1);
         assertThat(rows.get(0).getHabitId()).isEqualTo(saved.getId());
         assertThat(rows.get(0).getCompletedOn()).isEqualTo(LocalDate.now());
     }
 
     @Test
-    void complete_doesNotWriteHistory_whenSameDayTwice () throws Exception {
+    void complete_doesNotWriteHistory_whenSameDayTwice() throws Exception {
         var saved = repository.save(new Habit("Read"));
         mockMvc.perform(post("/habits/" + saved.getId() + "/complete"))
                 .andExpect(status().isOk());
@@ -401,7 +402,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
         repository.save(habit);
         mockMvc.perform(post("/habits/" + habit.getId() + "/complete"))
                 .andExpect(status().isOk());
-        mockMvc.perform(get("/habits/" + habit.getId()  + "/stats"))
+        mockMvc.perform(get("/habits/" + habit.getId() + "/stats"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.currentStreak").value(1))
                 .andExpect(jsonPath("$.longestStreak").value(1));
@@ -441,16 +442,45 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
 
     @Test
     void unarchivedHabitReappearsInList() throws Exception {
-        var habit1 = new Habit("Eat");
-        repository.save(habit1);
+        var habit = new Habit("Eat");
+        repository.save(habit);
 
-        mockMvc.perform(post("/habits/" + habit1.getId() + "/archive"))
+        mockMvc.perform(post("/habits/" + habit.getId() + "/archive"))
                 .andExpect(status().isOk());
-        mockMvc.perform(post("/habits/" + habit1.getId() + "/unarchive"))
+        mockMvc.perform(post("/habits/" + habit.getId() + "/unarchive"))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/habits"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].name").value("Eat"));
+    }
+
+    @Test
+    void getHistory_returns404_whenHabitNotExists() throws Exception {
+        mockMvc.perform(get("/habits/999/history"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getHistory_returnsEmptyList_whenNoCompletions() throws Exception {
+        var saved = new Habit("Mess around");
+        repository.save(saved);
+
+        mockMvc.perform(get("/habits/" + saved.getId() + "/history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    void getHistory_returnsCompletions_whenCompleted() throws Exception {
+        var habit = new Habit("Mess around");
+        repository.save(habit);
+
+        mockMvc.perform(post("/habits/" + habit.getId() + "/complete"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/habits/" + habit.getId() + "/history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].completedOn").value(LocalDate.now().toString()));
     }
 }

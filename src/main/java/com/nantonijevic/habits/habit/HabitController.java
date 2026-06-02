@@ -16,10 +16,12 @@ public class HabitController {
 
     private final HabitRepository repository;
     private final HabitService habitService;
+    private final HabitCompletionRepository  completionRepository;
 
-    public HabitController(HabitRepository repository, HabitService habitService) {
+    public HabitController(HabitRepository repository, HabitService habitService, HabitCompletionRepository completionRepository) {
         this.repository = repository;
         this.habitService = habitService;
+        this.completionRepository = completionRepository;
     }
 
     @PostMapping
@@ -112,5 +114,15 @@ public class HabitController {
         }
         repository.save(habit);
         return HabitResponse.from(habit);
+    }
+
+    @GetMapping("/{id}/history")
+    public List<HabitCompletionResponse> getHistory(@PathVariable Long id) {
+        repository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        return completionRepository.findByHabitIdOrderByCompletedOnDesc(id)
+                .stream()
+                .map(HabitCompletionResponse::from)
+                .toList();
     }
 }
