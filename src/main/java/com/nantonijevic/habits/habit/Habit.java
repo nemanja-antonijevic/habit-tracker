@@ -92,7 +92,7 @@ public class Habit {
         this.lastCompletedAt = null;
     }
 
-    public void complete(LocalDate today) {
+    public boolean complete(LocalDate today) {
         ZoneId zone = ZoneId.systemDefault();
 
         if(this.archived) throw new IllegalStateException("Cannot complete: archived");
@@ -101,7 +101,7 @@ public class Habit {
             LocalDate lastDate = LocalDate.ofInstant(lastCompletedAt, zone);
 
             if (lastDate.isEqual(today)) {
-                return;
+                return false;
             }
 
             if (lastDate.isEqual(today.minusDays(1))) {
@@ -117,6 +117,7 @@ public class Habit {
 
         lastCompletedAt = today.atStartOfDay(zone).toInstant();
         completionCount++;
+        return true;
     }
 
     public void archive(){

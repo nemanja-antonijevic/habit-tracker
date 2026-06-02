@@ -15,9 +15,11 @@ import java.util.List;
 public class HabitController {
 
     private final HabitRepository repository;
+    private final HabitService habitService;
 
-    public HabitController(HabitRepository repository) {
+    public HabitController(HabitRepository repository, HabitService habitService) {
         this.repository = repository;
+        this.habitService = habitService;
     }
 
     @PostMapping
@@ -66,15 +68,12 @@ public class HabitController {
 
     @PostMapping("/{id}/complete")
     public HabitResponse complete(@PathVariable Long id) {
-        var habit = repository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         try {
-            habit.complete(LocalDate.now());
+            Habit habit = habitService.complete(id,  LocalDate.now());
+            return HabitResponse.from(habit);
         } catch (IllegalStateException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
         }
-        repository.save(habit);
-        return HabitResponse.from(habit);
     }
 
     @PostMapping("/{id}/archive")

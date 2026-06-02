@@ -7,6 +7,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import static org.assertj.core.api.Assertions.assertThat;
+
 
 import java.time.LocalDate;
 
@@ -25,6 +27,9 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
 
     @Autowired
     private HabitRepository repository;
+
+    @Autowired
+    private HabitCompletionRepository completionRepository;
 
 
     @Test
@@ -272,6 +277,31 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest{
 
         mockMvc.perform(post("/habits/" + saved.getId() + "/complete"))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    void complete_writesOneHistoryRow_whenCompleted() throws Exception {
+        var saved = repository.save(new Habit("Read"));
+
+        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.completionCount").value(1));
+        var rows = completionRepository.findByHabitIdOrderByCompletedOnDesc(saved.getId());
+        assertThat(rows).hasSize(1  );
+        assertThat(rows.get(0).getHabitId()).isEqualTo(saved.getId());
+        assertThat(rows.get(0).getCompletedOn()).isEqualTo(LocalDate.now());
+    }
+
+    @Test
+    void complete_doesNotWriteHistory_whenSameDayTwice () throws Exception {
+        var saved = repository.save(new Habit("Read"));
+        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.completionCount").value(1));
+        var rows = completionRepository.findByHabitIdOrderByCompletedOnDesc(saved.getId());
+        assertThat(rows).hasSize(1);
     }
 
     @Test
