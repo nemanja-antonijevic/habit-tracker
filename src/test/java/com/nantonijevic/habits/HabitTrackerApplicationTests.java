@@ -1,6 +1,5 @@
 package com.nantonijevic.habits;
 
-import com.nantonijevic.habits.habit.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 

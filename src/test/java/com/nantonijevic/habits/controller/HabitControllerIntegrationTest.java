@@ -1,8 +1,9 @@
-package com.nantonijevic.habits.habit;
+package com.nantonijevic.habits.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.dto.CreateHabitRequest;
+import com.nantonijevic.habits.AbstractIntegrationTest;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitRepository;
 import org.junit.jupiter.api.Test;
