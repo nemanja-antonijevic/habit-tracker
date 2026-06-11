@@ -1,5 +1,10 @@
-package com.nantonijevic.habits.habit;
+package com.nantonijevic.habits.controller;
 
+import com.nantonijevic.habits.domain.Habit;
+import com.nantonijevic.habits.dto.*;
+import com.nantonijevic.habits.service.HabitService;
+import com.nantonijevic.habits.repository.HabitCompletionRepository;
+import com.nantonijevic.habits.repository.HabitRepository;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,7 +21,7 @@ public class HabitController {
 
     private final HabitRepository repository;
     private final HabitService habitService;
-    private final HabitCompletionRepository  completionRepository;
+    private final HabitCompletionRepository completionRepository;
 
     public HabitController(HabitRepository repository, HabitService habitService, HabitCompletionRepository completionRepository) {
         this.repository = repository;

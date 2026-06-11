@@ -1,5 +1,9 @@
-package com.nantonijevic.habits.habit;
+package com.nantonijevic.habits.service;
 
+import com.nantonijevic.habits.domain.Habit;
+import com.nantonijevic.habits.domain.HabitCompletion;
+import com.nantonijevic.habits.repository.HabitCompletionRepository;
+import com.nantonijevic.habits.repository.HabitRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

@@ -1,4 +1,6 @@
-package com.nantonijevic.habits.habit;
+package com.nantonijevic.habits.dto;
+
+import com.nantonijevic.habits.domain.Habit;
 
 import java.time.Instant;
 

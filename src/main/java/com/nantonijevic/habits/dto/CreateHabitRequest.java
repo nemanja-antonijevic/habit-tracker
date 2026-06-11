@@ -1,4 +1,4 @@
-package com.nantonijevic.habits.habit;
+package com.nantonijevic.habits.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;

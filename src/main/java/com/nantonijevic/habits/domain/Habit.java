@@ -1,4 +1,4 @@
-package com.nantonijevic.habits.habit;
+package com.nantonijevic.habits.domain;
 
 import jakarta.persistence.*;
 

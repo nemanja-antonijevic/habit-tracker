@@ -1,6 +1,10 @@
 package com.nantonijevic.habits.habit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nantonijevic.habits.domain.Habit;
+import com.nantonijevic.habits.dto.CreateHabitRequest;
+import com.nantonijevic.habits.repository.HabitCompletionRepository;
+import com.nantonijevic.habits.repository.HabitRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;

@@ -1,5 +1,6 @@
-package com.nantonijevic.habits.habit;
+package com.nantonijevic.habits.repository;
 
+import com.nantonijevic.habits.domain.Habit;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface HabitRepository extends JpaRepository<Habit, Long> {
