@@ -9,10 +9,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.time.LocalDate;
 
 @Service
 public class HabitService {
+
+    private static final Logger logger = LoggerFactory.getLogger(HabitService.class);
+
 
     private final HabitRepository habitRepository;
     private final HabitCompletionRepository completionRepository;
@@ -30,6 +36,10 @@ public class HabitService {
         boolean reallyCompleted = habit.complete(today);
         if (reallyCompleted) {
             completionRepository.save(new HabitCompletion(habitId, today));
+            logger.info("Habit completed, habitId: {}, date: {}, currentStreak: {}",
+                    habitId, today, habit.getCurrentStreak());
+        } else {
+            logger.debug("Habit completion skipped (already completed), habitId: {}, date: {}", habitId, today);
         }
         return habitRepository.save(habit);
     }
