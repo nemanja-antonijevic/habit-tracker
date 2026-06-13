@@ -86,7 +86,7 @@ public class Habit {
 
     public void decrementCompletionCount() {
         if (this.completionCount == 0) {
-            throw new IllegalStateException("Cannot uncomplete: count is already zero");
+            throw new InvalidHabitStateException("Cannot uncomplete: count is already zero");
         }
         this.completionCount--;
         this.lastCompletedAt = null;
@@ -95,7 +95,7 @@ public class Habit {
     public boolean complete(LocalDate today) {
         ZoneId zone = ZoneId.systemDefault();
 
-        if(this.archived) throw new IllegalStateException("Cannot complete: archived");
+        if(this.archived) throw new InvalidHabitStateException("Cannot complete: archived");
 
         if (lastCompletedAt != null) {
             LocalDate lastDate = LocalDate.ofInstant(lastCompletedAt, zone);

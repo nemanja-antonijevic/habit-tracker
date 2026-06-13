@@ -275,14 +275,14 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void completingArchivedHabitReturnsConflict() throws Exception {
+    void completingArchivedHabitReturnsBadRequest() throws Exception {
         var saved = repository.save(new Habit("Read"));
 
         mockMvc.perform(post("/habits/" + saved.getId() + "/archive"))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/habits/" + saved.getId() + "/complete"))
-                .andExpect(status().isConflict());
+                .andExpect(status().isBadRequest());
     }
 
     @Test

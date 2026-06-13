@@ -3,17 +3,16 @@ package com.nantonijevic.habits.service;
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.domain.HabitCompletion;
 import com.nantonijevic.habits.domain.HabitNotFoundException;
+import com.nantonijevic.habits.domain.HabitVersionConflictException;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitRepository;
-import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Service
 public class HabitService {
@@ -32,7 +31,7 @@ public class HabitService {
     @Transactional
     public Habit complete(Long habitId, LocalDate today) {
         Habit habit = habitRepository.findById(habitId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Habit not found"));
+                .orElseThrow(() -> new HabitNotFoundException(habitId));
 
         boolean reallyCompleted = habit.complete(today);
         if (reallyCompleted) {
@@ -45,6 +44,50 @@ public class HabitService {
         return habitRepository.save(habit);
     }
 
+    public Habit create(String name) {
+        Habit saved = habitRepository.save(new Habit(name));
+        logger.info("Habit created, habitId: {}", saved.getId());
+        return saved;
+    }
+
+    public Habit uncomplete(Long habitId) {
+        Habit habit = habitRepository.findById(habitId)
+                .orElseThrow(() -> new HabitNotFoundException(habitId));
+        habit.decrementCompletionCount();
+        logger.info("Habit uncompleted, habitId: {}", habitId);
+        return habitRepository.save(habit);
+    }
+
+    public Habit getById(Long habitId) {
+        return habitRepository.findById(habitId)
+                .orElseThrow(() -> new HabitNotFoundException(habitId));
+    }
+
+    public List<Habit> list() {
+        return habitRepository.findAll()
+                .stream()
+                .filter(habit -> !habit.isArchived())
+                .toList();
+    }
+
+    public List<HabitCompletion> getHistory(Long habitId) {
+        habitRepository.findById(habitId)
+                .orElseThrow(() -> new HabitNotFoundException(habitId));
+        return completionRepository.findByHabitIdOrderByCompletedOnDesc(habitId);
+    }
+
+    public Habit update(Long habitId, Long version, String name){
+        Habit habit = habitRepository.findById(habitId)
+                .orElseThrow(() -> new HabitNotFoundException(habitId));
+
+        if (!habit.getVersion().equals(version)) {
+            throw new HabitVersionConflictException(habitId);
+        }
+        habit.setName(name);
+        logger.info("Habit updated, habitId: {}, version: {}", habitId, version);
+        return habitRepository.save(habit);
+    }
+
     public Habit archive(Long habitId) {
         Habit habit = habitRepository.findById(habitId)
                 .orElseThrow(() -> new HabitNotFoundException(habitId));
@@ -52,6 +95,23 @@ public class HabitService {
         logger.info("Habit archived, habitId: {}",
                 habitId);
         return habitRepository.save(habit);
+    }
+
+    public Habit unarchive(Long habitId) {
+        Habit habit = habitRepository.findById(habitId)
+                .orElseThrow(() -> new HabitNotFoundException(habitId));
+        habit.unarchive();
+        logger.info("Habit unarchived, habitId: {}",
+                habitId);
+        return habitRepository.save(habit);
+    }
+
+    public void delete(Long habitId) {
+        habitRepository.findById(habitId)
+                .orElseThrow(() -> new HabitNotFoundException(habitId));
+        habitRepository.deleteById(habitId);
+        logger.info("Habit deleted, habitId: {}",
+                habitId);
     }
 
 }
