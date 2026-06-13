@@ -19,7 +19,6 @@ public class HabitService {
 
     private static final Logger logger = LoggerFactory.getLogger(HabitService.class);
 
-
     private final HabitRepository habitRepository;
     private final HabitCompletionRepository completionRepository;
 
@@ -44,12 +43,14 @@ public class HabitService {
         return habitRepository.save(habit);
     }
 
+    @Transactional
     public Habit create(String name) {
         Habit saved = habitRepository.save(new Habit(name));
         logger.info("Habit created, habitId: {}", saved.getId());
         return saved;
     }
 
+    @Transactional
     public Habit uncomplete(Long habitId) {
         Habit habit = habitRepository.findById(habitId)
                 .orElseThrow(() -> new HabitNotFoundException(habitId));
@@ -63,6 +64,9 @@ public class HabitService {
                 .orElseThrow(() -> new HabitNotFoundException(habitId));
     }
 
+    // readOnly: list() may return N entities — skips dirty-check snapshots.
+    // getById/getHistory intentionally omit it: single entity, benefit ≈ 0.
+    @Transactional(readOnly = true)
     public List<Habit> list() {
         return habitRepository.findAll()
                 .stream()
@@ -76,6 +80,7 @@ public class HabitService {
         return completionRepository.findByHabitIdOrderByCompletedOnDesc(habitId);
     }
 
+    @Transactional
     public Habit update(Long habitId, Long version, String name){
         Habit habit = habitRepository.findById(habitId)
                 .orElseThrow(() -> new HabitNotFoundException(habitId));
@@ -88,6 +93,7 @@ public class HabitService {
         return habitRepository.save(habit);
     }
 
+    @Transactional
     public Habit archive(Long habitId) {
         Habit habit = habitRepository.findById(habitId)
                 .orElseThrow(() -> new HabitNotFoundException(habitId));
@@ -97,6 +103,7 @@ public class HabitService {
         return habitRepository.save(habit);
     }
 
+    @Transactional
     public Habit unarchive(Long habitId) {
         Habit habit = habitRepository.findById(habitId)
                 .orElseThrow(() -> new HabitNotFoundException(habitId));
@@ -106,6 +113,7 @@ public class HabitService {
         return habitRepository.save(habit);
     }
 
+    @Transactional
     public void delete(Long habitId) {
         habitRepository.findById(habitId)
                 .orElseThrow(() -> new HabitNotFoundException(habitId));
@@ -113,5 +121,4 @@ public class HabitService {
         logger.info("Habit deleted, habitId: {}",
                 habitId);
     }
-
 }
