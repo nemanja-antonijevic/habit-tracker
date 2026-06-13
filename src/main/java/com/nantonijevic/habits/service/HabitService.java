@@ -2,6 +2,7 @@ package com.nantonijevic.habits.service;
 
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.domain.HabitCompletion;
+import com.nantonijevic.habits.domain.HabitNotFoundException;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitRepository;
 import org.springframework.http.HttpStatus;
@@ -41,6 +42,15 @@ public class HabitService {
         } else {
             logger.debug("Habit completion skipped (already completed), habitId: {}, date: {}", habitId, today);
         }
+        return habitRepository.save(habit);
+    }
+
+    public Habit archive(Long habitId) {
+        Habit habit = habitRepository.findById(habitId)
+                .orElseThrow(() -> new HabitNotFoundException(habitId));
+        habit.archive();
+        logger.info("Habit archived, habitId: {}",
+                habitId);
         return habitRepository.save(habit);
     }
 

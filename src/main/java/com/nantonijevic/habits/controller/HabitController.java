@@ -1,6 +1,7 @@
 package com.nantonijevic.habits.controller;
 
 import com.nantonijevic.habits.domain.Habit;
+import com.nantonijevic.habits.domain.HabitNotFoundException;
 import com.nantonijevic.habits.dto.*;
 import com.nantonijevic.habits.service.HabitService;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
@@ -97,10 +98,7 @@ public class HabitController {
 
     @PostMapping("/{id}/archive")
     public HabitResponse archive(@PathVariable Long id) {
-        var habit = repository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        habit.archive();
-        repository.save(habit);
+        Habit habit = habitService.archive(id);
         return HabitResponse.from(habit);
     }
 
