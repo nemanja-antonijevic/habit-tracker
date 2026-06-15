@@ -52,6 +52,15 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void createHabit_returns400_whenRequestBodyIsEmpty() throws Exception {
+        mockMvc.perform(post("/habits")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Malformed or missing request body"));
+    }
+
+    @Test
     void createHabit_returns400_whenNameIsBlank() throws Exception {
         var request = new CreateHabitRequest("");
 
@@ -170,6 +179,13 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(put("/habits/999999").content(jsonBody).contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Habit not found: " + 999999));
+    }
+
+    @Test
+    void updateHabit_returns400_whenBodyIsEmpty() throws Exception {
+        mockMvc.perform(put("/habits/999999").content("").contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Malformed or missing request body"));
     }
 
     @Test

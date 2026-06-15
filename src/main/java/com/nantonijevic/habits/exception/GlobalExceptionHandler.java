@@ -5,6 +5,7 @@ import com.nantonijevic.habits.domain.HabitVersionConflictException;
 import com.nantonijevic.habits.domain.InvalidHabitStateException;
 import com.nantonijevic.habits.dto.ErrorResponse;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -42,5 +43,11 @@ public class GlobalExceptionHandler {
                 .map(fe -> fe.getField() + " " + fe.getDefaultMessage())
                 .collect(Collectors.joining(", "));
         return new ErrorResponse(message);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse handle(HttpMessageNotReadableException e) {
+        return new ErrorResponse("Malformed or missing request body");
     }
 }
