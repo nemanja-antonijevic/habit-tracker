@@ -8,6 +8,8 @@ import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -67,11 +69,8 @@ public class HabitService {
     // readOnly: list() may return N entities — skips dirty-check snapshots.
     // getById/getHistory intentionally omit it: single entity, benefit ≈ 0.
     @Transactional(readOnly = true)
-    public List<Habit> list() {
-        return habitRepository.findAll()
-                .stream()
-                .filter(habit -> !habit.isArchived())
-                .toList();
+    public Page<Habit> list(Pageable pageable) {
+        return habitRepository.findByArchivedFalse(pageable);
     }
 
     public List<HabitCompletion> getHistory(Long habitId) {

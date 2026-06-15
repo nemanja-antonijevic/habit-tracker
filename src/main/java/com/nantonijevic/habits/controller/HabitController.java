@@ -4,6 +4,8 @@ import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.dto.*;
 import com.nantonijevic.habits.service.HabitService;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -30,11 +32,9 @@ public class HabitController {
     }
 
     @GetMapping
-    public List<HabitResponse> list() {
-        return habitService.list()
-                .stream()
-                .map(HabitResponse::from)
-                .toList();
+    public Page<HabitResponse> list(Pageable pageable) {
+        return habitService.list(pageable)
+                .map(HabitResponse::from);
     }
 
     @GetMapping("/{id}")
