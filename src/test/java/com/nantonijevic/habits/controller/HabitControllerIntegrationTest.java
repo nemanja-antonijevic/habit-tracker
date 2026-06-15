@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import static org.hamcrest.Matchers.containsString;
 
 import java.time.LocalDate;
 
@@ -57,7 +58,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/habits")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("name must not be blank"));
     }
 
     @Test
@@ -66,7 +68,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/habits")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("name size must be between 0 and 255"));
     }
 
     @Test
@@ -75,7 +78,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/habits")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("name must not be blank"));
     }
 
     @Test
@@ -115,7 +119,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     @Test
     void getHabit_returns404_whenNotExists() throws Exception {
         mockMvc.perform(get("/habits/999999"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Habit not found: " + 999999));
     }
 
     @Test
@@ -136,13 +141,15 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isNoContent());
 
         mockMvc.perform(get("/habits/" + saved.getId()))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Habit not found: " + saved.getId()));
     }
 
     @Test
     void deleteHabit_returns404_whenNotExists() throws Exception {
         mockMvc.perform(delete("/habits/999999"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Habit not found: " + 999999));
     }
 
     @Test
@@ -161,7 +168,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         String jsonBody = "{\"name\": \"Code 6 hours\",\"version\": 0}";
 
         mockMvc.perform(put("/habits/999999").content(jsonBody).contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Habit not found: " + 999999));
     }
 
     @Test
@@ -169,7 +177,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         String jsonBody = "{\"name\": \"\"}";
 
         mockMvc.perform(put("/habits/999999").content(jsonBody).contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("name must not be blank")));
     }
 
 
@@ -178,7 +187,9 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         String jsonBody = "{\"name\": \"" + "a".repeat(256) + "\"}";
 
         mockMvc.perform(put("/habits/999999").content(jsonBody).contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error")
+                        .value(containsString("name size must be between 0 and 255")));
     }
 
     @Test
@@ -186,7 +197,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         String jsonBody = "{\"name\": \"        \"}";
 
         mockMvc.perform(put("/habits/999999").content(jsonBody).contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("name must not be blank")));
     }
 
     @Test
@@ -213,7 +225,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(put("/habits/" + saved.getId()).content(jsonBody1).contentType(MediaType.APPLICATION_JSON));
         repository.flush();
         mockMvc.perform(put("/habits/" + saved.getId()).content(jsonBody2).contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isConflict());
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value(containsString("Habit version conflict")));
     }
 
     @Test
@@ -231,7 +244,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     @Test
     void completeHabit_returns404_whenNotExists() throws Exception {
         mockMvc.perform(post("/habits/999/complete"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Habit not found: " + 999));
     }
 
     @Test
@@ -282,7 +296,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/habits/" + saved.getId() + "/complete"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Cannot complete: archived"));
     }
 
     @Test
@@ -322,7 +337,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     @Test
     void getStats_returns404_whenHabitNotExists() throws Exception {
         mockMvc.perform(get("/habits/999/stats"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Habit not found: " + 999));
     }
 
     @Test
@@ -361,7 +377,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     @Test
     void uncomplete_returns404_whenHabitNotExists() throws Exception {
         mockMvc.perform(post("/habits/999/uncomplete"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Habit not found: " + 999));
     }
 
     @Test
@@ -463,7 +480,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     @Test
     void getHistory_returns404_whenHabitNotExists() throws Exception {
         mockMvc.perform(get("/habits/999/history"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Habit not found: " + 999));
     }
 
     @Test
