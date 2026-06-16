@@ -4,10 +4,12 @@ import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.domain.HabitCompletion;
 import com.nantonijevic.habits.domain.HabitNotFoundException;
 import com.nantonijevic.habits.domain.HabitVersionConflictException;
+import com.nantonijevic.habits.event.HabitCompletedEvent;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -23,10 +25,12 @@ public class HabitService {
 
     private final HabitRepository habitRepository;
     private final HabitCompletionRepository completionRepository;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
-    public HabitService(HabitRepository habitRepository, HabitCompletionRepository completionRepository) {
+    public HabitService(HabitRepository habitRepository, HabitCompletionRepository completionRepository, ApplicationEventPublisher applicationEventPublisher) {
         this.habitRepository = habitRepository;
         this.completionRepository = completionRepository;
+        this.applicationEventPublisher = applicationEventPublisher;
     }
 
     @Transactional
@@ -38,6 +42,10 @@ public class HabitService {
         if (reallyCompleted) {
             completionRepository.save(new HabitCompletion(habitId, today));
             logger.info("Habit completed, habitId: {}, date: {}, currentStreak: {}",
+                    habitId, today, habit.getCurrentStreak());
+            applicationEventPublisher.publishEvent(new HabitCompletedEvent(
+                    habitId, today, habit.getCurrentStreak(), habit.getCompletionCount()));
+            logger.info("HabitCompletedEvent published, habitId: {}, date: {}, currentStreak: {}",
                     habitId, today, habit.getCurrentStreak());
         } else {
             logger.debug("Habit completion skipped (already completed), habitId: {}, date: {}", habitId, today);
