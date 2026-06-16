@@ -3,6 +3,11 @@ spring:
     name: habit-tracker
   profiles:
     active: local
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
   datasource:
     url: jdbc:mysql://localhost:3306/habits
     username: habits
