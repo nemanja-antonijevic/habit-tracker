@@ -4,8 +4,10 @@ import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.domain.HabitCompletion;
 import com.nantonijevic.habits.domain.HabitNotFoundException;
 import com.nantonijevic.habits.domain.HabitVersionConflictException;
+import com.nantonijevic.habits.dto.HabitStatsView;
 import com.nantonijevic.habits.event.HabitCompletedEvent;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
+import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
 import com.nantonijevic.habits.repository.HabitRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,11 +28,13 @@ public class HabitService {
     private final HabitRepository habitRepository;
     private final HabitCompletionRepository completionRepository;
     private final ApplicationEventPublisher applicationEventPublisher;
+    private final HabitCompletionStatRepository completionStatRepository;
 
-    public HabitService(HabitRepository habitRepository, HabitCompletionRepository completionRepository, ApplicationEventPublisher applicationEventPublisher) {
+    public HabitService(HabitRepository habitRepository, HabitCompletionRepository completionRepository, ApplicationEventPublisher applicationEventPublisher,  HabitCompletionStatRepository completionStatRepository) {
         this.habitRepository = habitRepository;
         this.completionRepository = completionRepository;
         this.applicationEventPublisher = applicationEventPublisher;
+        this.completionStatRepository = completionStatRepository;
     }
 
     @Transactional
@@ -72,6 +76,14 @@ public class HabitService {
     public Habit getById(Long habitId) {
         return habitRepository.findById(habitId)
                 .orElseThrow(() -> new HabitNotFoundException(habitId));
+    }
+
+    @Transactional(readOnly = true)
+    public HabitStatsView getStatsProjection(Long habitId) {
+        if (!habitRepository.existsById(habitId)) {
+            throw new HabitNotFoundException(habitId);
+        }
+        return completionStatRepository.findStatsByHabitId(habitId);
     }
 
     // readOnly: list() may return N entities — skips dirty-check snapshots.

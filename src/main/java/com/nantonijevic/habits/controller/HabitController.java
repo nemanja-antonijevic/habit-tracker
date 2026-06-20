@@ -74,9 +74,9 @@ public class HabitController {
     }
 
     @GetMapping("/{id}/stats")
-    public StatsResponse getStats(@PathVariable Long id) {
-        Habit habit = habitService.getById(id);
-        return StatsResponse.from(habit);
+    public HabitStatsResponse getStats(@PathVariable Long id) {
+        HabitStatsView view = habitService.getStatsProjection(id);
+        return HabitStatsResponse.from(view);
     }
 
     @PostMapping("/{id}/uncomplete")
