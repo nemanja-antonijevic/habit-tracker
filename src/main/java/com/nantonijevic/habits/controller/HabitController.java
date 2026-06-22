@@ -75,7 +75,7 @@ public class HabitController {
 
     @GetMapping("/{id}/stats")
     public HabitStatsResponse getStats(@PathVariable Long id) {
-        HabitStatsView view = habitService.getStatsProjection(id);
+        HabitStatsView view = habitService.getStatsProjection(id, LocalDate.now());
         return HabitStatsResponse.from(view);
     }
 

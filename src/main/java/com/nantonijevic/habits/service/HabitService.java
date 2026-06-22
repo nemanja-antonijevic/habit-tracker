@@ -2,6 +2,7 @@ package com.nantonijevic.habits.service;
 
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.domain.HabitCompletion;
+import com.nantonijevic.habits.domain.HabitCompletionStat;
 import com.nantonijevic.habits.domain.HabitNotFoundException;
 import com.nantonijevic.habits.domain.HabitVersionConflictException;
 import com.nantonijevic.habits.dto.HabitStatsView;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class HabitService {
@@ -79,11 +81,27 @@ public class HabitService {
     }
 
     @Transactional(readOnly = true)
-    public HabitStatsView getStatsProjection(Long habitId) {
+    public HabitStatsView getStatsProjection(Long habitId, LocalDate today) {
         if (!habitRepository.existsById(habitId)) {
             throw new HabitNotFoundException(habitId);
         }
-        return completionStatRepository.findStatsByHabitId(habitId);
+        Optional<HabitCompletionStat> lastRow =
+                completionStatRepository.findFirstByHabitIdOrderByCompletedOnDesc(habitId);
+        int currentStreak;
+        if (lastRow.isEmpty()) {
+            currentStreak = 0;
+        } else {
+            LocalDate lastCompleted = lastRow.get().getCompletedOn();
+            boolean streakIsAlive = lastCompleted.equals(today) || lastCompleted.equals(today.minusDays(1));
+            currentStreak = streakIsAlive ? lastRow.get().getCurrentStreak() : 0;
+        }
+        HabitStatsView aggregate = completionStatRepository.findStatsByHabitId(habitId);
+
+        return new HabitStatsView(
+                aggregate.completionCount(),
+                aggregate.longestStreak(),
+                aggregate.lastCompletedOn(),
+                currentStreak);
     }
 
     // readOnly: list() may return N entities — skips dirty-check snapshots.
