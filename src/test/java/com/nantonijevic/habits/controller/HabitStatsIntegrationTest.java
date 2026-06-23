@@ -124,12 +124,13 @@ public class HabitStatsIntegrationTest {
     }
 
     @Test
-    @Disabled("currentStreak (2b) + read-model async punjenje — oba van dometa danas. Vidi reflection Day 25.")
     void firstCompleteSetsLongestStreakToOne() throws Exception {
+        messagesProcessedLatch = new CountDownLatch(1);
         var habit = new Habit("Read 30 min");
         repository.save(habit);
         mockMvc.perform(post("/habits/" + habit.getId() + "/complete"))
                 .andExpect(status().isOk());
+        assertThat(messagesProcessedLatch.await(10, SECONDS)).isTrue();
         mockMvc.perform(get("/habits/" + habit.getId() + "/stats"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.currentStreak").value(1))
