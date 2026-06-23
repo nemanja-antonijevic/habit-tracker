@@ -161,15 +161,38 @@ public class HabitStatsIntegrationTest {
     }
 
     @Test
-    @Disabled("Read-model prazan bez @EmbeddedKafka u ovom testu (longestStreak=MAX nad praznim=0). Vraća se uz async setup. Vidi reflection Day 25.")
     void streakResetDoesNotLowerLongestStreak() throws Exception {
-        var habit = new Habit("Read 30 min");
-        habit.complete(LocalDate.now().minusDays(4));
-        habit.complete(LocalDate.now().minusDays(3));
-        habit.complete(LocalDate.now().minusDays(2));
-        repository.save(habit);
-        mockMvc.perform(post("/habits/" + habit.getId() + "/complete"))
-                .andExpect(status().isOk());
+        messagesProcessedLatch = new CountDownLatch(4);
+
+        var habit = repository.save(new Habit("Read 30 min"));
+        LocalDate today = LocalDate.now();
+
+        kafkaTemplate.send(
+                "habit-completed",
+                String.valueOf(habit.getId()),
+                new HabitCompletedEvent(habit.getId(), today.minusDays(4), 1, 1)
+        ).get(10, SECONDS);
+
+        kafkaTemplate.send(
+                "habit-completed",
+                String.valueOf(habit.getId()),
+                new HabitCompletedEvent(habit.getId(), today.minusDays(3), 2, 2)
+        ).get(10, SECONDS);
+
+        kafkaTemplate.send(
+                "habit-completed",
+                String.valueOf(habit.getId()),
+                new HabitCompletedEvent(habit.getId(), today.minusDays(2), 3, 3)
+        ).get(10, SECONDS);
+
+        kafkaTemplate.send(
+                "habit-completed",
+                String.valueOf(habit.getId()),
+                new HabitCompletedEvent(habit.getId(), today, 1, 4)
+        ).get(10, SECONDS);
+
+        assertThat(messagesProcessedLatch.await(10, SECONDS)).isTrue();
+
         mockMvc.perform(get("/habits/" + habit.getId() + "/stats"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.currentStreak").value(1))
