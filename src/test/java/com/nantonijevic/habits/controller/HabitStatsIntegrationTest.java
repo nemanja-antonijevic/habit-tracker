@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.SpyBean;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -59,6 +60,9 @@ public class HabitStatsIntegrationTest {
     @Autowired
     private HabitCompletionStatRepository statRepository;
 
+    @Autowired
+    private KafkaTemplate<String, HabitCompletedEvent> kafkaTemplate;
+
     private CountDownLatch messagesProcessedLatch;
 
     @SpyBean
@@ -93,13 +97,32 @@ public class HabitStatsIntegrationTest {
     }
 
     @Test
-    @Disabled("currentStreak privremeno van read-side projekcije — vraća se kroz 2b (window-streak logika). Vidi reflection Day 25.")
     void getStats_returnsCurrentStreak_afterConsecutiveCompletions() throws Exception {
+        messagesProcessedLatch = new CountDownLatch(3);
+
         var habit = repository.save(new Habit("Read"));
-        habit.complete(LocalDate.now().minusDays(2));
-        habit.complete(LocalDate.now().minusDays(1));
-        repository.save(habit);
-        mockMvc.perform(post("/habits/" + habit.getId() + "/complete"));
+        LocalDate today = LocalDate.now();
+
+        kafkaTemplate.send(
+                "habit-completed",
+                String.valueOf(habit.getId()),
+                new HabitCompletedEvent(habit.getId(), today.minusDays(2), 1, 1)
+        ).get(10, SECONDS);
+
+        kafkaTemplate.send(
+                "habit-completed",
+                String.valueOf(habit.getId()),
+                new HabitCompletedEvent(habit.getId(), today.minusDays(1), 2, 2)
+        ).get(10, SECONDS);
+
+        kafkaTemplate.send(
+                "habit-completed",
+                String.valueOf(habit.getId()),
+                new HabitCompletedEvent(habit.getId(), today, 3, 3)
+        ).get(10, SECONDS);
+
+        assertThat(messagesProcessedLatch.await(10, SECONDS)).isTrue();
+
         mockMvc.perform(get("/habits/" + habit.getId() + "/stats"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.currentStreak").value(3));
