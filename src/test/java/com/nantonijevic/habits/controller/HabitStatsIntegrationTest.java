@@ -18,6 +18,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.LocalDate;
 import java.util.concurrent.CountDownLatch;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -78,11 +80,12 @@ public class HabitStatsIntegrationTest {
     }
 
     @Test
-    @Disabled("Read-model se puni async preko Kafke; HabitControllerIntegrationTest nema @EmbeddedKafka. Vraća se uz async setup. Vidi reflection Day 25.")
     void getStats_returnsCorrectCountAndTimestamp_afterComplete() throws Exception {
-        var saved = repository.save(new Habit("Read 30 min"));
-        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"));
-
+        messagesProcessedLatch = new CountDownLatch(1);
+        Habit saved = repository.save(new Habit("Read 30 min"));
+        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"))
+                .andExpect(status().isOk());
+        assertThat(messagesProcessedLatch.await(10, SECONDS)).isTrue();
         mockMvc.perform(get("/habits/" + saved.getId() + "/stats"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.completionCount").value(1))
