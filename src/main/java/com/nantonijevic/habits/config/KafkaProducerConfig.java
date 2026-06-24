@@ -1,7 +1,7 @@
 package com.nantonijevic.habits.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nantonijevic.habits.event.HabitCompletedEvent;
+import com.nantonijevic.habits.event.HabitEvent;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
 import org.springframework.context.annotation.Bean;
@@ -17,7 +17,7 @@ import java.util.Map;
 public class KafkaProducerConfig {
 
     @Bean
-    public ProducerFactory<String, HabitCompletedEvent> producerFactory(
+    public ProducerFactory<String, HabitEvent> producerFactory(
             ObjectMapper objectMapper,          // Spring ubrizga SVOJ konfigurisani mapper (ima JavaTimeModule)
             KafkaProperties kafkaProperties) {  // nosi bootstrap-servers iz application.yml
 
@@ -30,8 +30,8 @@ public class KafkaProducerConfig {
     }
 
     @Bean
-    public KafkaTemplate<String, HabitCompletedEvent> kafkaTemplate(
-            ProducerFactory<String, HabitCompletedEvent> producerFactory) {
+    public KafkaTemplate<String, HabitEvent> kafkaTemplate(
+            ProducerFactory<String, HabitEvent> producerFactory) {
         return new KafkaTemplate<>(producerFactory);
     }
 }

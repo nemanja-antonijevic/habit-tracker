@@ -81,7 +81,7 @@ public class HabitController {
 
     @PostMapping("/{id}/uncomplete")
     public HabitResponse uncomplete(@PathVariable Long id) {
-        Habit habit = habitService.uncomplete(id);
+        Habit habit = habitService.uncomplete(id, LocalDate.now());
         return HabitResponse.from(habit);
     }
 

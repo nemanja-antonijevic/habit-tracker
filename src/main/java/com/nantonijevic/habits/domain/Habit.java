@@ -84,12 +84,29 @@ public class Habit {
         return lastCompletedAt;
     }
 
-    public void decrementCompletionCount() {
-        if (this.completionCount == 0) {
+    public void decrementCompletionCount(LocalDate today) {
+        ZoneId zone = ZoneId.systemDefault();
+
+        if (this.archived) {
+            throw new InvalidHabitStateException("Cannot uncomplete: archived");
+        }
+
+        if (this.completionCount == 0 || this.lastCompletedAt == null) {
             throw new InvalidHabitStateException("Cannot uncomplete: count is already zero");
         }
+
+        LocalDate lastDate = LocalDate.ofInstant(lastCompletedAt, zone);
+
+        if (!lastDate.isEqual(today)) {
+            throw new InvalidHabitStateException("Cannot uncomplete: habit was not completed today");
+        }
+
         this.completionCount--;
         this.lastCompletedAt = null;
+
+        if (this.currentStreak > 0) {
+            this.currentStreak--;
+        }
     }
 
     public boolean complete(LocalDate today) {

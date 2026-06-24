@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.util.Optional;
 
 public interface HabitCompletionStatRepository extends JpaRepository<HabitCompletionStat, Long> {
@@ -16,6 +17,8 @@ public interface HabitCompletionStatRepository extends JpaRepository<HabitComple
       WHERE s.habitId = :habitId
       """)
     HabitStatsView findStatsByHabitId(@Param("habitId") Long habitId);
+
+    void deleteByHabitIdAndCompletedOn(Long habitId, LocalDate completedOn);
 
     Optional<HabitCompletionStat> findFirstByHabitIdOrderByCompletedOnDesc(Long habitId);
 }

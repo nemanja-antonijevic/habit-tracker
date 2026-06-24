@@ -3,6 +3,8 @@ package com.nantonijevic.habits.repository;
 import com.nantonijevic.habits.dto.HabitStatsView;
 import com.nantonijevic.habits.event.HabitCompletedEvent;
 import com.nantonijevic.habits.event.HabitCompletedEventConsumer;
+import com.nantonijevic.habits.event.HabitEvent;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,10 +29,16 @@ import static org.mockito.Mockito.doAnswer;
 class HabitCompletionStatRepositoryIntegrationTest {
 
     @Autowired
-    private KafkaTemplate<String, HabitCompletedEvent> kafkaTemplate;
+    private KafkaTemplate<String, HabitEvent> kafkaTemplate;
+
+    @Autowired
+    private HabitRepository repository;
 
     @Autowired
     private HabitCompletionStatRepository statRepository;
+
+    @Autowired
+    private HabitCompletionRepository completionRepository;
 
     @SpyBean
     private HabitCompletedEventConsumer consumer;
@@ -50,6 +58,13 @@ class HabitCompletionStatRepositoryIntegrationTest {
                 }
             }
         }).when(consumer).on(any(HabitCompletedEvent.class));
+    }
+
+    @AfterEach
+    void tearDown() {
+        completionRepository.deleteAll();
+        statRepository.deleteAll();
+        repository.deleteAll();
     }
 
     @Test

@@ -3,10 +3,12 @@ package com.nantonijevic.habits.controller;
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.event.HabitCompletedEvent;
 import com.nantonijevic.habits.event.HabitCompletedEventConsumer;
+import com.nantonijevic.habits.event.HabitEvent;
+import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
 import com.nantonijevic.habits.repository.HabitRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -61,7 +63,10 @@ public class HabitStatsIntegrationTest {
     private HabitCompletionStatRepository statRepository;
 
     @Autowired
-    private KafkaTemplate<String, HabitCompletedEvent> kafkaTemplate;
+    private HabitCompletionRepository completionRepository;
+
+    @Autowired
+    private KafkaTemplate<String, HabitEvent> kafkaTemplate;
 
     private CountDownLatch messagesProcessedLatch;
 
@@ -70,7 +75,9 @@ public class HabitStatsIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        completionRepository.deleteAll();
         statRepository.deleteAll();
+        repository.deleteAll();
 
         messagesProcessedLatch = new CountDownLatch(2);
 
@@ -80,7 +87,14 @@ public class HabitStatsIntegrationTest {
             } finally {
                 messagesProcessedLatch.countDown();
             }
-        }).when(consumer).on(any(HabitCompletedEvent.class));
+        }).when(consumer).on(any(HabitEvent.class));
+    }
+
+    @AfterEach
+    void tearDown() {
+        completionRepository.deleteAll();
+        statRepository.deleteAll();
+        repository.deleteAll();
     }
 
     @Test
@@ -129,17 +143,45 @@ public class HabitStatsIntegrationTest {
     }
 
     @Test
-    @Disabled("Dva uzroka: read-model prazan bez @EmbeddedKafka + uncomplete ne emituje event (read-model se ne smanjuje). Treba async setup + HabitUncompletedEvent. Vidi reflection Day 25.")
     void uncomplete_decrementsOnlyByOne() throws Exception {
+        messagesProcessedLatch = new CountDownLatch(3);
+
+        LocalDate today = LocalDate.now();
+
         var habit = new Habit("Read 30 min");
-        habit.complete(LocalDate.now().minusDays(2));
-        habit.complete(LocalDate.now().minusDays(1));
-        habit.complete(LocalDate.now());
+        habit.complete(today.minusDays(2));
+        habit.complete(today.minusDays(1));
+        habit.complete(today);
+
         var saved = repository.save(habit);
+
+        kafkaTemplate.send(
+                "habit-completed",
+                String.valueOf(saved.getId()),
+                new HabitCompletedEvent(saved.getId(), today.minusDays(2), 1, 1)
+        ).get(10, SECONDS);
+
+        kafkaTemplate.send(
+                "habit-completed",
+                String.valueOf(saved.getId()),
+                new HabitCompletedEvent(saved.getId(), today.minusDays(1), 2, 2)
+        ).get(10, SECONDS);
+
+        kafkaTemplate.send(
+                "habit-completed",
+                String.valueOf(saved.getId()),
+                new HabitCompletedEvent(saved.getId(), today, 3, 3)
+        ).get(10, SECONDS);
+
+        assertThat(messagesProcessedLatch.await(10, SECONDS)).isTrue();
+
+        messagesProcessedLatch = new CountDownLatch(1);
 
         mockMvc.perform(post("/habits/" + saved.getId() + "/uncomplete"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.completionCount").value(2));
+
+        assertThat(messagesProcessedLatch.await(10, SECONDS)).isTrue();
 
         mockMvc.perform(get("/habits/" + saved.getId() + "/stats"))
                 .andExpect(status().isOk())

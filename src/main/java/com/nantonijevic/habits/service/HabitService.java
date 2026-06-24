@@ -7,6 +7,7 @@ import com.nantonijevic.habits.domain.HabitNotFoundException;
 import com.nantonijevic.habits.domain.HabitVersionConflictException;
 import com.nantonijevic.habits.dto.HabitStatsView;
 import com.nantonijevic.habits.event.HabitCompletedEvent;
+import com.nantonijevic.habits.event.HabitUncompletedEvent;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
 import com.nantonijevic.habits.repository.HabitRepository;
@@ -32,7 +33,10 @@ public class HabitService {
     private final ApplicationEventPublisher applicationEventPublisher;
     private final HabitCompletionStatRepository completionStatRepository;
 
-    public HabitService(HabitRepository habitRepository, HabitCompletionRepository completionRepository, ApplicationEventPublisher applicationEventPublisher,  HabitCompletionStatRepository completionStatRepository) {
+    public HabitService(HabitRepository habitRepository,
+                        HabitCompletionRepository completionRepository,
+                        ApplicationEventPublisher applicationEventPublisher,
+                        HabitCompletionStatRepository completionStatRepository) {
         this.habitRepository = habitRepository;
         this.completionRepository = completionRepository;
         this.applicationEventPublisher = applicationEventPublisher;
@@ -67,11 +71,16 @@ public class HabitService {
     }
 
     @Transactional
-    public Habit uncomplete(Long habitId) {
+    public Habit uncomplete(Long habitId, LocalDate today) {
         Habit habit = habitRepository.findById(habitId)
                 .orElseThrow(() -> new HabitNotFoundException(habitId));
-        habit.decrementCompletionCount();
-        logger.info("Habit uncompleted, habitId: {}", habitId);
+
+        habit.decrementCompletionCount(today);
+
+        applicationEventPublisher.publishEvent(new HabitUncompletedEvent(habitId, today));
+
+        logger.info("Habit uncompleted, habitId: {}, date: {}", habitId, today);
+
         return habitRepository.save(habit);
     }
 

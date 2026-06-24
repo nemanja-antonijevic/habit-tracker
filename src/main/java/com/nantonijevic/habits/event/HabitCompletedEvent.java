@@ -7,5 +7,5 @@ public record HabitCompletedEvent(
         LocalDate completedOn,
         int currentStreak,
         int completionCount
-){
+) implements HabitEvent{
 }

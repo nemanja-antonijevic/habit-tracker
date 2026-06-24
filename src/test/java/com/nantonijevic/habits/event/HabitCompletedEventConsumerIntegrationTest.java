@@ -4,7 +4,9 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
+import com.nantonijevic.habits.repository.HabitRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,10 +33,16 @@ import static org.mockito.Mockito.doAnswer;
 class HabitCompletedEventConsumerIntegrationTest {
 
     @Autowired
-    private KafkaTemplate<String, HabitCompletedEvent> kafkaTemplate;
+    private KafkaTemplate<String, HabitEvent> kafkaTemplate;
+
+    @Autowired
+    private HabitRepository repository;
 
     @Autowired
     private HabitCompletionStatRepository statRepository;
+
+    @Autowired
+    private HabitCompletionRepository completionRepository;
 
     @SpyBean
     private HabitCompletedEventConsumer consumer;
@@ -66,6 +74,10 @@ class HabitCompletedEventConsumerIntegrationTest {
 
     @AfterEach
     void tearDown() {
+        completionRepository.deleteAll();
+        statRepository.deleteAll();
+        repository.deleteAll();
+
         Logger consumerLogger = (Logger) LoggerFactory.getLogger(HabitCompletedEventConsumer.class);
         consumerLogger.detachAppender(logAppender);
     }
