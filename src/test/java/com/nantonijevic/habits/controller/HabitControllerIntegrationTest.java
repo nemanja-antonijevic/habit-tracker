@@ -456,4 +456,18 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].completedOn").value(LocalDate.now().toString()));
     }
+
+    @Test
+    void getHistory_returnsEmptyList_whenUncompleted() throws Exception {
+        var habit = new Habit("Mess around");
+        repository.save(habit);
+
+        mockMvc.perform(post("/habits/" + habit.getId() + "/complete"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/habits/" + habit.getId() + "/uncomplete"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/habits/" + habit.getId() + "/history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
 }

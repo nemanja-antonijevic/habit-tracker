@@ -77,6 +77,8 @@ public class HabitService {
 
         habit.decrementCompletionCount(today);
 
+        completionRepository.deleteByHabitIdAndCompletedOn(habitId, today);
+
         applicationEventPublisher.publishEvent(new HabitUncompletedEvent(habitId, today));
 
         logger.info("Habit uncompleted, habitId: {}, date: {}", habitId, today);
