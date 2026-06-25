@@ -58,7 +58,9 @@ public class Habit {
         return name;
     }
 
-    public boolean isArchived() { return  archived; }
+    public boolean isArchived() {
+        return archived;
+    }
 
     public int getLongestStreak() {
         return longestStreak;
@@ -84,7 +86,7 @@ public class Habit {
         return lastCompletedAt;
     }
 
-    public void decrementCompletionCount(LocalDate today) {
+    public void decrementCompletionCount(LocalDate today, LocalDate previousCompletionDate) {
         ZoneId zone = ZoneId.systemDefault();
 
         if (this.archived) {
@@ -102,7 +104,13 @@ public class Habit {
         }
 
         this.completionCount--;
-        this.lastCompletedAt = null;
+
+        if (previousCompletionDate == null) {
+            this.lastCompletedAt = null;
+            this.currentStreak = 0;
+        } else {
+            this.lastCompletedAt = previousCompletionDate.atStartOfDay(zone).toInstant();
+        }
 
         if (this.currentStreak > 0) {
             this.currentStreak--;
@@ -112,7 +120,7 @@ public class Habit {
     public boolean complete(LocalDate today) {
         ZoneId zone = ZoneId.systemDefault();
 
-        if(this.archived) throw new InvalidHabitStateException("Cannot complete: archived");
+        if (this.archived) throw new InvalidHabitStateException("Cannot complete: archived");
 
         if (lastCompletedAt != null) {
             LocalDate lastDate = LocalDate.ofInstant(lastCompletedAt, zone);
@@ -137,11 +145,11 @@ public class Habit {
         return true;
     }
 
-    public void archive(){
+    public void archive() {
         this.archived = true;
     }
 
-    public void unarchive(){
+    public void unarchive() {
         this.archived = false;
     }
 }

@@ -75,9 +75,12 @@ public class HabitService {
         Habit habit = habitRepository.findById(habitId)
                 .orElseThrow(() -> new HabitNotFoundException(habitId));
 
-        habit.decrementCompletionCount(today);
-
         completionRepository.deleteByHabitIdAndCompletedOn(habitId, today);
+
+        LocalDate lastCompletion = completionRepository.findFirstByHabitIdOrderByCompletedOnDesc(habitId)
+                .map(HabitCompletion::getCompletedOn).orElse(null);
+
+        habit.decrementCompletionCount(today, lastCompletion);
 
         applicationEventPublisher.publishEvent(new HabitUncompletedEvent(habitId, today));
 
