@@ -454,6 +454,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/habits/" + habit.getId() + "/history"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").doesNotExist())
                 .andExpect(jsonPath("$[0].completedOn").value(LocalDate.now().toString()));
     }
 
