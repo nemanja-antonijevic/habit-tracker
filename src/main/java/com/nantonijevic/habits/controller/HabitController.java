@@ -32,8 +32,9 @@ public class HabitController {
     }
 
     @GetMapping
-    public Page<HabitResponse> list(Pageable pageable) {
-        return habitService.list(pageable)
+    public Page<HabitResponse> list(@RequestParam(defaultValue = "false") boolean includeArchived,
+                                    Pageable pageable) {
+        return habitService.list(includeArchived, pageable)
                 .map(HabitResponse::from);
     }
 

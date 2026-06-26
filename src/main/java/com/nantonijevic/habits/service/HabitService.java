@@ -121,8 +121,10 @@ public class HabitService {
     // readOnly: list() may return N entities — skips dirty-check snapshots.
     // getById/getHistory intentionally omit it: single entity, benefit ≈ 0.
     @Transactional(readOnly = true)
-    public Page<Habit> list(Pageable pageable) {
-        return habitRepository.findByArchivedFalse(pageable);
+    public Page<Habit> list(boolean includeArchived, Pageable pageable) {
+        return includeArchived
+                ? habitRepository.findAll(pageable)
+                : habitRepository.findByArchivedFalse(pageable);
     }
 
     public List<HabitCompletion> getHistory(Long habitId) {

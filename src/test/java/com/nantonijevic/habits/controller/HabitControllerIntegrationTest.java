@@ -413,6 +413,25 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void archivedHabitIncludedInList_whenIncludeArchivedTrue() throws Exception {
+        var habit1 = new Habit("Read");
+        var habit2 = new Habit("Eat");
+
+        repository.save(habit1);
+        repository.save(habit2);
+
+        mockMvc.perform(post("/habits/" + habit1.getId() + "/archive"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/habits?includeArchived=true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(2));
+        mockMvc.perform(get("/habits?includeArchived=false"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].name").value("Eat"));
+    }
+
+    @Test
     void unarchivedHabitReappearsInList() throws Exception {
         var habit = new Habit("Eat");
         repository.save(habit);
