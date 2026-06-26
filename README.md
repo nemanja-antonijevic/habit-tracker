@@ -40,41 +40,24 @@ Testovi koriste **H2 in-memory** u MySQL kompatibilnom mode-u (`MODE=MySQL`). **
 
 ## API
 
-Habits CRUD:
-
-```bash
-# Create
-curl -X POST http://localhost:8080/habits \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Code 3 hours","description":"Daily Java practice"}'
-
-# List
-curl http://localhost:8080/habits
-
-# Get by id
-curl http://localhost:8080/habits/1
-
-# Update
-curl -X PUT http://localhost:8080/habits/1 \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Code 4 hours","description":"Updated"}'
-
-# Delete
-curl -X DELETE http://localhost:8080/habits/1
-```
+Kompletna specifikacija svih endpointa: [docs/api-reference.md](docs/api-reference.md).
+Brzi curl primeri: [curls.md](curls.md).
 
 ## Project layout
 
 ```
-src/main/java/com/nantonijevic/habittracker/
+src/main/java/com/nantonijevic/habits/
   HabitTrackerApplication.java   # Spring Boot entry
-  habit/
-    Habit.java                   # @Entity
-    HabitRepository.java         # Spring Data JPA
-    HabitController.java         # REST endpoints
-    dto/                         # request/response records
+  controller/                    # REST endpoints (HabitController)
+  service/                       # HabitService (orkestracija)
+  domain/                        # @Entity klase + domenski izuzeci
+  dto/                           # request/response records
+  repository/                    # Spring Data JPA
+  event/                         # domenski eventi, Kafka publisher/consumer
+  config/                        # Kafka producer/consumer config
+  exception/                     # GlobalExceptionHandler
 src/main/resources/
-  application.yml                # MySQL datasource (prod)
+  application.yml                # MySQL datasource (prod) + Kafka
   db/migration/                  # Flyway migrations
 src/test/resources/
   application.yml                # H2 in-memory (test)
