@@ -116,13 +116,16 @@ Telo zahteva:
 GET /habits
 ```
 
-Query parametri (Spring `Pageable`):
+Query parametri:
 
 | Parametar | Tip | Default | Opis |
 |-----------|-----|---------|------|
+| `includeArchived` | `boolean` | `false` | `false` = samo aktivne; `true` = i arhivirane |
 | `page` | `int` | `0` | Indeks strane (od 0) |
 | `size` | `int` | `20` | Veličina strane |
 | `sort` | `string` | — | `polje,asc\|desc` (npr. `createdAt,desc`) |
+
+`page`/`size`/`sort` su Spring `Pageable` parametri. Filtriranje arhive se radi u upitu (`findByArchivedFalse` / `findAll`), pa `totalElements` i broj strana odgovaraju vraćenom skupu.
 
 **Odgovor:** `200 OK`, Spring `Page<HabitResponse>`.
 
@@ -136,7 +139,7 @@ Query parametri (Spring `Pageable`):
 }
 ```
 
-**Napomena:** trenutno vraća i arhivirane navike (nema filtera). Vidi [Poznata ograničenja](#poznata-ograničenja).
+**Napomena:** podrazumevano vraća samo aktivne navike; `?includeArchived=true` uključuje i arhivirane.
 
 ## 3. Jedna navika po id
 
@@ -329,6 +332,5 @@ Otvorene stavke — kandidati za dopunu (ažurirati kako se rešavaju):
 
 | Stavka | Opis |
 |--------|------|
-| Filter arhive na listi | `GET /habits` (endpoint 2) vraća i arhivirane. Predlog: `?includeArchived=false` default + filter u query-ju (`findByArchivedFalse`). |
 | `archived` nije u odgovoru | `HabitResponse` ne izlaže `archived`, pa klijent ne vidi rezultat `archive`/`unarchive` direktno. |
 | Istorija bez paginacije | `GET /habits/{id}/history` (endpoint 10) vraća sve redove; raste neograničeno. |
