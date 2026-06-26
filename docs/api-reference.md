@@ -47,7 +47,6 @@ Jedan odrađen dan. Vraća ga endpoint 10 kao niz.
 
 | Polje | Tip | Opis |
 |-------|-----|------|
-| `id` | `long` | Identifikator reda u istoriji |
 | `completedOn` | `string` (ISO-8601 date) | Datum (`YYYY-MM-DD`) |
 
 ### HabitStatsResponse
@@ -283,8 +282,8 @@ GET /habits/{id}/history
 
 ```json
 [
-  { "id": 105, "completedOn": "2026-06-25" },
-  { "id": 98, "completedOn": "2026-06-24" }
+  { "completedOn": "2026-06-25" },
+  { "completedOn": "2026-06-24" }
 ]
 ```
 
@@ -332,5 +331,4 @@ Otvorene stavke — kandidati za dopunu (ažurirati kako se rešavaju):
 |--------|------|
 | Filter arhive na listi | `GET /habits` (endpoint 2) vraća i arhivirane. Predlog: `?includeArchived=false` default + filter u query-ju (`findByArchivedFalse`). |
 | `archived` nije u odgovoru | `HabitResponse` ne izlaže `archived`, pa klijent ne vidi rezultat `archive`/`unarchive` direktno. |
-| `id` u istoriji | `HabitCompletionResponse.id` (endpoint 10) nijedan endpoint ne prima nazad kao ulaz — kandidat za uklanjanje. |
 | Istorija bez paginacije | `GET /habits/{id}/history` (endpoint 10) vraća sve redove; raste neograničeno. |
