@@ -16,6 +16,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -122,9 +124,16 @@ public class HabitService {
     // getById/getHistory intentionally omit it: single entity, benefit ≈ 0.
     @Transactional(readOnly = true)
     public Page<Habit> list(boolean includeArchived, Pageable pageable) {
+        Pageable effectivePageable = pageable.getSort().isUnsorted() ?
+                PageRequest.of(
+                        pageable.getPageNumber(),
+                        pageable.getPageSize(),
+                        Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"))) :
+                pageable;
+
         return includeArchived
-                ? habitRepository.findAll(pageable)
-                : habitRepository.findByArchivedFalse(pageable);
+                ? habitRepository.findAll(effectivePageable)
+                : habitRepository.findByArchivedFalse(effectivePageable);
     }
 
     public List<HabitCompletion> getHistory(Long habitId) {

@@ -112,8 +112,26 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(get("/habits"))
                 .andExpect(status().is(200))
-                .andExpect(jsonPath("$.content.length()").value(1));
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").exists())
+                .andExpect(jsonPath("$.content[0].name").value("Code 3 hours"))
+                .andExpect(jsonPath("$.content[0].archived").value(false));
+    }
 
+    @Test
+    void listHabits_returnsNewestFirst_byDefault() throws Exception {
+        repository.save(new Habit("Swim"));
+        repository.save(new Habit("Gym"));
+
+        mockMvc.perform(get("/habits"))
+                .andExpect(status().is(200))
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.content[0].id").exists())
+                .andExpect(jsonPath("$.content[0].name").value("Gym"))
+                .andExpect(jsonPath("$.content[0].archived").value(false))
+                .andExpect(jsonPath("$.content[1].id").exists())
+                .andExpect(jsonPath("$.content[1].name").value("Swim"))
+                .andExpect(jsonPath("$.content[1].archived").value(false));
     }
 
     @Test
@@ -123,7 +141,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/habits/" + saved.getId()))
                 .andExpect(status().is(200))
                 .andExpect(jsonPath("$.id").value(saved.getId()))
-                .andExpect(jsonPath("$.name").value("Code 3 hours"));
+                .andExpect(jsonPath("$.name").value("Code 3 hours"))
+                .andExpect(jsonPath("$.archived").value(false));
     }
 
     @Test
@@ -140,7 +159,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/habits/" + saved1.getId()))
                 .andExpect(status().is(200))
                 .andExpect(jsonPath("$.id").value(saved1.getId()))
-                .andExpect(jsonPath("$.name").value("Sport"));
+                .andExpect(jsonPath("$.name").value("Sport"))
+                .andExpect(jsonPath("$.archived").value(false));
     }
 
     @Test
@@ -170,7 +190,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(put("/habits/" + saved.getId()).content(jsonBody).contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(saved.getId()))
-                .andExpect(jsonPath("$.name").value("Code 6 hours"));
+                .andExpect(jsonPath("$.name").value("Code 6 hours"))
+                .andExpect(jsonPath("$.archived").value(false));
     }
 
     @Test
@@ -230,7 +251,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/habits/" + saved.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(saved.getId()))
-                .andExpect(jsonPath("$.name").value("Sleep"));
+                .andExpect(jsonPath("$.name").value("Sleep"))
+                .andExpect(jsonPath("$.archived").value(false));
     }
 
     @Test
@@ -409,7 +431,28 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/habits"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
-                .andExpect(jsonPath("$.content[0].name").value("Eat"));
+                .andExpect(jsonPath("$.content[0].name").value("Eat"))
+                .andExpect(jsonPath("$.content[0].archived").value(false));
+    }
+
+    @Test
+    void archivedHabit_exposesArchivedTrue_inListAndGetById() throws Exception {
+        var habit = new Habit("Read");
+
+        repository.save(habit);
+
+        mockMvc.perform(post("/habits/" + habit.getId() + "/archive"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/habits?includeArchived=true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].name").value("Read"))
+                .andExpect(jsonPath("$.content[0].archived").value(true));
+
+        mockMvc.perform(get("/habits/" + habit.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Read"))
+                .andExpect(jsonPath("$.archived").value(true));
     }
 
     @Test
@@ -424,11 +467,16 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk());
         mockMvc.perform(get("/habits?includeArchived=true"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content.length()").value(2));
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.content[0].name").value("Eat"))
+                .andExpect(jsonPath("$.content[0].archived").value(false))
+                .andExpect(jsonPath("$.content[1].name").value("Read"))
+                .andExpect(jsonPath("$.content[1].archived").value(true));
         mockMvc.perform(get("/habits?includeArchived=false"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
-                .andExpect(jsonPath("$.content[0].name").value("Eat"));
+                .andExpect(jsonPath("$.content[0].name").value("Eat"))
+                .andExpect(jsonPath("$.content[0].archived").value(false));
     }
 
     @Test
@@ -443,7 +491,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/habits"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
-                .andExpect(jsonPath("$.content[0].name").value("Eat"));
+                .andExpect(jsonPath("$.content[0].name").value("Eat"))
+                .andExpect(jsonPath("$.content[0].archived").value(false));
     }
 
     @Test

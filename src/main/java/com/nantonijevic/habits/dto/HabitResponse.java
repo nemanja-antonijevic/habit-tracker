@@ -9,9 +9,10 @@ public record HabitResponse(
         String name,
         int completionCount,
         int currentStreak,
+        boolean archived,
         Instant createdAt
 ) {
     public static HabitResponse from(Habit habit) {
-        return new HabitResponse(habit.getId(), habit.getName(), habit.getCompletionCount(), habit.getCurrentStreak(), habit.getCreatedAt());
+        return new HabitResponse(habit.getId(), habit.getName(), habit.getCompletionCount(), habit.getCurrentStreak(), habit.isArchived(), habit.getCreatedAt());
     }
 }
