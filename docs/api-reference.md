@@ -37,9 +37,10 @@ Standardni prikaz navike. Vraćaju ga endpointi 1, 3, 4, 6, 7, 8, 9.
 | `name` | `string` | Naziv |
 | `completionCount` | `int` | Ukupan broj odrađenih dana |
 | `currentStreak` | `int` | Trenutni niz uzastopnih dana |
+| `archived` | `boolean` | Da li je navika arhivirana (soft delete) |
 | `createdAt` | `string` (ISO-8601 instant) | Vreme kreiranja |
 
-Namerno se NE izlažu (interna polja): `version` (osim kao ulaz na update), `archived`, `longestStreak`, `lastCompletedAt`.
+Namerno se NE izlažu (interna polja): `version` (osim kao ulaz na update), `longestStreak`, `lastCompletedAt`.
 
 ### HabitCompletionResponse
 
@@ -102,7 +103,7 @@ Telo zahteva:
 **Odgovor:** `201 Created`, header `Location: /habits/{id}`, telo `HabitResponse`.
 
 ```json
-{ "id": 42, "name": "Read 30 min", "completionCount": 0, "currentStreak": 0, "createdAt": "2026-06-26T08:30:00Z" }
+{ "id": 42, "name": "Read 30 min", "completionCount": 0, "currentStreak": 0, "archived": false, "createdAt": "2026-06-26T08:30:00Z" }
 ```
 
 | Status | Uslov |
@@ -123,15 +124,17 @@ Query parametri:
 | `includeArchived` | `boolean` | `false` | `false` = samo aktivne; `true` = i arhivirane |
 | `page` | `int` | `0` | Indeks strane (od 0) |
 | `size` | `int` | `20` | Veličina strane |
-| `sort` | `string` | — | `polje,asc\|desc` (npr. `createdAt,desc`) |
+| `sort` | `string` | `createdAt,desc` (uz `id,desc` kao tie-breaker) | `polje,asc\|desc` (npr. `name,asc`) |
 
 `page`/`size`/`sort` su Spring `Pageable` parametri. Filtriranje arhive se radi u upitu (`findByArchivedFalse` / `findAll`), pa `totalElements` i broj strana odgovaraju vraćenom skupu.
+
+**Podrazumevani redosled:** ako klijent ne pošalje `sort`, lista se vraća `createdAt` opadajuće (najnovije navike prve), sa `id` opadajuće kao tie-breaker za isti trenutak kreiranja. Eksplicitan `?sort=` klijenta ima prednost nad podrazumevanim. Ugovor važi za oba kraka (`includeArchived=true` i `false`).
 
 **Odgovor:** `200 OK`, Spring `Page<HabitResponse>`.
 
 ```json
 {
-  "content": [ { "id": 42, "name": "Read 30 min", "completionCount": 0, "currentStreak": 0, "createdAt": "2026-06-26T08:30:00Z" } ],
+  "content": [ { "id": 42, "name": "Read 30 min", "completionCount": 0, "currentStreak": 0, "archived": false, "createdAt": "2026-06-26T08:30:00Z" } ],
   "totalElements": 1,
   "totalPages": 1,
   "number": 0,
@@ -332,5 +335,4 @@ Otvorene stavke — kandidati za dopunu (ažurirati kako se rešavaju):
 
 | Stavka | Opis |
 |--------|------|
-| `archived` nije u odgovoru | `HabitResponse` ne izlaže `archived`, pa klijent ne vidi rezultat `archive`/`unarchive` direktno. |
 | Istorija bez paginacije | `GET /habits/{id}/history` (endpoint 10) vraća sve redove; raste neograničeno. |
