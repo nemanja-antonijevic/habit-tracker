@@ -282,23 +282,34 @@ GET /habits/{id}/history
 |------------|-----|------|
 | `id` | `long` | Identifikator navike |
 
-Čita se direktno iz write-side tabele `habit_completions` (uvek tačno, sinhrono). Sortirano opadajuće po datumu.
+Query parametri:
 
-**Odgovor:** `200 OK`, niz `HabitCompletionResponse`.
+| Parametar | Tip | Default | Opis |
+|-----------|-----|---------|------|
+| `page` | `int` | `0` | Indeks strane (od 0) |
+| `size` | `int` | `20` | Veličina strane |
+
+Čita se direktno iz write-side tabele `habit_completions` (uvek tačno, sinhrono). Redosled je fiksan `completedOn` opadajuće (najskoriji dan prvi) — klijentov `?sort=` se ne primenjuje (istorija ima jedan smislen redosled).
+
+**Odgovor:** `200 OK`, Spring `Page<HabitCompletionResponse>`.
 
 ```json
-[
-  { "completedOn": "2026-06-25" },
-  { "completedOn": "2026-06-24" }
-]
+{
+  "content": [
+    { "completedOn": "2026-06-25" },
+    { "completedOn": "2026-06-24" }
+  ],
+  "totalElements": 2,
+  "totalPages": 1,
+  "number": 0,
+  "size": 20
+}
 ```
 
 | Status | Uslov |
 |--------|-------|
-| `200` | OK (prazan niz `[]` ako nema odrađenih dana) |
+| `200` | OK (prazan `content: []` ako nema odrađenih dana) |
 | `404` | Ne postoji |
-
-**Napomena:** nije paginirano — vraća sve dane. Vidi [Poznata ograničenja](#poznata-ograničenja).
 
 ## 11. Agregatna statistika
 
@@ -331,8 +342,4 @@ GET /habits/{id}/stats
 
 ## Poznata ograničenja
 
-Otvorene stavke — kandidati za dopunu (ažurirati kako se rešavaju):
-
-| Stavka | Opis |
-|--------|------|
-| Istorija bez paginacije | `GET /habits/{id}/history` (endpoint 10) vraća sve redove; raste neograničeno. |
+Trenutno nema otvorenih ograničenja na nivou API ugovora. (Stavke se dodaju ovde kad se otkriju, i uklanjaju kad se reše.)
