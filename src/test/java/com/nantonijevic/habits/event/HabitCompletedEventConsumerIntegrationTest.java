@@ -52,17 +52,19 @@ class HabitCompletedEventConsumerIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        completionRepository.deleteAll();
         statRepository.deleteAll();
-
-        messagesProcessedLatch = new CountDownLatch(2);
+        repository.deleteAll();
 
         doAnswer(invocation -> {
             try {
                 return invocation.callRealMethod();
             } finally {
-                messagesProcessedLatch.countDown();
+                if (messagesProcessedLatch != null) {
+                    messagesProcessedLatch.countDown();
+                }
             }
-        }).when(consumer).on(any(HabitCompletedEvent.class));
+        }).when(consumer).on(any(HabitEvent.class));
 
         Logger consumerLogger = (Logger) LoggerFactory.getLogger(HabitCompletedEventConsumer.class);
         consumerLogger.setLevel(Level.DEBUG);
@@ -84,6 +86,8 @@ class HabitCompletedEventConsumerIntegrationTest {
 
     @Test
     void duplicateEvent_isDedupedByUniqueConstraint() throws Exception {
+        expectEvents(2);
+
         HabitCompletedEvent event = new HabitCompletedEvent(
                 11L,
                 LocalDate.now(),
@@ -91,26 +95,32 @@ class HabitCompletedEventConsumerIntegrationTest {
                 1
         );
 
-        kafkaTemplate.send(
-                "habit-completed",
-                String.valueOf(event.habitId()),
-                event
-        ).get(10, SECONDS);
+        publishCompletedEvent(event);
+        publishCompletedEvent(event);
 
-        kafkaTemplate.send(
-                "habit-completed",
-                String.valueOf(event.habitId()),
-                event
-        ).get(10, SECONDS);
+        awaitEvents();
 
-        kafkaTemplate.flush();
-
-        assertThat(messagesProcessedLatch.await(10, SECONDS)).isTrue();
         assertThat(statRepository.count()).isEqualTo(1);
 
         boolean skippedLogged = logAppender.list.stream()
                 .anyMatch(e -> e.getFormattedMessage().contains("Skipped duplicate"));
 
         assertThat(skippedLogged).isTrue();
+    }
+
+    private void expectEvents(int count) {
+        messagesProcessedLatch = new CountDownLatch(count);
+    }
+
+    private void awaitEvents() throws InterruptedException {
+        assertThat(messagesProcessedLatch.await(10, SECONDS)).isTrue();
+    }
+
+    private void publishCompletedEvent(HabitCompletedEvent event) throws Exception {
+        kafkaTemplate.send(
+                "habit-completed",
+                String.valueOf(event.habitId()),
+                event
+        ).get(10, SECONDS);
     }
 }

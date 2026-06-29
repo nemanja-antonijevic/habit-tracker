@@ -47,7 +47,9 @@ class HabitCompletionStatRepositoryIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        completionRepository.deleteAll();
         statRepository.deleteAll();
+        repository.deleteAll();
 
         doAnswer(invocation -> {
             try {
@@ -57,7 +59,7 @@ class HabitCompletionStatRepositoryIntegrationTest {
                     messagesProcessedLatch.countDown();
                 }
             }
-        }).when(consumer).on(any(HabitCompletedEvent.class));
+        }).when(consumer).on(any(HabitEvent.class));
     }
 
     @AfterEach
@@ -69,18 +71,16 @@ class HabitCompletionStatRepositoryIntegrationTest {
 
     @Test
     void aggregatesStatsAcrossMultipleCompletionEvents() throws Exception {
-        messagesProcessedLatch = new CountDownLatch(3);
+        expectEvents(3);
 
         Long habitId = 11L;
         LocalDate today = LocalDate.now();
 
-        sendCompletedEvent(habitId, today.minusDays(2), 1, 1);
-        sendCompletedEvent(habitId, today.minusDays(1), 2, 2);
-        sendCompletedEvent(habitId, today, 3, 3);
+        publishCompletedEvent(habitId, today.minusDays(2), 1, 1);
+        publishCompletedEvent(habitId, today.minusDays(1), 2, 2);
+        publishCompletedEvent(habitId, today, 3, 3);
 
-        kafkaTemplate.flush();
-
-        assertThat(messagesProcessedLatch.await(10, SECONDS)).isTrue();
+        awaitEvents();
 
         HabitStatsView view = statRepository.findStatsByHabitId(habitId);
 
@@ -102,23 +102,24 @@ class HabitCompletionStatRepositoryIntegrationTest {
         });
     }
 
-    private void sendCompletedEvent(
+    private void expectEvents(int count) {
+        messagesProcessedLatch = new CountDownLatch(count);
+    }
+
+    private void awaitEvents() throws InterruptedException {
+        assertThat(messagesProcessedLatch.await(10, SECONDS)).isTrue();
+    }
+
+    private void publishCompletedEvent(
             Long habitId,
             LocalDate completedDate,
             int currentStreak,
             int completionCount
     ) throws Exception {
-        HabitCompletedEvent event = new HabitCompletedEvent(
-                habitId,
-                completedDate,
-                currentStreak,
-                completionCount
-        );
-
         kafkaTemplate.send(
                 "habit-completed",
-                String.valueOf(event.habitId()),
-                event
+                String.valueOf(habitId),
+                new HabitCompletedEvent(habitId, completedDate, currentStreak, completionCount)
         ).get(10, SECONDS);
     }
 }

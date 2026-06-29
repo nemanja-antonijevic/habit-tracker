@@ -68,10 +68,10 @@ public class HabitStatsIntegrationTest {
     @Autowired
     private KafkaTemplate<String, HabitEvent> kafkaTemplate;
 
-    private CountDownLatch messagesProcessedLatch;
-
     @SpyBean
     private HabitCompletedEventConsumer consumer;
+
+    private CountDownLatch messagesProcessedLatch;
 
     @BeforeEach
     void setUp() {
@@ -79,13 +79,13 @@ public class HabitStatsIntegrationTest {
         statRepository.deleteAll();
         repository.deleteAll();
 
-        messagesProcessedLatch = new CountDownLatch(2);
-
         doAnswer(invocation -> {
             try {
                 return invocation.callRealMethod();
             } finally {
-                messagesProcessedLatch.countDown();
+                if (messagesProcessedLatch != null) {
+                    messagesProcessedLatch.countDown();
+                }
             }
         }).when(consumer).on(any(HabitEvent.class));
     }
@@ -99,11 +99,15 @@ public class HabitStatsIntegrationTest {
 
     @Test
     void getStats_returnsCorrectCountAndTimestamp_afterComplete() throws Exception {
-        messagesProcessedLatch = new CountDownLatch(1);
+        expectEvents(1);
+
         Habit saved = repository.save(new Habit("Read 30 min"));
+
         mockMvc.perform(post("/habits/" + saved.getId() + "/complete"))
                 .andExpect(status().isOk());
-        assertThat(messagesProcessedLatch.await(10, SECONDS)).isTrue();
+
+        awaitEvents();
+
         mockMvc.perform(get("/habits/" + saved.getId() + "/stats"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.completionCount").value(1))
@@ -112,30 +116,16 @@ public class HabitStatsIntegrationTest {
 
     @Test
     void getStats_returnsCurrentStreak_afterConsecutiveCompletions() throws Exception {
-        messagesProcessedLatch = new CountDownLatch(3);
+        expectEvents(3);
 
         var habit = repository.save(new Habit("Read"));
         LocalDate today = LocalDate.now();
 
-        kafkaTemplate.send(
-                "habit-completed",
-                String.valueOf(habit.getId()),
-                new HabitCompletedEvent(habit.getId(), today.minusDays(2), 1, 1)
-        ).get(10, SECONDS);
+        publishCompletedEvent(habit.getId(), today.minusDays(2), 1, 1);
+        publishCompletedEvent(habit.getId(), today.minusDays(1), 2, 2);
+        publishCompletedEvent(habit.getId(), today, 3, 3);
 
-        kafkaTemplate.send(
-                "habit-completed",
-                String.valueOf(habit.getId()),
-                new HabitCompletedEvent(habit.getId(), today.minusDays(1), 2, 2)
-        ).get(10, SECONDS);
-
-        kafkaTemplate.send(
-                "habit-completed",
-                String.valueOf(habit.getId()),
-                new HabitCompletedEvent(habit.getId(), today, 3, 3)
-        ).get(10, SECONDS);
-
-        assertThat(messagesProcessedLatch.await(10, SECONDS)).isTrue();
+        awaitEvents();
 
         mockMvc.perform(get("/habits/" + habit.getId() + "/stats"))
                 .andExpect(status().isOk())
@@ -144,7 +134,7 @@ public class HabitStatsIntegrationTest {
 
     @Test
     void uncomplete_decrementsOnlyByOne() throws Exception {
-        messagesProcessedLatch = new CountDownLatch(3);
+        expectEvents(3);
 
         LocalDate today = LocalDate.now();
 
@@ -155,33 +145,19 @@ public class HabitStatsIntegrationTest {
 
         var saved = repository.save(habit);
 
-        kafkaTemplate.send(
-                "habit-completed",
-                String.valueOf(saved.getId()),
-                new HabitCompletedEvent(saved.getId(), today.minusDays(2), 1, 1)
-        ).get(10, SECONDS);
+        publishCompletedEvent(saved.getId(), today.minusDays(2), 1, 1);
+        publishCompletedEvent(saved.getId(), today.minusDays(1), 2, 2);
+        publishCompletedEvent(saved.getId(), today, 3, 3);
 
-        kafkaTemplate.send(
-                "habit-completed",
-                String.valueOf(saved.getId()),
-                new HabitCompletedEvent(saved.getId(), today.minusDays(1), 2, 2)
-        ).get(10, SECONDS);
+        awaitEvents();
 
-        kafkaTemplate.send(
-                "habit-completed",
-                String.valueOf(saved.getId()),
-                new HabitCompletedEvent(saved.getId(), today, 3, 3)
-        ).get(10, SECONDS);
-
-        assertThat(messagesProcessedLatch.await(10, SECONDS)).isTrue();
-
-        messagesProcessedLatch = new CountDownLatch(1);
+        expectEvents(1);
 
         mockMvc.perform(post("/habits/" + saved.getId() + "/uncomplete"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.completionCount").value(2));
 
-        assertThat(messagesProcessedLatch.await(10, SECONDS)).isTrue();
+        awaitEvents();
 
         mockMvc.perform(get("/habits/" + saved.getId() + "/stats"))
                 .andExpect(status().isOk())
@@ -190,12 +166,16 @@ public class HabitStatsIntegrationTest {
 
     @Test
     void firstCompleteSetsLongestStreakToOne() throws Exception {
-        messagesProcessedLatch = new CountDownLatch(1);
+        expectEvents(1);
+
         var habit = new Habit("Read 30 min");
         repository.save(habit);
+
         mockMvc.perform(post("/habits/" + habit.getId() + "/complete"))
                 .andExpect(status().isOk());
-        assertThat(messagesProcessedLatch.await(10, SECONDS)).isTrue();
+
+        awaitEvents();
+
         mockMvc.perform(get("/habits/" + habit.getId() + "/stats"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.currentStreak").value(1))
@@ -204,36 +184,17 @@ public class HabitStatsIntegrationTest {
 
     @Test
     void streakResetDoesNotLowerLongestStreak() throws Exception {
-        messagesProcessedLatch = new CountDownLatch(4);
+        expectEvents(4);
 
         var habit = repository.save(new Habit("Read 30 min"));
         LocalDate today = LocalDate.now();
 
-        kafkaTemplate.send(
-                "habit-completed",
-                String.valueOf(habit.getId()),
-                new HabitCompletedEvent(habit.getId(), today.minusDays(4), 1, 1)
-        ).get(10, SECONDS);
+        publishCompletedEvent(habit.getId(), today.minusDays(4), 1, 1);
+        publishCompletedEvent(habit.getId(), today.minusDays(3), 2, 2);
+        publishCompletedEvent(habit.getId(), today.minusDays(2), 3, 3);
+        publishCompletedEvent(habit.getId(), today, 1, 4);
 
-        kafkaTemplate.send(
-                "habit-completed",
-                String.valueOf(habit.getId()),
-                new HabitCompletedEvent(habit.getId(), today.minusDays(3), 2, 2)
-        ).get(10, SECONDS);
-
-        kafkaTemplate.send(
-                "habit-completed",
-                String.valueOf(habit.getId()),
-                new HabitCompletedEvent(habit.getId(), today.minusDays(2), 3, 3)
-        ).get(10, SECONDS);
-
-        kafkaTemplate.send(
-                "habit-completed",
-                String.valueOf(habit.getId()),
-                new HabitCompletedEvent(habit.getId(), today, 1, 4)
-        ).get(10, SECONDS);
-
-        assertThat(messagesProcessedLatch.await(10, SECONDS)).isTrue();
+        awaitEvents();
 
         mockMvc.perform(get("/habits/" + habit.getId() + "/stats"))
                 .andExpect(status().isOk())
@@ -241,4 +202,24 @@ public class HabitStatsIntegrationTest {
                 .andExpect(jsonPath("$.longestStreak").value(3));
     }
 
+    private void expectEvents(int count) {
+        messagesProcessedLatch = new CountDownLatch(count);
+    }
+
+    private void awaitEvents() throws InterruptedException {
+        assertThat(messagesProcessedLatch.await(10, SECONDS)).isTrue();
+    }
+
+    private void publishCompletedEvent(
+            Long habitId,
+            LocalDate completedDate,
+            int currentStreak,
+            int completionCount
+    ) throws Exception {
+        kafkaTemplate.send(
+                "habit-completed",
+                String.valueOf(habitId),
+                new HabitCompletedEvent(habitId, completedDate, currentStreak, completionCount)
+        ).get(10, SECONDS);
+    }
 }
