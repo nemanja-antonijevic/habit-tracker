@@ -2,6 +2,7 @@ package com.nantonijevic.habits.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nantonijevic.habits.domain.Habit;
+import com.nantonijevic.habits.domain.HabitCompletion;
 import com.nantonijevic.habits.dto.CreateHabitRequest;
 import com.nantonijevic.habits.AbstractIntegrationTest;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
@@ -509,7 +510,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(get("/habits/" + saved.getId() + "/history"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(0));
+                .andExpect(jsonPath("$.content.length()").value(0));
     }
 
     @Test
@@ -521,9 +522,9 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk());
         mockMvc.perform(get("/habits/" + habit.getId() + "/history"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].id").doesNotExist())
-                .andExpect(jsonPath("$[0].completedOn").value(LocalDate.now().toString()));
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").doesNotExist())
+                .andExpect(jsonPath("$.content[0].completedOn").value(LocalDate.now().toString()));
     }
 
     @Test
@@ -537,6 +538,21 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk());
         mockMvc.perform(get("/habits/" + habit.getId() + "/history"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(0));
+                .andExpect(jsonPath("$.content.length()").value(0));
+    }
+
+    @Test
+    void getHistory_returnsPagedResult_whenMoreThanOnePage() throws Exception {
+        var saved = repository.save(new Habit("Read"));
+        Long id = saved.getId();
+        completionRepository.save(new HabitCompletion(id, LocalDate.now()));
+        completionRepository.save(new HabitCompletion(id, LocalDate.now().minusDays(1)));
+        completionRepository.save(new HabitCompletion(id, LocalDate.now().minusDays(2)));
+
+        mockMvc.perform(get("/habits/" + id + "/history?page=0&size=2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.totalPages").value(2));
     }
 }

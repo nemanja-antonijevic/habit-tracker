@@ -136,10 +136,13 @@ public class HabitService {
                 : habitRepository.findByArchivedFalse(effectivePageable);
     }
 
-    public List<HabitCompletion> getHistory(Long habitId) {
+    // readOnly: list()/getHistory() may return N entities — skips dirty-check snapshots.
+    // getById intentionally omits it: single entity, benefit ≈ 0.
+    @Transactional(readOnly = true)
+    public Page<HabitCompletion> getHistory(Long habitId, Pageable pageable) {
         habitRepository.findById(habitId)
                 .orElseThrow(() -> new HabitNotFoundException(habitId));
-        return completionRepository.findByHabitIdOrderByCompletedOnDesc(habitId);
+        return completionRepository.findByHabitIdOrderByCompletedOnDesc(habitId, pageable);
     }
 
     @Transactional
