@@ -1,136 +1,137 @@
 # Habit Tracker — API Reference
 
-Kompletna specifikacija svih HTTP endpointa. Ovo je izvor istine za API ugovor — dopunjava se uz svaku izmenu endpointa.
+Full specification of every HTTP endpoint. This is the source of truth for the API contract — update it with every endpoint change.
 
-- **Base URL (lokalno):** `http://localhost:8080`
-- **Content-Type:** `application/json` (zahtevi sa telom)
-- **Setup i pokretanje:** vidi [README.md](../README.md)
-- **Brzi copy-paste curl primeri:** vidi [curls.md](../curls.md)
+- **Base URL (local):** `http://localhost:8080`
+- **Content-Type:** `application/json` (requests with a body)
+- **Setup and run:** see [README.md](../README.md)
+- **Quick copy-paste curl examples:** see [curls.md](../curls.md)
 
-Sve rute su pod `/habits` (`HabitController`).
+All routes live under `/habits` (`HabitController`).
 
-## Pregled endpointa
+## Endpoint overview
 
-| # | Metoda | Putanja | Namena | CQRS strana |
-|---|--------|---------|--------|-------------|
-| 1 | `POST` | `/habits` | Kreiraj naviku | Write |
-| 2 | `GET` | `/habits` | Lista navika (paginirano) | Write |
-| 3 | `GET` | `/habits/{id}` | Jedna navika po id | Write |
-| 4 | `PUT` | `/habits/{id}` | Izmeni naziv (optimistic lock) | Write |
-| 5 | `DELETE` | `/habits/{id}` | Obriši naviku | Write |
-| 6 | `POST` | `/habits/{id}/complete` | Označi kao odrađeno danas | Write + event |
-| 7 | `POST` | `/habits/{id}/uncomplete` | Poništi današnje označavanje | Write + event |
-| 8 | `POST` | `/habits/{id}/archive` | Arhiviraj (soft) | Write |
-| 9 | `POST` | `/habits/{id}/unarchive` | Vrati iz arhive | Write |
-| 10 | `GET` | `/habits/{id}/history` | Dani kad je navika odrađena | Write (direktno čitanje) |
-| 11 | `GET` | `/habits/{id}/stats` | Agregatna statistika | Read-model (Kafka projekcija) |
+| # | Method | Path | Purpose | CQRS side |
+|---|--------|------|---------|-----------|
+| 1 | `POST` | `/habits` | Create a habit | Write |
+| 2 | `GET` | `/habits` | List habits (paginated) | Write |
+| 3 | `GET` | `/habits/{id}` | Get one habit by id | Write |
+| 4 | `PUT` | `/habits/{id}` | Update the name (optimistic lock) | Write |
+| 5 | `DELETE` | `/habits/{id}` | Delete a habit | Write |
+| 6 | `POST` | `/habits/{id}/complete` | Mark as done today | Write + event |
+| 7 | `POST` | `/habits/{id}/uncomplete` | Undo today's completion | Write + event |
+| 8 | `POST` | `/habits/{id}/archive` | Archive (soft delete) | Write |
+| 9 | `POST` | `/habits/{id}/unarchive` | Restore from archive | Write |
+| 10 | `GET` | `/habits/{id}/history` | Days the habit was completed | Write (direct read) |
+| 11 | `GET` | `/habits/{id}/stats` | Aggregate statistics | Read model (Kafka projection) |
 
-## Model podataka
+## Data model
 
 ### HabitResponse
 
-Standardni prikaz navike. Vraćaju ga endpointi 1, 3, 4, 6, 7, 8, 9.
+Standard habit representation. Returned by endpoints 1, 3, 4, 6, 7, 8, 9.
 
-| Polje | Tip | Opis |
-|-------|-----|------|
-| `id` | `long` | Identifikator navike |
-| `name` | `string` | Naziv |
-| `completionCount` | `int` | Ukupan broj odrađenih dana |
-| `currentStreak` | `int` | Trenutni niz uzastopnih dana |
-| `archived` | `boolean` | Da li je navika arhivirana (soft delete) |
-| `createdAt` | `string` (ISO-8601 instant) | Vreme kreiranja |
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `long` | Habit identifier |
+| `name` | `string` | Name |
+| `completionCount` | `int` | Total number of completed days |
+| `currentStreak` | `int` | Current run of consecutive days |
+| `archived` | `boolean` | Whether the habit is archived (soft delete) |
+| `createdAt` | `string` (ISO-8601 instant) | Creation time |
 
-Namerno se NE izlažu (interna polja): `version` (osim kao ulaz na update), `longestStreak`, `lastCompletedAt`.
+Deliberately not exposed (internal fields): `version` (except as update input), `longestStreak`, `lastCompletedAt`.
 
 ### HabitCompletionResponse
 
-Jedan odrađen dan. Vraća ga endpoint 10 kao niz.
+One completed day. Returned by endpoint 10 as an array.
 
-| Polje | Tip | Opis |
-|-------|-----|------|
-| `completedOn` | `string` (ISO-8601 date) | Datum (`YYYY-MM-DD`) |
+| Field | Type | Description |
+|-------|------|-------------|
+| `completedOn` | `string` (ISO-8601 date) | Date (`YYYY-MM-DD`) |
 
 ### HabitStatsResponse
 
-Agregatna statistika. Vraća je endpoint 11.
+Aggregate statistics. Returned by endpoint 11.
 
-| Polje | Tip | Opis |
-|-------|-----|------|
-| `completionCount` | `long` | Ukupan broj odrađenih dana |
-| `longestStreak` | `int` | Najduži niz ikad zabeležen |
-| `lastCompletedOn` | `string` (ISO-8601 date) \| `null` | Poslednji odrađen datum |
-| `currentStreak` | `int` | Trenutni niz, korigovan na vreme čitanja (vidi endpoint 11) |
+| Field | Type | Description |
+|-------|------|-------------|
+| `completionCount` | `long` | Total number of completed days |
+| `longestStreak` | `int` | Longest streak ever recorded |
+| `lastCompletedOn` | `string` (ISO-8601 date) \| `null` | Last completed date |
+| `currentStreak` | `int` | Current streak, corrected at read time (see endpoint 11) |
 
 ### ErrorResponse
 
-Telo svih grešaka.
+Body of every error.
 
-| Polje | Tip | Opis |
-|-------|-----|------|
-| `error` | `string` | Poruka greške |
+| Field | Type | Description |
+|-------|------|-------------|
+| `error` | `string` | Error message |
 
-## Status kodovi
+## Status codes
 
-| Kod | Kada |
-|-----|------|
-| `200 OK` | Uspeh sa telom |
-| `201 Created` | Navika kreirana (uz `Location` header) |
-| `204 No Content` | Uspeh bez tela (brisanje) |
-| `400 Bad Request` | Validacija pala, pokvaren JSON, ili nedozvoljen prelaz stanja (`InvalidHabitStateException`) |
-| `404 Not Found` | Navika ne postoji (`HabitNotFoundException`) |
-| `409 Conflict` | Neslaganje verzije pri izmeni (`HabitVersionConflictException`) |
+| Code | When |
+|------|------|
+| `200 OK` | Success with a body |
+| `201 Created` | Habit created (with a `Location` header) |
+| `204 No Content` | Success with no body (delete) |
+| `400 Bad Request` | Validation failed, malformed JSON, or an illegal state transition (`InvalidHabitStateException`) |
+| `404 Not Found` | Habit does not exist (`HabitNotFoundException`) |
+| `409 Conflict` | Version mismatch on update (`HabitVersionConflictException`) |
 
-Mapiranje izuzetak → status je centralizovano u `GlobalExceptionHandler` (`@RestControllerAdvice`).
+`GlobalExceptionHandler` (`@RestControllerAdvice`) centralizes the exception-to-status mapping.
 
 ---
 
-## 1. Kreiraj naviku
+## 1. Create a habit
 
 ```
 POST /habits
 ```
 
-Telo zahteva:
+Request body:
 
-| Polje | Tip | Ograničenja |
-|-------|-----|-------------|
+| Field | Type | Constraints |
+|-------|------|-------------|
 | `name` | `string` | `@NotBlank`, `@Size(max = 255)` |
 
 ```json
 { "name": "Read 30 min" }
 ```
 
-**Odgovor:** `201 Created`, header `Location: /habits/{id}`, telo `HabitResponse`.
+**Response:** `201 Created`, header `Location: /habits/{id}`, body `HabitResponse`.
 
 ```json
 { "id": 42, "name": "Read 30 min", "completionCount": 0, "currentStreak": 0, "archived": false, "createdAt": "2026-06-26T08:30:00Z" }
 ```
 
-| Status | Uslov |
-|--------|-------|
-| `201` | Kreirano |
-| `400` | `name` prazan ili duži od 255 / pokvareno telo |
+| Status | Condition |
+|--------|-----------|
+| `201` | Created |
+| `400` | `name` empty or longer than 255 / malformed body |
 
-## 2. Lista navika
+## 2. List habits
 
 ```
 GET /habits
 ```
 
-Query parametri:
+Query parameters:
 
-| Parametar | Tip | Default | Opis |
-|-----------|-----|---------|------|
-| `includeArchived` | `boolean` | `false` | `false` = samo aktivne; `true` = i arhivirane |
-| `page` | `int` | `0` | Indeks strane (od 0) |
-| `size` | `int` | `20` | Veličina strane |
-| `sort` | `string` | `createdAt,desc` (uz `id,desc` kao tie-breaker) | `polje,asc\|desc` (npr. `name,asc`) |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | `string` | _(no filter)_ | Filters by name, substring and case-insensitive (`SwIm` matches `Swim`). Empty or whitespace-only means no filter (returns all). |
+| `includeArchived` | `boolean` | `false` | `false` = active only; `true` = include archived |
+| `page` | `int` | `0` | Page index (zero-based) |
+| `size` | `int` | `20` | Page size |
+| `sort` | `string` | `createdAt,desc` (with `id,desc` as tie-breaker) | `field,asc\|desc` (e.g. `name,asc`) |
 
-`page`/`size`/`sort` su Spring `Pageable` parametri. Filtriranje arhive se radi u upitu (`findByArchivedFalse` / `findAll`), pa `totalElements` i broj strana odgovaraju vraćenom skupu.
+`page`/`size`/`sort` are Spring `Pageable` parameters. Both filters (name and archive) run in a single query (`search`, both conditions optional), so `totalElements` and the page count match the returned set.
 
-**Podrazumevani redosled:** ako klijent ne pošalje `sort`, lista se vraća `createdAt` opadajuće (najnovije navike prve), sa `id` opadajuće kao tie-breaker za isti trenutak kreiranja. Eksplicitan `?sort=` klijenta ima prednost nad podrazumevanim. Ugovor važi za oba kraka (`includeArchived=true` i `false`).
+**Default order:** when the client sends no `sort`, the list comes back `createdAt` descending (newest habits first), with `id` descending as a tie-breaker for habits created at the same instant. An explicit `?sort=` from the client takes precedence. The contract holds for both branches (`includeArchived=true` and `false`).
 
-**Odgovor:** `200 OK`, Spring `Page<HabitResponse>`.
+**Response:** `200 OK`, Spring `Page<HabitResponse>`.
 
 ```json
 {
@@ -142,156 +143,156 @@ Query parametri:
 }
 ```
 
-**Napomena:** podrazumevano vraća samo aktivne navike; `?includeArchived=true` uključuje i arhivirane.
+By default the list returns active habits only; `?includeArchived=true` includes archived ones. `?name=` filters by name (substring, case-insensitive) and combines with `includeArchived` (e.g. `?name=read&includeArchived=true`).
 
-## 3. Jedna navika po id
+## 3. Get one habit by id
 
 ```
 GET /habits/{id}
 ```
 
-| Path param | Tip | Opis |
-|------------|-----|------|
-| `id` | `long` | Identifikator navike |
+| Path param | Type | Description |
+|------------|------|-------------|
+| `id` | `long` | Habit identifier |
 
-**Odgovor:** `200 OK`, `HabitResponse`.
+**Response:** `200 OK`, `HabitResponse`.
 
-| Status | Uslov |
-|--------|-------|
-| `200` | Pronađena |
-| `404` | Ne postoji |
+| Status | Condition |
+|--------|-----------|
+| `200` | Found |
+| `404` | Does not exist |
 
-## 4. Izmeni naviku
+## 4. Update a habit
 
 ```
 PUT /habits/{id}
 ```
 
-Telo zahteva:
+Request body:
 
-| Polje | Tip | Ograničenja |
-|-------|-----|-------------|
-| `version` | `long` | `@NotNull` — trenutna verzija navike (optimistic locking) |
-| `name` | `string` | `@NotBlank`, `@Size(max = 255)` — novi naziv |
+| Field | Type | Constraints |
+|-------|------|-------------|
+| `version` | `long` | `@NotNull` — current habit version (optimistic locking) |
+| `name` | `string` | `@NotBlank`, `@Size(max = 255)` — new name |
 
 ```json
 { "version": 3, "name": "Read 45 min" }
 ```
 
-**Odgovor:** `200 OK`, `HabitResponse` (sa uvećanom `version` u bazi).
+**Response:** `200 OK`, `HabitResponse` (with `version` incremented in the database).
 
-| Status | Uslov |
-|--------|-------|
-| `200` | Izmenjeno |
-| `400` | Validacija pala / pokvareno telo |
-| `404` | Ne postoji |
-| `409` | `version` iz zahteva ne odgovara verziji u bazi (neko je u međuvremenu izmenio) |
+| Status | Condition |
+|--------|-----------|
+| `200` | Updated |
+| `400` | Validation failed / malformed body |
+| `404` | Does not exist |
+| `409` | Request `version` does not match the database version (someone updated it in the meantime) |
 
-## 5. Obriši naviku
+## 5. Delete a habit
 
 ```
 DELETE /habits/{id}
 ```
 
-| Path param | Tip | Opis |
-|------------|-----|------|
-| `id` | `long` | Identifikator navike |
+| Path param | Type | Description |
+|------------|------|-------------|
+| `id` | `long` | Habit identifier |
 
-**Odgovor:** `204 No Content`, bez tela.
+**Response:** `204 No Content`, no body.
 
-| Status | Uslov |
-|--------|-------|
-| `204` | Obrisano |
-| `404` | Ne postoji (uključujući ponovljeni `DELETE` već obrisane navike) |
+| Status | Condition |
+|--------|-----------|
+| `204` | Deleted |
+| `404` | Does not exist (including a repeated `DELETE` of an already-deleted habit) |
 
-## 6. Označi kao odrađeno
+## 6. Mark as done
 
 ```
 POST /habits/{id}/complete
 ```
 
-Bez tela. Datum se uzima serverski (`LocalDate.now()`). Uvećava `completionCount` i ažurira `currentStreak`/`longestStreak`. Upisuje red u istoriju i emituje `HabitCompletedEvent` na Kafka topic `habit-completed`.
+No body. The server takes the date (`LocalDate.now()`). Increments `completionCount`, updates `currentStreak`/`longestStreak`, writes a history row, and emits `HabitCompletedEvent` to the Kafka topic `habit-completed`.
 
-**Ponašanje:** ponovni `complete` istog dana je no-op — bez duplog reda, bez novog eventa, streak se ne menja.
+A repeated `complete` on the same day is a no-op — no duplicate row, no new event, streak unchanged.
 
-**Odgovor:** `200 OK`, `HabitResponse`.
+**Response:** `200 OK`, `HabitResponse`.
 
-| Status | Uslov |
-|--------|-------|
-| `200` | Označeno (ili no-op ako je već označeno danas) |
-| `400` | Navika je arhivirana |
-| `404` | Ne postoji |
+| Status | Condition |
+|--------|-----------|
+| `200` | Marked (or a no-op if already marked today) |
+| `400` | Habit is archived |
+| `404` | Does not exist |
 
-## 7. Poništi današnje označavanje
+## 7. Undo today's completion
 
 ```
 POST /habits/{id}/uncomplete
 ```
 
-Bez tela. Briše današnji red iz istorije, vraća `completionCount`/`currentStreak`/`lastCompletedAt` na prethodno stanje i emituje `HabitUncompletedEvent`.
+No body. Deletes today's history row, reverts `completionCount`/`currentStreak`/`lastCompletedAt` to the previous state, and emits `HabitUncompletedEvent`.
 
-**Odgovor:** `200 OK`, `HabitResponse`.
+**Response:** `200 OK`, `HabitResponse`.
 
-| Status | Uslov |
-|--------|-------|
-| `200` | Poništeno |
-| `400` | Navika nije bila odrađena danas, ili je arhivirana |
-| `404` | Ne postoji |
+| Status | Condition |
+|--------|-----------|
+| `200` | Undone |
+| `400` | Habit was not completed today, or is archived |
+| `404` | Does not exist |
 
-## 8. Arhiviraj naviku
+## 8. Archive a habit
 
 ```
 POST /habits/{id}/archive
 ```
 
-Bez tela. Postavlja `archived = true` (soft delete — navika i istorija ostaju u bazi). Arhivirana navika ne može da se `complete`/`uncomplete` (vraća `400`).
+No body. Sets `archived = true` (soft delete — the habit and its history stay in the database). An archived habit cannot be completed or uncompleted (returns `400`).
 
-**Ponašanje:** idempotentno — ponovni `archive` je no-op.
+Idempotent — a repeated `archive` is a no-op.
 
-**Odgovor:** `200 OK`, `HabitResponse`.
+**Response:** `200 OK`, `HabitResponse`.
 
-| Status | Uslov |
-|--------|-------|
-| `200` | Arhivirano |
-| `404` | Ne postoji |
+| Status | Condition |
+|--------|-----------|
+| `200` | Archived |
+| `404` | Does not exist |
 
-## 9. Vrati iz arhive
+## 9. Restore from archive
 
 ```
 POST /habits/{id}/unarchive
 ```
 
-Bez tela. Postavlja `archived = false`.
+No body. Sets `archived = false`.
 
-**Ponašanje:** idempotentno — ponovni `unarchive` je no-op.
+Idempotent — a repeated `unarchive` is a no-op.
 
-**Odgovor:** `200 OK`, `HabitResponse`.
+**Response:** `200 OK`, `HabitResponse`.
 
-| Status | Uslov |
-|--------|-------|
-| `200` | Vraćeno iz arhive |
-| `404` | Ne postoji |
+| Status | Condition |
+|--------|-----------|
+| `200` | Restored from archive |
+| `404` | Does not exist |
 
-## 10. Istorija odrađenih dana
+## 10. Completion history
 
 ```
 GET /habits/{id}/history
 ```
 
-| Path param | Tip | Opis |
-|------------|-----|------|
-| `id` | `long` | Identifikator navike |
+| Path param | Type | Description |
+|------------|------|-------------|
+| `id` | `long` | Habit identifier |
 
-Query parametri:
+Query parameters:
 
-| Parametar | Tip | Default | Opis |
-|-----------|-----|---------|------|
-| `page` | `int` | `0` | Indeks strane (od 0) |
-| `size` | `int` | `20` | Veličina strane |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `page` | `int` | `0` | Page index (zero-based) |
+| `size` | `int` | `20` | Page size |
 
-Čita se direktno iz write-side tabele `habit_completions` (uvek tačno, sinhrono). Redosled je fiksan `completedOn` opadajuće (najskoriji dan prvi) — klijentov `?sort=` se ne primenjuje (istorija ima jedan smislen redosled).
+Read directly from the write-side table `habit_completions` (always accurate, synchronous). The order is fixed `completedOn` descending (most recent day first) — the client's `?sort=` does not apply, since history has one meaningful order.
 
-**Odgovor:** `200 OK`, Spring `Page<HabitCompletionResponse>`.
+**Response:** `200 OK`, Spring `Page<HabitCompletionResponse>`.
 
 ```json
 {
@@ -306,40 +307,40 @@ Query parametri:
 }
 ```
 
-| Status | Uslov |
-|--------|-------|
-| `200` | OK (prazan `content: []` ako nema odrađenih dana) |
-| `404` | Ne postoji |
+| Status | Condition |
+|--------|-----------|
+| `200` | OK (empty `content: []` when there are no completed days) |
+| `404` | Does not exist |
 
-## 11. Agregatna statistika
+## 11. Aggregate statistics
 
 ```
 GET /habits/{id}/stats
 ```
 
-| Path param | Tip | Opis |
-|------------|-----|------|
-| `id` | `long` | Identifikator navike |
+| Path param | Type | Description |
+|------------|------|-------------|
+| `id` | `long` | Habit identifier |
 
-Čita se iz read-modela `habit_completion_stats` (Kafka projekcija).
+Read from the read model `habit_completion_stats` (Kafka projection).
 
-**Odgovor:** `200 OK`, `HabitStatsResponse`.
+**Response:** `200 OK`, `HabitStatsResponse`.
 
 ```json
 { "completionCount": 7, "longestStreak": 5, "lastCompletedOn": "2026-06-25", "currentStreak": 4 }
 ```
 
-| Status | Uslov |
-|--------|-------|
-| `200` | OK (nule / `null` ako nema podataka) |
-| `404` | Ne postoji |
+| Status | Condition |
+|--------|-----------|
+| `200` | OK (zeros / `null` when there is no data) |
+| `404` | Does not exist |
 
-**Ponašanje:**
-- **Eventualna konzistencija** — read-model se puni asinhrono preko Kafke. Poziv odmah nakon `complete` može vratiti staro stanje dok consumer ne obradi event.
-- **`currentStreak` se koriguje na vreme čitanja** — read-model čuva streak iz trenutka poslednjeg completa. Ako je poslednji complete bio danas ili juče, vraća se sačuvana vrednost; inače `0` (streak je istekao a da nije stigao event da ga obori).
+Behavior:
+- **Eventual consistency** — the read model is filled asynchronously over Kafka. A call right after `complete` may return the old state until the consumer processes the event.
+- **`currentStreak` is corrected at read time** — the read model stores the streak from the last completion. If the last completion was today or yesterday, it returns the stored value; otherwise `0` (the streak expired before an event arrived to reset it).
 
 ---
 
-## Poznata ograničenja
+## Known limitations
 
-Trenutno nema otvorenih ograničenja na nivou API ugovora. (Stavke se dodaju ovde kad se otkriju, i uklanjaju kad se reše.)
+None open at the API-contract level. (Items are added here when discovered and removed when resolved.)

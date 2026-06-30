@@ -1,22 +1,25 @@
 # habit-tracker — curl cheat sheet
 
-Lokalni server na `http://localhost:8080`. Dodaj `| jq` za formatiran JSON.
+Local server at `http://localhost:8080`. Append `| jq` for formatted JSON.
 
 ## Habits CRUD
 
 ```bash
-# Create (vraća habit sa id-em — zapamti ga za ostalo)
+# Create (returns the habit with an id — keep it for the rest)
 curl -s -X POST http://localhost:8080/habits \
   -H "Content-Type: application/json" \
   -d '{"name": "Read 30 min"}'
 
-# Lista (paginirano — odgovor je u $.content)
+# List (paginated — the array is under $.content)
 curl -s "http://localhost:8080/habits?page=0&size=10"
 
-# Jedan po id
+# List filtered by name (substring, case-insensitive; combines with includeArchived)
+curl -s "http://localhost:8080/habits?name=read&includeArchived=true"
+
+# Get one by id
 curl -s http://localhost:8080/habits/1
 
-# Update (treba i version i name — optimistic locking)
+# Update (needs both version and name — optimistic locking)
 curl -s -X PUT http://localhost:8080/habits/1 \
   -H "Content-Type: application/json" \
   -d '{"version": 0, "name": "Read 45 min"}'
@@ -28,8 +31,8 @@ curl -s -X DELETE http://localhost:8080/habits/1
 ## Completion
 
 ```bash
-# Complete (emituje HabitCompletedEvent na Kafka topic habit-completed)
-# Napomena: drugi complete istog dana je no-op (idempotentan domen) — event ne izlazi
+# Complete (emits HabitCompletedEvent to the Kafka topic habit-completed)
+# A second complete on the same day is a no-op (idempotent domain) — no event emitted
 curl -s -X POST http://localhost:8080/habits/1/complete
 
 # Uncomplete
