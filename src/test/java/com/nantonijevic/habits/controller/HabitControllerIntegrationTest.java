@@ -136,6 +136,117 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void listHabits_returnsHabitByName_whenQueryIsCorrect() throws Exception {
+        repository.save(new Habit("Swim"));
+        repository.save(new Habit("Gym"));
+
+        mockMvc.perform(get("/habits?name=Swim"))
+                .andExpect(status().is(200))
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").exists())
+                .andExpect(jsonPath("$.content[0].name").value("Swim"))
+                .andExpect(jsonPath("$.content[0].archived").value(false));
+    }
+
+    @Test
+    void listHabits_returnsHabitByName_whenMixcased() throws Exception {
+        repository.save(new Habit("Swim"));
+        repository.save(new Habit("Gym"));
+
+        mockMvc.perform(get("/habits?name=SwIm"))
+                .andExpect(status().is(200))
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").exists())
+                .andExpect(jsonPath("$.content[0].name").value("Swim"))
+                .andExpect(jsonPath("$.content[0].archived").value(false));
+    }
+
+    @Test
+    void listHabits_returnsHabitByName_whenNameHasTrailingSpace() throws Exception {
+        repository.save(new Habit("Swim"));
+        repository.save(new Habit("Gym"));
+
+        mockMvc.perform(get("/habits").param("name", "Swim  "))
+                .andExpect(status().is(200))
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").exists())
+                .andExpect(jsonPath("$.content[0].name").value("Swim"))
+                .andExpect(jsonPath("$.content[0].archived").value(false));
+    }
+
+    @Test
+    void listHabits_returnsHabitByName_whenNamePartiallyMatches() throws Exception {
+        repository.save(new Habit("Swim"));
+
+        mockMvc.perform(get("/habits?name=wi"))
+                .andExpect(status().is(200))
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").exists())
+                .andExpect(jsonPath("$.content[0].name").value("Swim"))
+                .andExpect(jsonPath("$.content[0].archived").value(false));
+    }
+
+    @Test
+    void listHabits_returnsAllHabits_whenNameIsEmpty() throws Exception {
+        repository.save(new Habit("Swim"));
+        repository.save(new Habit("Gym"));
+
+        mockMvc.perform(get("/habits?name="))
+                .andExpect(status().is(200))
+                .andExpect(jsonPath("$.content.length()").value(2));
+    }
+
+    @Test
+    void listHabits_returnsAllHabits_whenNameIsWhitespace() throws Exception {
+        repository.save(new Habit("Swim"));
+        repository.save(new Habit("Gym"));
+
+        mockMvc.perform(get("/habits").param("name", "    "))
+                .andExpect(status().is(200))
+                .andExpect(jsonPath("$.content.length()").value(2));
+    }
+
+    @Test
+    void listHabits_returnsNoHabitsByName_whenNameDoesNotMatch() throws Exception {
+        repository.save(new Habit("Swim"));
+        repository.save(new Habit("Gym"));
+
+        mockMvc.perform(get("/habits?name=Run"))
+                .andExpect(status().is(200))
+                .andExpect(jsonPath("$.content.length()").value(0));
+    }
+
+    @Test
+    void listHabits_excludesArchivedMatch_whenIncludeArchivedFalse () throws Exception {
+        var habit = new Habit("Read");
+
+        repository.save(habit);
+
+        mockMvc.perform(post("/habits/" + habit.getId() + "/archive"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/habits?name=Read"))
+                .andExpect(status().is(200))
+                .andExpect(jsonPath("$.content.length()").value(0));
+    }
+
+    @Test
+    void listHabits_includesArchivedMatch_whenIncludeArchivedTrue() throws Exception {
+        var habit = new Habit("Read");
+
+        repository.save(habit);
+
+        mockMvc.perform(post("/habits/" + habit.getId() + "/archive"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/habits?name=Read&includeArchived=true"))
+                .andExpect(status().is(200))
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").exists())
+                .andExpect(jsonPath("$.content[0].name").value("Read"))
+                .andExpect(jsonPath("$.content[0].archived").value(true));
+    }
+
+    @Test
     void getHabit_returnsHabit_whenExists() throws Exception {
         var saved = repository.save(new Habit("Code 3 hours"));
 

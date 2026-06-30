@@ -123,7 +123,7 @@ public class HabitService {
     // readOnly: list() may return N entities — skips dirty-check snapshots.
     // getById/getHistory intentionally omit it: single entity, benefit ≈ 0.
     @Transactional(readOnly = true)
-    public Page<Habit> list(boolean includeArchived, Pageable pageable) {
+    public Page<Habit> list(boolean includeArchived, String name, Pageable pageable) {
         Pageable effectivePageable = pageable.getSort().isUnsorted() ?
                 PageRequest.of(
                         pageable.getPageNumber(),
@@ -131,9 +131,11 @@ public class HabitService {
                         Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"))) :
                 pageable;
 
-        return includeArchived
-                ? habitRepository.findAll(effectivePageable)
-                : habitRepository.findByArchivedFalse(effectivePageable);
+        String normalizedName = name == null || name.isBlank()
+                ? null
+                : name.trim();
+
+        return habitRepository.search(normalizedName, includeArchived, effectivePageable);
     }
 
     // readOnly: list()/getHistory() may return N entities — skips dirty-check snapshots.
