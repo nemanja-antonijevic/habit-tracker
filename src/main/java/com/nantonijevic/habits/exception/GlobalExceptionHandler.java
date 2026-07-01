@@ -50,4 +50,10 @@ public class GlobalExceptionHandler {
     public ErrorResponse handle(HttpMessageNotReadableException e) {
         return new ErrorResponse("Malformed or missing request body");
     }
+
+    @ExceptionHandler(InvalidDateRangeException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse handleInvalidDateRange(InvalidDateRangeException ex) {
+        return new ErrorResponse(ex.getMessage());
+    }
 }

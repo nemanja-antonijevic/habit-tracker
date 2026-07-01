@@ -88,8 +88,12 @@ public class HabitController {
     }
 
     @GetMapping("/{id}/history")
-    public Page<HabitCompletionResponse> getHistory(@PathVariable Long id, Pageable pageable) {
-        return habitService.getHistory(id, pageable)
+    public Page<HabitCompletionResponse> getHistory(
+            @PathVariable Long id,
+            @RequestParam(required = false) LocalDate from,
+            @RequestParam(required = false) LocalDate to,
+            Pageable pageable) {
+        return habitService.getHistory(id, from, to, pageable)
                 .map(HabitCompletionResponse::from);
     }
 }

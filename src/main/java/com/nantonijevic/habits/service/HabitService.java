@@ -8,6 +8,7 @@ import com.nantonijevic.habits.domain.HabitVersionConflictException;
 import com.nantonijevic.habits.dto.HabitStatsView;
 import com.nantonijevic.habits.event.HabitCompletedEvent;
 import com.nantonijevic.habits.event.HabitUncompletedEvent;
+import com.nantonijevic.habits.exception.InvalidDateRangeException;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
 import com.nantonijevic.habits.repository.HabitRepository;
@@ -22,7 +23,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -141,10 +141,17 @@ public class HabitService {
     // readOnly: list()/getHistory() may return N entities — skips dirty-check snapshots.
     // getById intentionally omits it: single entity, benefit ≈ 0.
     @Transactional(readOnly = true)
-    public Page<HabitCompletion> getHistory(Long habitId, Pageable pageable) {
+    public Page<HabitCompletion> getHistory(
+            Long habitId,
+            LocalDate from,
+            LocalDate to,
+            Pageable pageable) {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new InvalidDateRangeException();
+        }
         habitRepository.findById(habitId)
                 .orElseThrow(() -> new HabitNotFoundException(habitId));
-        return completionRepository.findByHabitIdOrderByCompletedOnDesc(habitId, pageable);
+        return completionRepository.findByHabitIdAndCompletedOnBetweenOptional(habitId, from, to, pageable);
     }
 
     @Transactional

@@ -217,7 +217,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void listHabits_excludesArchivedMatch_whenIncludeArchivedFalse () throws Exception {
+    void listHabits_excludesArchivedMatch_whenIncludeArchivedFalse() throws Exception {
         var habit = new Habit("Read");
 
         repository.save(habit);
@@ -665,5 +665,88 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.content.length()").value(2))
                 .andExpect(jsonPath("$.totalElements").value(3))
                 .andExpect(jsonPath("$.totalPages").value(2));
+    }
+
+    @Test
+    void getHistory_filtersCompletionsByDateRange_whenFromAndToProvided() throws Exception {
+        var saved = repository.save(new Habit("Read"));
+        Long id = saved.getId();
+
+        completionRepository.save(new HabitCompletion(id, LocalDate.of(2024, 1, 9)));
+        completionRepository.save(new HabitCompletion(id, LocalDate.of(2024, 1, 10)));
+        completionRepository.save(new HabitCompletion(id, LocalDate.of(2024, 1, 11)));
+        completionRepository.save(new HabitCompletion(id, LocalDate.of(2024, 1, 12)));
+
+        mockMvc.perform(get("/habits/" + id + "/history?from=2024-01-10&to=2024-01-11"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.content[0].completedOn").value("2024-01-11"))
+                .andExpect(jsonPath("$.content[1].completedOn").value("2024-01-10"))
+                .andExpect(jsonPath("$.totalElements").value(2));
+    }
+
+    @Test
+    void getHistory_filtersCompletionsFromDate_whenOnlyFromProvided() throws Exception {
+        var saved = repository.save(new Habit("Read"));
+        Long id = saved.getId();
+
+        completionRepository.save(new HabitCompletion(id, LocalDate.of(2024, 1, 9)));
+        completionRepository.save(new HabitCompletion(id, LocalDate.of(2024, 1, 10)));
+        completionRepository.save(new HabitCompletion(id, LocalDate.of(2024, 1, 11)));
+
+        mockMvc.perform(get("/habits/" + id + "/history?from=2024-01-10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.content[0].completedOn").value("2024-01-11"))
+                .andExpect(jsonPath("$.content[1].completedOn").value("2024-01-10"))
+                .andExpect(jsonPath("$.totalElements").value(2));
+    }
+
+    @Test
+    void getHistory_filtersCompletionsToDate_whenOnlyToProvided() throws Exception {
+        var saved = repository.save(new Habit("Read"));
+        Long id = saved.getId();
+
+        completionRepository.save(new HabitCompletion(id, LocalDate.of(2024, 1, 9)));
+        completionRepository.save(new HabitCompletion(id, LocalDate.of(2024, 1, 10)));
+        completionRepository.save(new HabitCompletion(id, LocalDate.of(2024, 1, 11)));
+
+        mockMvc.perform(get("/habits/" + id + "/history?to=2024-01-10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.content[0].completedOn").value("2024-01-10"))
+                .andExpect(jsonPath("$.content[1].completedOn").value("2024-01-09"))
+                .andExpect(jsonPath("$.totalElements").value(2));
+    }
+
+    @Test
+    void getHistory_returnsBadRequest_whenFromIsAfterTo() throws Exception {
+        var saved = repository.save(new Habit("Read"));
+        Long id = saved.getId();
+
+        mockMvc.perform(get("/habits/" + id + "/history")
+                        .param("from", "2024-01-12")
+                        .param("to", "2024-01-10"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error")
+                        .value("'from' must not be after 'to'"));
+    }
+
+    @Test
+    void getHistory_returnsAllCompletionsSortedDesc_whenNoDateRangeProvided() throws Exception {
+        var saved = repository.save(new Habit("Read"));
+        Long id = saved.getId();
+
+        completionRepository.save(new HabitCompletion(id, LocalDate.of(2024, 1, 9)));
+        completionRepository.save(new HabitCompletion(id, LocalDate.of(2024, 1, 10)));
+        completionRepository.save(new HabitCompletion(id, LocalDate.of(2024, 1, 11)));
+
+        mockMvc.perform(get("/habits/" + id + "/history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(3))
+                .andExpect(jsonPath("$.content[0].completedOn").value("2024-01-11"))
+                .andExpect(jsonPath("$.content[1].completedOn").value("2024-01-10"))
+                .andExpect(jsonPath("$.content[2].completedOn").value("2024-01-09"))
+                .andExpect(jsonPath("$.totalElements").value(3));
     }
 }
