@@ -54,4 +54,7 @@ curl -s http://localhost:8080/habits/1/stats
 
 # History
 curl -s http://localhost:8080/habits/1/history
+
+# History filtered by inclusive date range (both bounds optional)
+curl -s "http://localhost:8080/habits/1/history?from=2024-01-10&to=2024-01-31"
 ```

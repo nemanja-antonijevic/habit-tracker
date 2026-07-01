@@ -289,8 +289,12 @@ Query parameters:
 |-----------|------|---------|-------------|
 | `page` | `int` | `0` | Page index (zero-based) |
 | `size` | `int` | `20` | Page size |
+| `from` | `LocalDate` (`YYYY-MM-DD`) | _none_ | Only completions on or after this date. Omitted means unbounded below. |
+| `to` | `LocalDate` (`YYYY-MM-DD`) | _none_ | Only completions on or before this date. Omitted means unbounded above. |
 
 Read directly from the write-side table `habit_completions` (always accurate, synchronous). The order is fixed `completedOn` descending (most recent day first) — the client's `?sort=` does not apply, since history has one meaningful order.
+
+Both `from` and `to` are optional and inclusive. Supplying only one bounds that side and leaves the other open; supplying neither returns the full history. When both are given, `from` must not be after `to`.
 
 **Response:** `200 OK`, Spring `Page<HabitCompletionResponse>`.
 
@@ -309,7 +313,8 @@ Read directly from the write-side table `habit_completions` (always accurate, sy
 
 | Status | Condition |
 |--------|-----------|
-| `200` | OK (empty `content: []` when there are no completed days) |
+| `200` | OK (empty `content: []` when there are no completed days, or none fall in the requested range) |
+| `400` | `from` is after `to` |
 | `404` | Does not exist |
 
 ## 11. Aggregate statistics
