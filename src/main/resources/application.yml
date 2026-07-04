@@ -1,26 +1,45 @@
 spring:
   application:
     name: habit-tracker
+
   profiles:
     active: local
-  kafka:
-    bootstrap-servers: localhost:9092
-    consumer:
-      # earliest so the read-model rebuilds from the whole topic on a fresh
-      # consumer group, not just events produced after it starts (latest)
-      auto-offset-reset: earliest
+
   datasource:
     url: jdbc:mysql://localhost:3306/habits
     username: habits
     password: habits
+
   jpa:
     hibernate:
       ddl-auto: validate
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect
+
   flyway:
     enabled: true
 
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      # earliest so the read-model rebuilds from the whole topic on a fresh
+      # consumer group, not just events produced after it starts (latest)
+      auto-offset-reset: earliest
+
 server:
   port: 8080
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db
+
+  endpoints:
+    web:
+      exposure:
+        include: health
