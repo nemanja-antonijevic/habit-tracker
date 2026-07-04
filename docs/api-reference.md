@@ -36,7 +36,7 @@ Standard habit representation. Returned by endpoints 1, 3, 4, 6, 7, 8, 9.
 | `id` | `long` | Habit identifier |
 | `name` | `string` | Name |
 | `completionCount` | `int` | Total number of completed days |
-| `currentStreak` | `int` | Current run of consecutive days |
+| `currentStreak` | `int` | Current run of consecutive days, corrected at read time: the stored streak if the last completion was today or yesterday, otherwise `0` |
 | `archived` | `boolean` | Whether the habit is archived (soft delete) |
 | `createdAt` | `string` (ISO-8601 instant) | Creation time |
 
