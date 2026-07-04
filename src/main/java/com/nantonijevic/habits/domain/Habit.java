@@ -145,6 +145,22 @@ public class Habit {
         return true;
     }
 
+    public int effectiveCurrentStreak(LocalDate today) {
+        if (lastCompletedAt == null) {
+            return 0;
+        }
+
+        LocalDate lastCompletedDate = lastCompletedAt
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate();
+
+        if (lastCompletedDate.isEqual(today) || lastCompletedDate.isEqual(today.minusDays(1))) {
+            return currentStreak;
+        }
+
+        return 0;
+    }
+
     public void archive() {
         this.archived = true;
     }

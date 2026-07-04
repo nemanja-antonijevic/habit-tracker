@@ -247,6 +247,25 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void listHabits_returnsZeroCurrentStreak_whenLastCompletionIsOlderThanYesterday() throws Exception {
+        var habit = new Habit("Read");
+
+        habit.complete(LocalDate.now().minusDays(3));
+        habit.complete(LocalDate.now().minusDays(2));
+
+        repository.save(habit);
+
+        mockMvc.perform(get("/habits"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].name").value("Read"))
+                .andExpect(jsonPath("$.content[0].currentStreak").value(0));
+
+        var reloaded = repository.findAll().get(0);
+        assertThat(reloaded.getCurrentStreak()).isEqualTo(2);
+    }
+
+    @Test
     void getHabit_returnsHabit_whenExists() throws Exception {
         var saved = repository.save(new Habit("Code 3 hours"));
 
@@ -273,6 +292,40 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.id").value(saved1.getId()))
                 .andExpect(jsonPath("$.name").value("Sport"))
                 .andExpect(jsonPath("$.archived").value(false));
+    }
+
+    @Test
+    void getHabit_returnsZeroCurrentStreak_whenLastCompletionIsOlderThanYesterday() throws Exception {
+        var habit = new Habit("Read");
+
+        habit.complete(LocalDate.now().minusDays(3));
+        habit.complete(LocalDate.now().minusDays(2));
+
+        var saved = repository.save(habit);
+
+        mockMvc.perform(get("/habits/" + saved.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.currentStreak").value(0));
+
+        var reloaded = repository.findById(saved.getId()).orElseThrow();
+        assertThat(reloaded.getCurrentStreak()).isEqualTo(2);
+    }
+
+    @Test
+    void getHabit_returnsCurrentStreak_whenLastCompletionWasYesterday() throws Exception {
+        var habit = new Habit("Read");
+
+        habit.complete(LocalDate.now().minusDays(2));
+        habit.complete(LocalDate.now().minusDays(1));
+
+        var saved = repository.save(habit);
+
+        mockMvc.perform(get("/habits/" + saved.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.currentStreak").value(2));
+
+        var reloaded = repository.findById(saved.getId()).orElseThrow();
+        assertThat(reloaded.getCurrentStreak()).isEqualTo(2);
     }
 
     @Test
