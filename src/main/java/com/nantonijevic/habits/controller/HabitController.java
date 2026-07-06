@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.time.LocalDate;
-import java.util.List;
 
 @RestController
 @RequestMapping("/habits")
@@ -26,7 +25,7 @@ public class HabitController {
 
     @PostMapping
     public ResponseEntity<HabitResponse> create(@Valid @RequestBody CreateHabitRequest request) {
-        Habit saved = habitService.create(request.name());
+        Habit saved = habitService.create(request.name(), request.scheduledDays());
         return ResponseEntity.created(URI.create("/habits/" + saved.getId()))
                 .body(HabitResponse.from(saved));
     }
@@ -53,7 +52,7 @@ public class HabitController {
 
     @PutMapping("/{id}")
     public HabitResponse update(@PathVariable Long id, @Valid @RequestBody UpdateHabitRequest request) {
-        Habit habit = habitService.update(id, request.version(), request.name());
+        Habit habit = habitService.update(id, request.version(), request.name(), request.scheduledDays());
         return HabitResponse.from(habit);
     }
 

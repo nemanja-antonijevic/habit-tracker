@@ -18,7 +18,9 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.util.EnumSet;
 import java.util.concurrent.CountDownLatch;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -200,6 +202,30 @@ public class HabitStatsIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.currentStreak").value(1))
                 .andExpect(jsonPath("$.longestStreak").value(3));
+    }
+
+    @Test
+    void getStats_keepsCurrentStreakAliveAcrossOffDays() throws Exception {
+        expectEvents(1);
+
+        var habit = new Habit("Workout");
+        habit.setScheduledDays(EnumSet.of(
+                DayOfWeek.MONDAY,
+                DayOfWeek.WEDNESDAY,
+                DayOfWeek.FRIDAY
+        ));
+        var saved = repository.save(habit);
+
+        LocalDate friday = LocalDate.of(2026, 7, 3);
+
+        publishCompletedEvent(saved.getId(), friday, 1, 1);
+
+        awaitEvents();
+
+        mockMvc.perform(get("/habits/" + saved.getId() + "/stats")
+                        .param("today", "2026-07-06"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.currentStreak").value(1));
     }
 
     private void expectEvents(int count) {

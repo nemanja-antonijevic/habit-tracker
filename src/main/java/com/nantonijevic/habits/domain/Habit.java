@@ -2,9 +2,11 @@ package com.nantonijevic.habits.domain;
 
 import jakarta.persistence.*;
 
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.EnumSet;
 
 @Entity
 @Table(name = "habits")
@@ -19,6 +21,10 @@ public class Habit {
 
     @Column(nullable = false)
     private String name;
+
+    @Column(name = "scheduled_days", nullable = false)
+    @Convert(converter = DayOfWeekSetConverter.class)
+    private EnumSet<DayOfWeek> scheduledDays = EnumSet.allOf(DayOfWeek.class);
 
     @Column(name = "completion_count", nullable = false)
     private int completionCount;
@@ -58,6 +64,15 @@ public class Habit {
         return name;
     }
 
+    public EnumSet<DayOfWeek> getScheduledDays() {
+        return EnumSet.copyOf(scheduledDays);
+    }
+
+    public void setScheduledDays(EnumSet<DayOfWeek> scheduledDays) {
+        requireNonEmptySchedule(scheduledDays);
+        this.scheduledDays = EnumSet.copyOf(scheduledDays);
+    }
+
     public boolean isArchived() {
         return archived;
     }
@@ -86,6 +101,12 @@ public class Habit {
         return lastCompletedAt;
     }
 
+    // Known limitation: currentStreak is maintained arithmetically here (decremented by one),
+    // not reconstructed from completion history. When the completion being undone had reset the
+    // streak (a gap preceded it), this decrement yields a value that does not reflect the streak
+    // as of previousCompletionDate. This is pre-existing behaviour, not introduced by the
+    // scheduling feature. Fixing it requires recomputing the streak from history + schedule,
+    // tracked as a separate task.
     public void decrementCompletionCount(LocalDate today, LocalDate previousCompletionDate) {
         ZoneId zone = ZoneId.systemDefault();
 
@@ -118,6 +139,10 @@ public class Habit {
     }
 
     public boolean complete(LocalDate today) {
+        if (!isScheduledFor(today)) {
+            throw new InvalidHabitStateException("Habit is not scheduled for today.");
+        }
+
         ZoneId zone = ZoneId.systemDefault();
 
         if (this.archived) throw new InvalidHabitStateException("Cannot complete: archived");
@@ -129,7 +154,7 @@ public class Habit {
                 return false;
             }
 
-            if (lastDate.isEqual(today.minusDays(1))) {
+            if (lastDate.isEqual(previousScheduledDateBefore(today))) {
                 currentStreak++;
             } else {
                 currentStreak = 1;
@@ -154,7 +179,7 @@ public class Habit {
                 .atZone(ZoneId.systemDefault())
                 .toLocalDate();
 
-        if (lastCompletedDate.isEqual(today) || lastCompletedDate.isEqual(today.minusDays(1))) {
+        if (lastCompletedDate.isEqual(today) || lastCompletedDate.isEqual(previousScheduledDateBefore(today))) {
             return currentStreak;
         }
 
@@ -167,5 +192,25 @@ public class Habit {
 
     public void unarchive() {
         this.archived = false;
+    }
+
+    public boolean isScheduledFor(LocalDate date) {
+        return scheduledDays.contains(date.getDayOfWeek());
+    }
+
+    public LocalDate previousScheduledDateBefore(LocalDate date) {
+        LocalDate candidate = date.minusDays(1);
+
+        while (!isScheduledFor(candidate)) {
+            candidate = candidate.minusDays(1);
+        }
+
+        return candidate;
+    }
+
+    private void requireNonEmptySchedule(EnumSet<DayOfWeek> scheduledDays) {
+        if (scheduledDays == null || scheduledDays.isEmpty()) {
+            throw new IllegalArgumentException("Habit schedule must contain at least one day.");
+        }
     }
 }

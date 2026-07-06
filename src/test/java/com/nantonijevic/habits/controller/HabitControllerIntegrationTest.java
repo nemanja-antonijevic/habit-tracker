@@ -9,6 +9,7 @@ import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
@@ -16,6 +17,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 
 import java.time.LocalDate;
@@ -43,14 +45,54 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void createHabit_returns201_andPersistsHabit() throws Exception {
-        var request = new CreateHabitRequest("Code 3 hours");
+        var request = new CreateHabitRequest("Code 3 hours", null);
 
         mockMvc.perform(post("/habits")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").exists())
-                .andExpect(jsonPath("$.name").value("Code 3 hours"));
+                .andExpect(jsonPath("$.name").value("Code 3 hours"))
+                .andExpect(jsonPath("$.scheduledDays").isArray())
+                .andExpect(jsonPath("$.scheduledDays.length()").value(7));
+    }
+
+    @Test
+    void createHabit_returnsProvidedScheduledDays() throws Exception {
+        String jsonBody = """
+            {
+              "name": "Workout",
+              "scheduledDays": ["MONDAY", "WEDNESDAY", "FRIDAY"]
+            }
+            """;
+
+        mockMvc.perform(post("/habits")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name").value("Workout"))
+                .andExpect(jsonPath("$.scheduledDays").isArray())
+                .andExpect(jsonPath("$.scheduledDays.length()").value(3))
+                .andExpect(jsonPath("$.scheduledDays", containsInAnyOrder(
+                        "MONDAY",
+                        "WEDNESDAY",
+                        "FRIDAY"
+                )));
+    }
+
+    @Test
+    void createHabit_rejectsEmptyScheduledDays() throws Exception {
+        String jsonBody = """
+            {
+              "name": "Workout",
+              "scheduledDays": []
+            }
+            """;
+
+        mockMvc.perform(post("/habits")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonBody))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -64,7 +106,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void createHabit_returns400_whenNameIsBlank() throws Exception {
-        var request = new CreateHabitRequest("");
+        var request = new CreateHabitRequest("", null);
 
         mockMvc.perform(post("/habits")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -75,7 +117,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void createHabit_returns400_whenNameIsTooLong() throws Exception {
-        var request = new CreateHabitRequest("a".repeat(256));
+        var request = new CreateHabitRequest("a".repeat(256), null);
         mockMvc.perform(post("/habits")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -85,7 +127,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void createHabit_returns400_whenNameIsWhitespaceOnly() throws Exception {
-        var request = new CreateHabitRequest("    ");
+        var request = new CreateHabitRequest("    ", null);
         mockMvc.perform(post("/habits")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -102,7 +144,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void listHabits_returnsOneHabit_whenOneExists() throws Exception {
-        var request = new CreateHabitRequest("Code 3 hours");
+        var request = new CreateHabitRequest("Code 3 hours", null);
 
         mockMvc.perform(post("/habits")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -261,7 +303,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.content[0].name").value("Read"))
                 .andExpect(jsonPath("$.content[0].currentStreak").value(0));
 
-        var reloaded = repository.findAll().get(0);
+        var reloaded = repository.findAll().getFirst();
         assertThat(reloaded.getCurrentStreak()).isEqualTo(2);
     }
 
@@ -434,6 +476,63 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void updateHabit_updatesScheduledDays() throws Exception {
+        var habit = new Habit("Workout");
+        habit.setScheduledDays(java.util.EnumSet.of(
+                java.time.DayOfWeek.MONDAY,
+                java.time.DayOfWeek.WEDNESDAY,
+                java.time.DayOfWeek.FRIDAY
+        ));
+        var saved = repository.save(habit);
+
+        String jsonBody = """
+            {
+              "name": "Workout",
+              "version": 0,
+              "scheduledDays": ["TUESDAY", "THURSDAY"]
+            }
+            """;
+
+        mockMvc.perform(put("/habits/" + saved.getId())
+                        .content(jsonBody)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scheduledDays", containsInAnyOrder(
+                        "TUESDAY",
+                        "THURSDAY"
+                )));
+    }
+
+    @Test
+    void updateHabit_keepsScheduledDays_whenNotProvided() throws Exception {
+        var habit = new Habit("Workout");
+        habit.setScheduledDays(java.util.EnumSet.of(
+                java.time.DayOfWeek.MONDAY,
+                java.time.DayOfWeek.WEDNESDAY,
+                java.time.DayOfWeek.FRIDAY
+        ));
+        var saved = repository.save(habit);
+
+        String jsonBody = """
+            {
+              "name": "Updated workout",
+              "version": 0
+            }
+            """;
+
+        mockMvc.perform(put("/habits/" + saved.getId())
+                        .content(jsonBody)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Updated workout"))
+                .andExpect(jsonPath("$.scheduledDays", containsInAnyOrder(
+                        "MONDAY",
+                        "WEDNESDAY",
+                        "FRIDAY"
+                )));
+    }
+
+    @Test
     void completeHabit_returns200_andIncrementsCount() throws Exception {
         var saved = repository.save(new Habit("Read 30 min"));
 
@@ -513,8 +612,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.completionCount").value(1));
         var rows = completionRepository.findByHabitIdOrderByCompletedOnDesc(saved.getId());
         assertThat(rows).hasSize(1);
-        assertThat(rows.get(0).getHabitId()).isEqualTo(saved.getId());
-        assertThat(rows.get(0).getCompletedOn()).isEqualTo(LocalDate.now());
+        assertThat(rows.getFirst().getHabitId()).isEqualTo(saved.getId());
+        assertThat(rows.getFirst().getCompletedOn()).isEqualTo(LocalDate.now());
     }
 
     @Test
@@ -535,7 +634,9 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"New habit\"}"))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.completionCount").value(0));
+                .andExpect(jsonPath("$.completionCount").value(0))
+                .andExpect(jsonPath("$.scheduledDays").isArray())
+                .andExpect(jsonPath("$.scheduledDays.length()").value(7));
     }
 
     @Test

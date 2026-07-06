@@ -22,8 +22,11 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.util.EnumSet;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 public class HabitService {
@@ -66,8 +69,15 @@ public class HabitService {
     }
 
     @Transactional
-    public Habit create(String name) {
-        Habit saved = habitRepository.save(new Habit(name));
+    public Habit create(String name, Set<DayOfWeek> scheduledDays) {
+        Habit habit = new Habit(name);
+
+        EnumSet<DayOfWeek> effectiveScheduledDays = scheduledDays == null
+                ? EnumSet.allOf(DayOfWeek.class)
+                : EnumSet.copyOf(scheduledDays);
+
+        habit.setScheduledDays(effectiveScheduledDays);
+        Habit saved = habitRepository.save(habit);
         logger.info("Habit created, habitId: {}", saved.getId());
         return saved;
     }
@@ -98,9 +108,8 @@ public class HabitService {
 
     @Transactional(readOnly = true)
     public HabitStatsView getStatsProjection(Long habitId, LocalDate today) {
-        if (!habitRepository.existsById(habitId)) {
-            throw new HabitNotFoundException(habitId);
-        }
+        Habit habit = habitRepository.findById(habitId)
+                .orElseThrow(() -> new HabitNotFoundException(habitId));
         Optional<HabitCompletionStat> lastRow =
                 completionStatRepository.findFirstByHabitIdOrderByCompletedOnDesc(habitId);
         int currentStreak;
@@ -108,7 +117,9 @@ public class HabitService {
             currentStreak = 0;
         } else {
             LocalDate lastCompleted = lastRow.get().getCompletedOn();
-            boolean streakIsAlive = lastCompleted.equals(today) || lastCompleted.equals(today.minusDays(1));
+            boolean streakIsAlive =
+                    lastCompleted.equals(today)
+                            || lastCompleted.equals(habit.previousScheduledDateBefore(today));
             currentStreak = streakIsAlive ? lastRow.get().getCurrentStreak() : 0;
         }
         HabitStatsView aggregate = completionStatRepository.findStatsByHabitId(habitId);
@@ -155,14 +166,20 @@ public class HabitService {
     }
 
     @Transactional
-    public Habit update(Long habitId, Long version, String name){
+    public Habit update(Long habitId, Long version, String name, Set<DayOfWeek> scheduledDays) {
         Habit habit = habitRepository.findById(habitId)
                 .orElseThrow(() -> new HabitNotFoundException(habitId));
 
         if (!habit.getVersion().equals(version)) {
             throw new HabitVersionConflictException(habitId);
         }
+
         habit.setName(name);
+
+        if (scheduledDays != null) {
+            habit.setScheduledDays(EnumSet.copyOf(scheduledDays));
+        }
+
         logger.info("Habit updated, habitId: {}, version: {}", habitId, version);
         return habitRepository.save(habit);
     }
