@@ -6,9 +6,15 @@ Local server at `http://localhost:8080`. Append `| jq` for formatted JSON.
 
 ```bash
 # Create (returns the habit with an id — keep it for the rest)
+# No scheduledDays → defaults to all 7 days (daily habit)
 curl -s -X POST http://localhost:8080/habits \
   -H "Content-Type: application/json" \
   -d '{"name": "Read 30 min"}'
+
+# Create with an explicit weekly schedule (Mon/Wed/Fri)
+curl -s -X POST http://localhost:8080/habits \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Workout", "scheduledDays": ["MONDAY", "WEDNESDAY", "FRIDAY"]}'
 
 # List (paginated — the array is under $.content)
 curl -s "http://localhost:8080/habits?page=0&size=10"
@@ -19,10 +25,15 @@ curl -s "http://localhost:8080/habits?name=read&includeArchived=true"
 # Get one by id
 curl -s http://localhost:8080/habits/1
 
-# Update (needs both version and name — optimistic locking)
+# Update — patch-style: omit scheduledDays to keep the current schedule
 curl -s -X PUT http://localhost:8080/habits/1 \
   -H "Content-Type: application/json" \
   -d '{"version": 0, "name": "Read 45 min"}'
+
+# Update including the schedule (replaces it; empty array [] is rejected with 400)
+curl -s -X PUT http://localhost:8080/habits/1 \
+  -H "Content-Type: application/json" \
+  -d '{"version": 0, "name": "Read 45 min", "scheduledDays": ["TUESDAY", "THURSDAY"]}'
 
 # Delete
 curl -s -X DELETE http://localhost:8080/habits/1
@@ -33,6 +44,7 @@ curl -s -X DELETE http://localhost:8080/habits/1
 ```bash
 # Complete (emits HabitCompletedEvent to the Kafka topic habit-completed)
 # A second complete on the same day is a no-op (idempotent domain) — no event emitted
+# Rejected with 400 if today is not one of the habit's scheduledDays
 curl -s -X POST http://localhost:8080/habits/1/complete
 
 # Uncomplete

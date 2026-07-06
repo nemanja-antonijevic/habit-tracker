@@ -16,7 +16,7 @@ All routes live under `/habits` (`HabitController`).
 | 1 | `POST` | `/habits` | Create a habit | Write |
 | 2 | `GET` | `/habits` | List habits (paginated) | Write |
 | 3 | `GET` | `/habits/{id}` | Get one habit by id | Write |
-| 4 | `PUT` | `/habits/{id}` | Update the name (optimistic lock) | Write |
+| 4 | `PUT` | `/habits/{id}` | Update the name and/or schedule (optimistic lock) | Write |
 | 5 | `DELETE` | `/habits/{id}` | Delete a habit | Write |
 | 6 | `POST` | `/habits/{id}/complete` | Mark as done today | Write + event |
 | 7 | `POST` | `/habits/{id}/uncomplete` | Undo today's completion | Write + event |
@@ -35,8 +35,9 @@ Standard habit representation. Returned by endpoints 1, 3, 4, 6, 7, 8, 9.
 |-------|------|-------------|
 | `id` | `long` | Habit identifier |
 | `name` | `string` | Name |
+| `scheduledDays` | `string[]` | Days of the week the habit is due, as `DayOfWeek` names (`"MONDAY"` … `"SUNDAY"`). A habit with all 7 days behaves like a daily habit. |
 | `completionCount` | `int` | Total number of completed days |
-| `currentStreak` | `int` | Current run of consecutive days, corrected at read time: the stored streak if the last completion was today or yesterday, otherwise `0` |
+| `currentStreak` | `int` | Current run of consecutive scheduled days, corrected at read time: the stored streak if the last completion was today or the previous scheduled day, otherwise `0` |
 | `archived` | `boolean` | Whether the habit is archived (soft delete) |
 | `createdAt` | `string` (ISO-8601 instant) | Creation time |
 
@@ -59,7 +60,7 @@ Aggregate statistics. Returned by endpoint 11.
 | `completionCount` | `long` | Total number of completed days |
 | `longestStreak` | `int` | Longest streak ever recorded |
 | `lastCompletedOn` | `string` (ISO-8601 date) \| `null` | Last completed date |
-| `currentStreak` | `int` | Current streak, corrected at read time (see endpoint 11) |
+| `currentStreak` | `int` | Current streak, corrected at read time against the schedule (see endpoint 11) |
 
 ### ErrorResponse
 
@@ -95,21 +96,30 @@ Request body:
 | Field | Type | Constraints |
 |-------|------|-------------|
 | `name` | `string` | `@NotBlank`, `@Size(max = 255)` |
+| `scheduledDays` | `string[]` | Optional. `DayOfWeek` names (`"MONDAY"` … `"SUNDAY"`). `@Size(min = 1)`: omit the field entirely to default to all 7 days (daily), but an empty array `[]` is rejected. |
+
+Minimal (daily habit — no schedule sent):
 
 ```json
 { "name": "Read 30 min" }
 ```
 
+With an explicit schedule (Mon/Wed/Fri):
+
+```json
+{ "name": "Workout", "scheduledDays": ["MONDAY", "WEDNESDAY", "FRIDAY"] }
+```
+
 **Response:** `201 Created`, header `Location: /habits/{id}`, body `HabitResponse`.
 
 ```json
-{ "id": 42, "name": "Read 30 min", "completionCount": 0, "currentStreak": 0, "archived": false, "createdAt": "2026-06-26T08:30:00Z" }
+{ "id": 42, "name": "Read 30 min", "scheduledDays": ["MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY","SUNDAY"], "completionCount": 0, "currentStreak": 0, "archived": false, "createdAt": "2026-06-26T08:30:00Z" }
 ```
 
 | Status | Condition |
 |--------|-----------|
 | `201` | Created |
-| `400` | `name` empty or longer than 255 / malformed body |
+| `400` | `name` empty or longer than 255 / `scheduledDays` is an empty array / malformed body |
 
 ## 2. List habits
 
@@ -135,7 +145,7 @@ Query parameters:
 
 ```json
 {
-  "content": [ { "id": 42, "name": "Read 30 min", "completionCount": 0, "currentStreak": 0, "archived": false, "createdAt": "2026-06-26T08:30:00Z" } ],
+  "content": [ { "id": 42, "name": "Read 30 min", "scheduledDays": ["MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY","SUNDAY"], "completionCount": 0, "currentStreak": 0, "archived": false, "createdAt": "2026-06-26T08:30:00Z" } ],
   "totalElements": 1,
   "totalPages": 1,
   "number": 0,
@@ -174,9 +184,18 @@ Request body:
 |-------|------|-------------|
 | `version` | `long` | `@NotNull` — current habit version (optimistic locking) |
 | `name` | `string` | `@NotBlank`, `@Size(max = 255)` — new name |
+| `scheduledDays` | `string[]` | Optional. `DayOfWeek` names. `@Size(min = 1)`: **patch-style** — omit the field to leave the existing schedule unchanged; send an array to replace it. An empty array `[]` is rejected. |
+
+Rename only (schedule left untouched):
 
 ```json
 { "version": 3, "name": "Read 45 min" }
+```
+
+Change the schedule too:
+
+```json
+{ "version": 3, "name": "Read 45 min", "scheduledDays": ["TUESDAY", "THURSDAY"] }
 ```
 
 **Response:** `200 OK`, `HabitResponse` (with `version` incremented in the database).
@@ -184,7 +203,7 @@ Request body:
 | Status | Condition |
 |--------|-----------|
 | `200` | Updated |
-| `400` | Validation failed / malformed body |
+| `400` | Validation failed / `scheduledDays` is an empty array / malformed body |
 | `404` | Does not exist |
 | `409` | Request `version` does not match the database version (someone updated it in the meantime) |
 
@@ -215,12 +234,14 @@ No body. The server takes the date (`LocalDate.now()`). Increments `completionCo
 
 A repeated `complete` on the same day is a no-op — no duplicate row, no new event, streak unchanged.
 
+**The habit can only be completed on a scheduled day.** If today is not in the habit's `scheduledDays`, the call is rejected with `400`. The streak counts consecutive *scheduled* days: completing on Friday and then Monday keeps the streak alive for a Mon/Wed/Fri habit, because Saturday and Sunday are not scheduled.
+
 **Response:** `200 OK`, `HabitResponse`.
 
 | Status | Condition |
 |--------|-----------|
 | `200` | Marked (or a no-op if already marked today) |
-| `400` | Habit is archived |
+| `400` | Habit is archived, or today is not a scheduled day |
 | `404` | Does not exist |
 
 ## 7. Undo today's completion
@@ -342,10 +363,10 @@ Read from the read model `habit_completion_stats` (Kafka projection).
 
 Behavior:
 - **Eventual consistency** — the read model is filled asynchronously over Kafka. A call right after `complete` may return the old state until the consumer processes the event.
-- **`currentStreak` is corrected at read time** — the read model stores the streak from the last completion. If the last completion was today or yesterday, it returns the stored value; otherwise `0` (the streak expired before an event arrived to reset it).
+- **`currentStreak` is corrected at read time against the schedule** — the read model stores the streak from the last completion. If the last completion was today or the previous scheduled day, it returns the stored value; otherwise `0` (the streak expired before an event arrived to reset it). For a daily habit (all 7 days) the previous scheduled day is simply yesterday.
 
 ---
 
 ## Known limitations
 
-None open at the API-contract level. (Items are added here when discovered and removed when resolved.)
+- **`uncomplete` streak accuracy.** `POST /habits/{id}/uncomplete` maintains `currentStreak` arithmetically (decrement by one) rather than reconstructing it from completion history. When the completion being undone had reset the streak (a gap preceded it), the reverted `currentStreak` may not reflect the streak as of the previous completion. Pre-existing behaviour, not introduced by scheduling; a fix (recompute from history + schedule) is tracked as a separate task.
