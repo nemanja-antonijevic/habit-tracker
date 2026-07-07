@@ -208,22 +208,28 @@ public class HabitStatsIntegrationTest {
     void getStats_keepsCurrentStreakAliveAcrossOffDays() throws Exception {
         expectEvents(1);
 
-        var habit = new Habit("Workout");
-        habit.setScheduledDays(EnumSet.of(
+        LocalDate today = LocalDate.now();
+
+        var scheduledDays = EnumSet.of(
                 DayOfWeek.MONDAY,
                 DayOfWeek.WEDNESDAY,
                 DayOfWeek.FRIDAY
-        ));
+        );
+
+        LocalDate previousScheduledDay = today.minusDays(1);
+        while (!scheduledDays.contains(previousScheduledDay.getDayOfWeek())) {
+            previousScheduledDay = previousScheduledDay.minusDays(1);
+        }
+
+        var habit = new Habit("Workout");
+        habit.setScheduledDays(scheduledDays);
         var saved = repository.save(habit);
 
-        LocalDate friday = LocalDate.of(2026, 7, 3);
-
-        publishCompletedEvent(saved.getId(), friday, 1, 1);
+        publishCompletedEvent(saved.getId(), previousScheduledDay, 1, 1);
 
         awaitEvents();
 
-        mockMvc.perform(get("/habits/" + saved.getId() + "/stats")
-                        .param("today", "2026-07-06"))
+        mockMvc.perform(get("/habits/" + saved.getId() + "/stats"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.currentStreak").value(1));
     }
