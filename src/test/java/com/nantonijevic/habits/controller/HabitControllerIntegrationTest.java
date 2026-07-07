@@ -17,11 +17,11 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.containsString;
-
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.util.EnumSet;
 
+import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -902,5 +902,39 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.content[1].completedOn").value("2024-01-10"))
                 .andExpect(jsonPath("$.content[2].completedOn").value("2024-01-09"))
                 .andExpect(jsonPath("$.totalElements").value(3));
+    }
+
+    @Test
+    void dueToday_returnsOnlyActiveScheduledAndNotCompletedHabits () throws Exception {
+        LocalDate today = LocalDate.now();
+        DayOfWeek todayDay = today.getDayOfWeek();
+        DayOfWeek otherDay = todayDay.plus(1);
+
+        var due = new Habit("Due");
+        due.setScheduledDays(EnumSet.of(todayDay));
+        repository.save(due);
+
+        var notScheduledToday = new Habit("Not scheduled today");
+        notScheduledToday.setScheduledDays(EnumSet.of(otherDay));
+        repository.save(notScheduledToday);
+
+        var alreadyCompletedToday = new Habit("Already completed today");
+        alreadyCompletedToday.setScheduledDays(EnumSet.of(todayDay));
+        alreadyCompletedToday.complete(today);
+        repository.save(alreadyCompletedToday);
+
+        var archivedDue = new Habit("Archive due");
+        archivedDue.setScheduledDays(EnumSet.of(todayDay));
+        repository.save(archivedDue);
+        
+        mockMvc.perform(post("/habits/" + archivedDue.getId() + "/archive"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/habits/due-today"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].name").value("Due"))
+                .andExpect(jsonPath("$.content[*].name",
+                        not(hasItems("Not scheduled today", "Already completed today", "Archive due"))));
     }
 }

@@ -213,4 +213,13 @@ public class Habit {
             throw new IllegalArgumentException("Habit schedule must contain at least one day.");
         }
     }
+
+    public boolean wasCompletedOn(LocalDate date) {
+        if (lastCompletedAt == null) {
+            return false;
+        }
+
+        return LocalDate.ofInstant(lastCompletedAt, ZoneId.systemDefault())
+                .isEqual(date);
+    }
 }

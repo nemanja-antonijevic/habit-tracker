@@ -16,8 +16,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -211,5 +213,27 @@ public class HabitService {
         habitRepository.deleteById(habitId);
         logger.info("Habit deleted, habitId: {}",
                 habitId);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<Habit> dueToday(LocalDate today, Pageable pageable) {
+        // scheduledDays je @Convert-ovana kolona (serijalizovan string), pa se ne može
+        // filtrirati u SQL WHERE — učitavamo aktivne habite i filtriramo u memoriji.
+        // Prihvatljivo za ličnu skalu (desetine habita); nije za velike skupove.
+        List<Habit> filtered = habitRepository.search(null, false, Pageable.unpaged())
+                .getContent()
+                .stream()
+                .filter(habit -> habit.isScheduledFor(today))
+                .filter(habit -> !habit.wasCompletedOn(today))
+                .toList();
+
+        int start = (int) pageable.getOffset();
+        int end = Math.min(start + pageable.getPageSize(), filtered.size());
+
+        List<Habit> pageContent = start >= filtered.size()
+                ? List.of()
+                : filtered.subList(start, end);
+
+        return new PageImpl<>(pageContent, pageable, filtered.size());
     }
 }

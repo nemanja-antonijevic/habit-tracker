@@ -24,6 +24,7 @@ All routes live under `/habits` (`HabitController`).
 | 9 | `POST` | `/habits/{id}/unarchive` | Restore from archive | Write |
 | 10 | `GET` | `/habits/{id}/history` | Days the habit was completed | Write (direct read) |
 | 11 | `GET` | `/habits/{id}/stats` | Aggregate statistics | Read model (Kafka projection) |
+| 12 | `GET` | `/habits/due-today` | Active habits scheduled for today and not yet completed | Write (direct read) |
 
 ## Data model
 
@@ -364,6 +365,45 @@ Read from the read model `habit_completion_stats` (Kafka projection).
 Behavior:
 - **Eventual consistency** — the read model is filled asynchronously over Kafka. A call right after `complete` may return the old state until the consumer processes the event.
 - **`currentStreak` is corrected at read time against the schedule** — the read model stores the streak from the last completion. If the last completion was today or the previous scheduled day, it returns the stored value; otherwise `0` (the streak expired before an event arrived to reset it). For a daily habit (all 7 days) the previous scheduled day is simply yesterday.
+
+## 12. Habits due today
+
+```
+GET /habits/due-today
+```
+
+Returns the active habits that are **due today**: scheduled for today's day of week and not yet completed today. "Today" is resolved server-side from the system clock — there is no date query parameter.
+
+Query parameters:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `page` | `int` | `0` | Page index (zero-based) |
+| `size` | `int` | `20` | Page size |
+| `sort` | `string` | _(unspecified)_ | `field,asc\|desc` Spring `Pageable` sort |
+
+A habit is included only when **all three** hold:
+- it is active (archived habits are excluded);
+- today's `DayOfWeek` is in its `scheduledDays`;
+- it has not been completed today.
+
+Filtering runs in memory over the active habits (the schedule is a converted column, not queryable in SQL), then the result is paginated. This is fine at personal scale; it is not intended for large data sets.
+
+**Response:** `200 OK`, Spring `Page<HabitResponse>`.
+
+```json
+{
+  "content": [ { "id": 42, "name": "Workout", "scheduledDays": ["MONDAY","WEDNESDAY","FRIDAY"], "completionCount": 3, "currentStreak": 3, "archived": false, "createdAt": "2026-06-26T08:30:00Z" } ],
+  "totalElements": 1,
+  "totalPages": 1,
+  "number": 0,
+  "size": 20
+}
+```
+
+| Status | Condition |
+|--------|-----------|
+| `200` | OK (empty `content: []` when nothing is due today) |
 
 ---
 

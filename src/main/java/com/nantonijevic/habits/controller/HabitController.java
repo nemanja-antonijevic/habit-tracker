@@ -95,4 +95,10 @@ public class HabitController {
         return habitService.getHistory(id, from, to, pageable)
                 .map(HabitCompletionResponse::from);
     }
+
+    @GetMapping("/due-today")
+    public Page<HabitResponse> dueToday(Pageable pageable) {
+        return habitService.dueToday(LocalDate.now(), pageable)
+                .map(HabitResponse::from);
+    }
 }
