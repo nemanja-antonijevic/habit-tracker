@@ -9,7 +9,6 @@ import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
@@ -926,7 +925,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         var archivedDue = new Habit("Archive due");
         archivedDue.setScheduledDays(EnumSet.of(todayDay));
         repository.save(archivedDue);
-        
+
         mockMvc.perform(post("/habits/" + archivedDue.getId() + "/archive"))
                 .andExpect(status().isOk());
 
