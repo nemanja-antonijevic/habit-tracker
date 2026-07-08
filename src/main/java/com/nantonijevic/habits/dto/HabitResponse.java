@@ -16,13 +16,13 @@ public record HabitResponse(
         boolean archived,
         Instant createdAt
 ) {
-    public static HabitResponse from(Habit habit) {
+    public static HabitResponse from(Habit habit, LocalDate today) {
         return new HabitResponse(
                 habit.getId(),
                 habit.getName(),
                 habit.getScheduledDays(),
                 habit.getCompletionCount(),
-                habit.effectiveCurrentStreak(LocalDate.now()),
+                habit.effectiveCurrentStreak(today),
                 habit.isArchived(),
                 habit.getCreatedAt());
     }
