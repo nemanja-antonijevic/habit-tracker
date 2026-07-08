@@ -91,10 +91,13 @@ public class HabitService {
 
         completionRepository.deleteByHabitIdAndCompletedOn(habitId, today);
 
-        LocalDate lastCompletion = completionRepository.findFirstByHabitIdOrderByCompletedOnDesc(habitId)
-                .map(HabitCompletion::getCompletedOn).orElse(null);
+        List<LocalDate> remainingCompletionDates = completionRepository
+                .findByHabitIdOrderByCompletedOnDesc(habitId)
+                .stream()
+                .map(HabitCompletion::getCompletedOn)
+                .toList();
 
-        habit.decrementCompletionCount(today, lastCompletion);
+        habit.decrementCompletionCount(today, remainingCompletionDates);
 
         applicationEventPublisher.publishEvent(new HabitUncompletedEvent(habitId, today));
 

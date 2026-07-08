@@ -251,7 +251,7 @@ A repeated `complete` on the same day is a no-op — no duplicate row, no new ev
 POST /habits/{id}/uncomplete
 ```
 
-No body. Deletes today's history row, reverts `completionCount`/`currentStreak`/`lastCompletedAt` to the previous state, and emits `HabitUncompletedEvent`.
+No body. Deletes today's history row, then recomputes `completionCount`, `currentStreak`, and `longestStreak` from the remaining completion history (walking consecutive scheduled days, so a gap breaks the run), and emits `HabitUncompletedEvent`. `currentStreak` is gated to the live window — if the latest remaining completion is neither today nor the previous scheduled day it becomes `0`, while `longestStreak` still reflects the best past run.
 
 **Response:** `200 OK`, `HabitResponse`.
 
@@ -404,9 +404,3 @@ Filtering runs in memory over the active habits (the schedule is a converted col
 | Status | Condition |
 |--------|-----------|
 | `200` | OK (empty `content: []` when nothing is due today) |
-
----
-
-## Known limitations
-
-- **`uncomplete` streak accuracy.** `POST /habits/{id}/uncomplete` maintains `currentStreak` arithmetically (decrement by one) rather than reconstructing it from completion history. When the completion being undone had reset the streak (a gap preceded it), the reverted `currentStreak` may not reflect the streak as of the previous completion. Pre-existing behaviour, not introduced by scheduling; a fix (recompute from history + schedule) is tracked as a separate task.

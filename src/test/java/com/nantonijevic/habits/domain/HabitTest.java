@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.EnumSet;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -19,7 +20,7 @@ public class HabitTest {
         habit.complete(today.minusDays(2));
         habit.complete(today.minusDays(1));
         habit.complete(today);
-        habit.decrementCompletionCount(today, today.minusDays(1));
+        habit.decrementCompletionCount(today, List.of(today.minusDays(1), today.minusDays(2)));
         habit.complete(today);
 
         assertThat(habit.getCurrentStreak()).isEqualTo(3);
@@ -72,6 +73,43 @@ public class HabitTest {
         habit.complete(LocalDate.of(2026, 7, 6));
 
         assertThat(habit.getCurrentStreak()).isEqualTo(2);
+        assertThat(habit.getLongestStreak()).isEqualTo(2);
+    }
+
+    @Test
+    void uncompleteLastCompletionRecomputesLongestStreakWhenLatestCompletionCreatedNewRecord() {
+        Habit habit = new Habit("Read 30 min");
+
+        LocalDate day1 = LocalDate.of(2026, 7, 1);
+        LocalDate day2 = LocalDate.of(2026, 7, 2);
+        LocalDate day3 = LocalDate.of(2026, 7, 3);
+
+        habit.complete(day1);
+        habit.complete(day2);
+        habit.complete(day3);
+
+        habit.decrementCompletionCount(day3, List.of(day2, day1));
+
+        assertThat(habit.getCurrentStreak()).isEqualTo(2);
+        assertThat(habit.getLongestStreak()).isEqualTo(2);
+    }
+
+    @Test
+    void uncompleteLastCompletionSetsCurrentStreakToZeroWhenRemainingHistoryIsNotAlive() {
+        Habit habit = new Habit("Read 30 min");
+
+        LocalDate day1 = LocalDate.of(2026, 7, 1);
+        LocalDate day2 = LocalDate.of(2026, 7, 2);
+        LocalDate day5 = LocalDate.of(2026, 7, 5);
+
+        habit.complete(day1);
+        habit.complete(day2);
+        habit.complete(day5);
+
+        habit.decrementCompletionCount(day5, List.of(day2, day1));
+
+        assertThat(habit.getCompletionCount()).isEqualTo(2);
+        assertThat(habit.getCurrentStreak()).isEqualTo(0);
         assertThat(habit.getLongestStreak()).isEqualTo(2);
     }
 

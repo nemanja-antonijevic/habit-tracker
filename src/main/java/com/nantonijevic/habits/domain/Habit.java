@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.EnumSet;
+import java.util.List;
 
 @Entity
 @Table(name = "habits")
@@ -101,13 +102,18 @@ public class Habit {
         return lastCompletedAt;
     }
 
-    // Known limitation: currentStreak is maintained arithmetically here (decremented by one),
-    // not reconstructed from completion history. When the completion being undone had reset the
-    // streak (a gap preceded it), this decrement yields a value that does not reflect the streak
-    // as of previousCompletionDate. This is pre-existing behaviour, not introduced by the
-    // scheduling feature. Fixing it requires recomputing the streak from history + schedule,
-    // tracked as a separate task.
-    public void decrementCompletionCount(LocalDate today, LocalDate previousCompletionDate) {
+    // Undoes the completion made today (the only one this can undo, per the guards below) and
+    // recomputes both currentStreak and longestStreak from the remaining completion history,
+    // walking consecutive scheduled days so a gap correctly breaks a run. currentStreak is gated
+    // to the live window (latest remaining completion must be today or the previous scheduled day),
+    // so an undo that leaves a gap before today yields a current streak of zero while longestStreak
+    // still reflects the best past run.
+    //
+    // Scope: the complete() path remains arithmetic (it is correct there); only this undo path
+    // reconstructs from history. A full derived-streak refactor (dropping the stored columns) is
+    // out of scope. The Kafka read-side projection is untouched: it heals itself when the latest
+    // HabitCompletionStat snapshot is deleted on the uncompleted event.
+    public void decrementCompletionCount(LocalDate today, List<LocalDate> remainingCompletionDates) {
         ZoneId zone = ZoneId.systemDefault();
 
         if (this.archived) {
@@ -126,16 +132,41 @@ public class Habit {
 
         this.completionCount--;
 
-        if (previousCompletionDate == null) {
+        if (remainingCompletionDates.isEmpty()) {
             this.lastCompletedAt = null;
             this.currentStreak = 0;
-        } else {
-            this.lastCompletedAt = previousCompletionDate.atStartOfDay(zone).toInstant();
+            this.longestStreak = 0;
+            return;
         }
 
-        if (this.currentStreak > 0) {
-            this.currentStreak--;
+        List<LocalDate> completedDatesAsc = remainingCompletionDates.stream()
+                .sorted()
+                .toList();
+
+        int longest = 0;
+        int currentRun = 0;
+        LocalDate previousDate = null;
+
+        for (LocalDate completedDate : completedDatesAsc) {
+            if (previousDate != null
+                    && previousScheduledDateBefore(completedDate).isEqual(previousDate)) {
+                currentRun++;
+            } else {
+                currentRun = 1;
+            }
+
+            longest = Math.max(longest, currentRun);
+            previousDate = completedDate;
         }
+
+        LocalDate latestCompletedDate = completedDatesAsc.getLast();
+
+        boolean currentStreakIsAlive = latestCompletedDate.isEqual(today)
+                || latestCompletedDate.isEqual(previousScheduledDateBefore(today));
+
+        this.lastCompletedAt = latestCompletedDate.atStartOfDay(zone).toInstant();
+        this.currentStreak = currentStreakIsAlive ? currentRun : 0;
+        this.longestStreak = longest;
     }
 
     public boolean complete(LocalDate today) {
