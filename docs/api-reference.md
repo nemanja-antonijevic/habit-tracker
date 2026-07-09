@@ -414,6 +414,8 @@ POST /habits/bulk-complete
 
 Mark many habits as done today in one call. "Today" is resolved server-side from the system clock — there is no date in the request.
 
+**Why this exists alongside [endpoint 6](#6-mark-as-done).** The two are not redundant — they are two different *contracts* over the same operation, the same way Spring Data exposes both `save` and `saveAll`. Endpoint 6 is resource-scoped and fail-fast: it targets one habit and reports the outcome through the HTTP status (`404` for a missing habit, `400` for archived / off-day), which is the right ergonomics for the common single-habit case. Bulk-complete is best-effort: it always returns `200` and reports each id's outcome in the body, so one bad id never rolls back the others — the right shape for a "close out the day" action over several habits. The shared domain logic is not duplicated: both paths funnel through the same `completeExistingHabit` method in `HabitService`, so only the contract (error model, response shape, target cardinality) differs.
+
 Request body (`BulkCompleteRequest`):
 
 ```json
