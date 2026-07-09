@@ -946,4 +946,106 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.content[*].name",
                         not(hasItems("Not scheduled today", "Already completed today", "Archive due"))));
     }
+
+    @Test
+    void bulkComplete_returnsPerItemResult() throws Exception {
+        LocalDate today = LocalDate.now();
+        DayOfWeek todayDay = today.getDayOfWeek();
+        DayOfWeek otherDay = todayDay.plus(1);
+
+        var completed = new Habit("Completed");
+        completed.setScheduledDays(EnumSet.of(todayDay));
+        repository.save(completed);
+
+        var skipped = new Habit("Skipped");
+        skipped.setScheduledDays(EnumSet.of(todayDay));
+        skipped.complete(today);
+        repository.save(skipped);
+
+        var failed = new Habit("Failed");
+        failed.setScheduledDays(EnumSet.of(otherDay));
+        repository.save(failed);
+
+        long missingId = 999999L;
+
+        String jsonBody = """
+            {
+              "habitIds": [%d, %d, %d, %d]
+            }
+            """.formatted(
+                completed.getId(),
+                skipped.getId(),
+                failed.getId(),
+                missingId
+        );
+
+        mockMvc.perform(post("/habits/bulk-complete")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.completed", containsInAnyOrder(
+                        completed.getId().intValue()
+                )))
+                .andExpect(jsonPath("$.skipped", containsInAnyOrder(
+                        skipped.getId().intValue()
+                )))
+                .andExpect(jsonPath("$.failed", containsInAnyOrder(
+                        failed.getId().intValue()
+                )))
+                .andExpect(jsonPath("$.notFound", containsInAnyOrder(
+                        (int) missingId
+                )));
+    }
+
+    @Test
+    void bulkComplete_skipsDuplicateIdAfterFirstCompletion() throws Exception {
+        LocalDate today = LocalDate.now();
+        DayOfWeek todayDay = today.getDayOfWeek();
+
+        var habit = new Habit("Read");
+        habit.setScheduledDays(EnumSet.of(todayDay));
+        repository.save(habit);
+
+        String jsonBody = """
+            {
+              "habitIds": [%d, %d]
+            }
+            """.formatted(habit.getId(), habit.getId());
+
+        mockMvc.perform(post("/habits/bulk-complete")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.completed", containsInAnyOrder(
+                        habit.getId().intValue()
+                )))
+                .andExpect(jsonPath("$.skipped", containsInAnyOrder(
+                        habit.getId().intValue()
+                )))
+                .andExpect(jsonPath("$.failed.length()").value(0))
+                .andExpect(jsonPath("$.notFound.length()").value(0));
+    }
+
+    @Test
+    void bulkComplete_returns400_whenHabitIdsIsEmpty() throws Exception {
+        mockMvc.perform(post("/habits/bulk-complete")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                              "habitIds": []
+                            }
+                            """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void bulkComplete_returns400_whenHabitIdsMissing() throws Exception {
+        mockMvc.perform(post("/habits/bulk-complete")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                            }
+                            """))
+                .andExpect(status().isBadRequest());
+    }
 }

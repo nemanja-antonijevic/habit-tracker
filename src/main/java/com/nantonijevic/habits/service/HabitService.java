@@ -5,6 +5,7 @@ import com.nantonijevic.habits.domain.HabitCompletion;
 import com.nantonijevic.habits.domain.HabitCompletionStat;
 import com.nantonijevic.habits.domain.HabitNotFoundException;
 import com.nantonijevic.habits.domain.HabitVersionConflictException;
+import com.nantonijevic.habits.dto.BulkCompleteResponse;
 import com.nantonijevic.habits.dto.HabitStatsView;
 import com.nantonijevic.habits.event.HabitCompletedEvent;
 import com.nantonijevic.habits.event.HabitUncompletedEvent;
@@ -25,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
@@ -55,19 +57,76 @@ public class HabitService {
         Habit habit = habitRepository.findById(habitId)
                 .orElseThrow(() -> new HabitNotFoundException(habitId));
 
+        completeExistingHabit(habit, habitId, today);
+
+        return habitRepository.save(habit);
+    }
+
+    private void completeExistingHabit(Habit habit, Long habitId, LocalDate today) {
         boolean reallyCompleted = habit.complete(today);
+
         if (reallyCompleted) {
             completionRepository.save(new HabitCompletion(habitId, today));
+
             logger.info("Habit completed, habitId: {}, date: {}, currentStreak: {}",
                     habitId, today, habit.getCurrentStreak());
+
             applicationEventPublisher.publishEvent(new HabitCompletedEvent(
-                    habitId, today, habit.getCurrentStreak(), habit.getCompletionCount()));
+                    habitId,
+                    today,
+                    habit.getCurrentStreak(),
+                    habit.getCompletionCount()
+            ));
+
             logger.info("HabitCompletedEvent published, habitId: {}, date: {}, currentStreak: {}",
                     habitId, today, habit.getCurrentStreak());
         } else {
             logger.debug("Habit completion skipped (already completed), habitId: {}, date: {}", habitId, today);
         }
-        return habitRepository.save(habit);
+    }
+
+    @Transactional
+    public BulkCompleteResponse bulkComplete(List<Long> habitIds, LocalDate today) {
+        List<Long> completed = new ArrayList<>();
+        List<Long> skipped = new ArrayList<>();
+        List<Long> failed = new ArrayList<>();
+        List<Long> notFound = new ArrayList<>();
+
+        // One findById per id (N queries). This is a deliberate trade-off, not an
+        // oversight: best-effort semantics need a per-item notFound verdict, so each
+        // id is looked up individually. Acceptable at personal scale (tens of habits,
+        // capped at 100 by @Size on the request); a batch findAllById would not tell
+        // us which specific ids were missing without extra bookkeeping.
+        for (Long habitId : habitIds) {
+            var maybeHabit = habitRepository.findById(habitId);
+
+            if (maybeHabit.isEmpty()) {
+                notFound.add(habitId);
+                continue;
+            }
+
+            Habit habit = maybeHabit.get();
+
+            if (habit.isArchived()) {
+                failed.add(habitId);
+                continue;
+            }
+
+            if (!habit.isScheduledFor(today)) {
+                failed.add(habitId);
+                continue;
+            }
+
+            if (habit.wasCompletedOn(today)) {
+                skipped.add(habitId);
+                continue;
+            }
+
+            completeExistingHabit(habit, habitId, today);
+            completed.add(habitId);
+        }
+
+        return new BulkCompleteResponse(completed, skipped, failed, notFound);
     }
 
     @Transactional

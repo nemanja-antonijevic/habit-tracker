@@ -1,6 +1,8 @@
 package com.nantonijevic.habits.controller;
 
 import com.nantonijevic.habits.domain.Habit;
+import com.nantonijevic.habits.dto.BulkCompleteRequest;
+import com.nantonijevic.habits.dto.BulkCompleteResponse;
 import com.nantonijevic.habits.dto.CreateHabitRequest;
 import com.nantonijevic.habits.dto.HabitCompletionResponse;
 import com.nantonijevic.habits.dto.HabitResponse;
@@ -43,6 +45,13 @@ public class HabitController {
         Habit saved = habitService.create(request.name(), request.scheduledDays());
         return ResponseEntity.created(URI.create("/habits/" + saved.getId()))
                 .body(HabitResponse.from(saved, today));
+    }
+
+    @PostMapping("/bulk-complete")
+    public BulkCompleteResponse bulkComplete(@Valid @RequestBody BulkCompleteRequest request) {
+        LocalDate today = LocalDate.now();
+
+        return habitService.bulkComplete(request.habitIds(), today);
     }
 
     @GetMapping

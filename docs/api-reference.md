@@ -25,6 +25,7 @@ All routes live under `/habits` (`HabitController`).
 | 10 | `GET` | `/habits/{id}/history` | Days the habit was completed | Write (direct read) |
 | 11 | `GET` | `/habits/{id}/stats` | Aggregate statistics | Read model (Kafka projection) |
 | 12 | `GET` | `/habits/due-today` | Active habits scheduled for today and not yet completed | Write (direct read) |
+| 13 | `POST` | `/habits/bulk-complete` | Mark many habits as done today (best-effort, per-item result) | Write + event |
 
 ## Data model
 
@@ -404,3 +405,50 @@ Filtering runs in memory over the active habits (the schedule is a converted col
 | Status | Condition |
 |--------|-----------|
 | `200` | OK (empty `content: []` when nothing is due today) |
+
+## 13. Bulk complete
+
+```
+POST /habits/bulk-complete
+```
+
+Mark many habits as done today in one call. "Today" is resolved server-side from the system clock — there is no date in the request.
+
+Request body (`BulkCompleteRequest`):
+
+```json
+{ "habitIds": [1, 2, 3] }
+```
+
+| Field | Type | Constraints |
+|-------|------|-------------|
+| `habitIds` | `long[]` | Required, non-empty, at most 100 ids |
+
+**Best-effort semantics.** Each id is processed independently — one bad id never rolls back the others. The call returns `200 OK` with a per-item breakdown; the outcome is in the body, not the status code. For each id, exactly one bucket applies (checked in this order):
+
+- `notFound` — no habit with that id;
+- `failed` — the habit exists but cannot be completed today (archived, or today is not a scheduled day);
+- `skipped` — already completed today (idempotent no-op, not an error);
+- `completed` — newly marked done today.
+
+Each newly `completed` habit follows the same path as [endpoint 6](#6-mark-as-done): it writes a history row and emits `HabitCompletedEvent`. `skipped`/`failed`/`notFound` produce no write and no event.
+
+A duplicate id within the same request (e.g. `[1, 1]`) completes on the first occurrence and is `skipped` on the second, so the same id can appear in both `completed` and `skipped`.
+
+**Response:** `200 OK`, `BulkCompleteResponse`.
+
+```json
+{ "completed": [1], "skipped": [2], "failed": [3], "notFound": [999] }
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `completed` | `long[]` | Newly marked done today |
+| `skipped` | `long[]` | Already completed today |
+| `failed` | `long[]` | Archived, or today is not a scheduled day |
+| `notFound` | `long[]` | No habit with that id |
+
+| Status | Condition |
+|--------|-----------|
+| `200` | Processed (see body for the per-item breakdown) |
+| `400` | `habitIds` is missing, empty, or has more than 100 ids |

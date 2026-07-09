@@ -49,6 +49,12 @@ curl -s -X POST http://localhost:8080/habits/1/complete
 
 # Uncomplete
 curl -s -X POST http://localhost:8080/habits/1/uncomplete
+
+# Bulk complete (best-effort; each id lands in completed/skipped/failed/notFound)
+# Only completed ids emit HabitCompletedEvent. 400 if habitIds is empty or > 100 ids
+curl -s -X POST http://localhost:8080/habits/bulk-complete \
+  -H 'Content-Type: application/json' \
+  -d '{"habitIds": [1, 2, 999]}'
 ```
 
 ## Archive
