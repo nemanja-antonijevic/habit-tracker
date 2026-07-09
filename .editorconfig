@@ -1,0 +1,19 @@
+# Shared code style for the habit-tracker project.
+# IntelliJ IDEA reads this file and overrides its global defaults for anyone
+# who opens the project, so import collapsing stays consistent across machines.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.java]
+indent_style = space
+indent_size = 4
+# Never collapse imports into wildcards (per the Java standard: MUST NOT use
+# wildcard imports). The high thresholds keep IntelliJ from rewriting explicit
+# imports to `foo.*` once a package crosses its default 5-import limit.
+ij_java_class_count_to_use_import_on_demand = 999
+ij_java_names_count_to_use_static_import_on_demand = 999
