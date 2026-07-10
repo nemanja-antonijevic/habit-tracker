@@ -1,5 +1,6 @@
 package com.nantonijevic.habits.config;
 
+import org.springframework.boot.ssl.SslBundles;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -19,9 +20,10 @@ public class KafkaConsumerConfig {
     @Bean
     public ConsumerFactory<String, HabitCompletedEvent> consumerFactory(
             ObjectMapper objectMapper,
-            KafkaProperties kafkaProperties) {
+            KafkaProperties kafkaProperties,
+            SslBundles sslBundles) {
 
-        Map<String, Object> props = kafkaProperties.buildConsumerProperties();
+        Map<String, Object> props = kafkaProperties.buildConsumerProperties(sslBundles);
 
         JsonDeserializer<HabitCompletedEvent> valueDeserializer =
                 new JsonDeserializer<>(HabitCompletedEvent.class, objectMapper);
