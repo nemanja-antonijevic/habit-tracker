@@ -285,8 +285,7 @@ public class HabitService {
         List<Habit> filtered = habitRepository.search(null, false, Pageable.unpaged())
                 .getContent()
                 .stream()
-                .filter(habit -> habit.isScheduledFor(today))
-                .filter(habit -> !habit.wasCompletedOn(today))
+                .filter(habit -> isDueToday(habit, today))
                 .toList();
 
         int start = (int) pageable.getOffset();
@@ -297,5 +296,19 @@ public class HabitService {
                 : filtered.subList(start, end);
 
         return new PageImpl<>(pageContent, pageable, filtered.size());
+    }
+
+    @Transactional(readOnly = true)
+    public long countDueToday(LocalDate today) {
+        return habitRepository.search(null, false, Pageable.unpaged())
+                .getContent()
+                .stream()
+                .filter(habit -> isDueToday(habit, today))
+                .count();
+    }
+
+    private boolean isDueToday(Habit habit, LocalDate today) {
+        return habit.isScheduledFor(today)
+                && !habit.wasCompletedOn(today);
     }
 }

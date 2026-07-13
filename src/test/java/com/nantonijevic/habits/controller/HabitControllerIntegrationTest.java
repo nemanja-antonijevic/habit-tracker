@@ -948,6 +948,65 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void dueTodayCount_returnsOnlyActiveScheduledAndNotCompletedHabits() throws Exception {
+        LocalDate today = LocalDate.now();
+        DayOfWeek todayDay = today.getDayOfWeek();
+        DayOfWeek otherDay = todayDay.plus(1);
+
+        var dueOne = new Habit("Due one");
+        dueOne.setScheduledDays(EnumSet.of(todayDay));
+        repository.save(dueOne);
+
+        var dueTwo = new Habit("Due two");
+        dueTwo.setScheduledDays(EnumSet.of(todayDay));
+        repository.save(dueTwo);
+
+        var notScheduledToday = new Habit("Not scheduled today");
+        notScheduledToday.setScheduledDays(EnumSet.of(otherDay));
+        repository.save(notScheduledToday);
+
+        var alreadyCompletedToday = new Habit("Already completed today");
+        alreadyCompletedToday.setScheduledDays(EnumSet.of(todayDay));
+        alreadyCompletedToday.complete(today);
+        repository.save(alreadyCompletedToday);
+
+        var archivedDue = new Habit("Archived due");
+        archivedDue.setScheduledDays(EnumSet.of(todayDay));
+        repository.save(archivedDue);
+
+        mockMvc.perform(post("/habits/" + archivedDue.getId() + "/archive"))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/habits/due-today/count"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.count").value(2));
+    }
+
+    @Test
+    void dueTodayCount_returnsZero_whenNoDueHabits() throws Exception {
+        mockMvc.perform(get("/habits/due-today/count"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.count").value(0));
+    }
+
+    @Test
+    void dueTodayCount_returnsZero_whenOnlyArchivedHabitsExist() throws Exception {
+        LocalDate today = LocalDate.now();
+        DayOfWeek todayDay = today.getDayOfWeek();
+
+        var habit = new Habit("Archived");
+        habit.setScheduledDays(EnumSet.of(todayDay));
+        repository.save(habit);
+
+        mockMvc.perform(post("/habits/" + habit.getId() + "/archive"))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/habits/due-today/count"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.count").value(0));
+    }
+
+    @Test
     void bulkComplete_returnsPerItemResult() throws Exception {
         LocalDate today = LocalDate.now();
         DayOfWeek todayDay = today.getDayOfWeek();

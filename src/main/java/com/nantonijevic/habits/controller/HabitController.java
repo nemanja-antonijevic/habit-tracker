@@ -4,6 +4,7 @@ import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.dto.BulkCompleteRequest;
 import com.nantonijevic.habits.dto.BulkCompleteResponse;
 import com.nantonijevic.habits.dto.CreateHabitRequest;
+import com.nantonijevic.habits.dto.DueTodayCountResponse;
 import com.nantonijevic.habits.dto.HabitCompletionResponse;
 import com.nantonijevic.habits.dto.HabitResponse;
 import com.nantonijevic.habits.dto.HabitStatsResponse;
@@ -132,5 +133,14 @@ public class HabitController {
         LocalDate today = LocalDate.now();
         return habitService.dueToday(today, pageable)
                 .map(habit -> HabitResponse.from(habit, today));
+    }
+
+    @GetMapping("/due-today/count")
+    public DueTodayCountResponse dueTodayCount() {
+        LocalDate today = LocalDate.now();
+
+        long count = habitService.countDueToday(today);
+
+        return new DueTodayCountResponse(count);
     }
 }

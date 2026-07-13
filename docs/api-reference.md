@@ -26,6 +26,7 @@ All routes live under `/habits` (`HabitController`).
 | 11 | `GET` | `/habits/{id}/stats` | Aggregate statistics | Read model (Kafka projection) |
 | 12 | `GET` | `/habits/due-today` | Active habits scheduled for today and not yet completed | Write (direct read) |
 | 13 | `POST` | `/habits/bulk-complete` | Mark many habits as done today (best-effort, per-item result) | Write + event |
+| 14 | `GET` | `/habits/due-today/count` | Number of habits due today | Write (direct read) |
 
 ## Data model
 
@@ -454,3 +455,32 @@ A duplicate id within the same request (e.g. `[1, 1]`) completes on the first oc
 |--------|-----------|
 | `200` | Processed (see body for the per-item breakdown) |
 | `400` | `habitIds` is missing, empty, or has more than 100 ids |
+
+## 14. Count of habits due today
+
+```
+GET /habits/due-today/count
+```
+
+Returns just the **count** of habits due today, without the habit payloads. "Due today" is defined exactly as for [endpoint 12](#12-habits-due-today) — the same predicate is shared in `HabitService` so the two can never disagree. "Today" is resolved server-side from the system clock; there is no date query parameter and no pagination.
+
+A habit is counted only when **all three** hold:
+- it is active (archived habits are excluded);
+- today's `DayOfWeek` is in its `scheduledDays`;
+- it has not been completed today.
+
+Like endpoint 12, the count is computed in memory over the active habits (the schedule is a converted column, not queryable in SQL). Fine at personal scale; not intended for large data sets.
+
+**Response:** `200 OK`, `DueTodayCountResponse`.
+
+```json
+{ "count": 3 }
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `count` | `long` | Number of habits due today |
+
+| Status | Condition |
+|--------|-----------|
+| `200` | OK (`{ "count": 0 }` when nothing is due today) |
