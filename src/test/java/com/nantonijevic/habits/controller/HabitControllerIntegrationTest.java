@@ -386,6 +386,9 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(delete("/habits/" + saved.getId()))
                 .andExpect(status().isNoContent());
 
+        // Flush the JPA delete before the MyBatis GET (see updateHabit test).
+        repository.flush();
+
         mockMvc.perform(get("/habits/" + saved.getId()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Habit not found: " + saved.getId()));
@@ -463,6 +466,10 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(put("/habits/" + saved.getId()).content(jsonBody).contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk());
+
+        // MockMvc requests share the test transaction; flush the JPA write
+        // to simulate the production transaction boundary before MyBatis reads.
+        repository.flush();
 
         mockMvc.perform(get("/habits/" + saved.getId()))
                 .andExpect(status().isOk())
@@ -549,6 +556,9 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.completionCount").value(1));
 
+        // Flush the JPA update before the MyBatis GET (see updateHabit test).
+        repository.flush();
+
         mockMvc.perform(get("/habits/" + saved.getId()))
                 .andExpect(jsonPath("$.completionCount").value(1));
     }
@@ -574,7 +584,12 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     @Test
     void completeHabit_startsStreakAtOne_whenFirstCompletion() throws Exception {
         var saved = repository.save(new Habit("Read"));
+
         mockMvc.perform(post("/habits/" + saved.getId() + "/complete"));
+
+        // Flush the JPA update before the MyBatis GET (see updateHabit test).
+        repository.flush();
+
         mockMvc.perform(get("/habits/" + saved.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.currentStreak").value(1));

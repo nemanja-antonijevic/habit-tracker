@@ -12,6 +12,7 @@ import com.nantonijevic.habits.event.HabitUncompletedEvent;
 import com.nantonijevic.habits.exception.InvalidDateRangeException;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
+import com.nantonijevic.habits.repository.HabitMapper;
 import com.nantonijevic.habits.repository.HabitRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,15 +39,18 @@ public class HabitService {
     private static final Logger logger = LoggerFactory.getLogger(HabitService.class);
 
     private final HabitRepository habitRepository;
+    private final HabitMapper habitMapper;
     private final HabitCompletionRepository completionRepository;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final HabitCompletionStatRepository completionStatRepository;
 
     public HabitService(HabitRepository habitRepository,
+                        HabitMapper habitMapper,
                         HabitCompletionRepository completionRepository,
                         ApplicationEventPublisher applicationEventPublisher,
                         HabitCompletionStatRepository completionStatRepository) {
         this.habitRepository = habitRepository;
+        this.habitMapper = habitMapper;
         this.completionRepository = completionRepository;
         this.applicationEventPublisher = applicationEventPublisher;
         this.completionStatRepository = completionStatRepository;
@@ -166,7 +170,7 @@ public class HabitService {
     }
 
     public Habit getById(Long habitId) {
-        return habitRepository.findById(habitId)
+        return Optional.ofNullable(habitMapper.findById(habitId))
                 .orElseThrow(() -> new HabitNotFoundException(habitId));
     }
 
