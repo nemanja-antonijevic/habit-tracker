@@ -282,8 +282,7 @@ public class HabitService {
         // scheduledDays je @Convert-ovana kolona (serijalizovan string), pa se ne može
         // filtrirati u SQL WHERE — učitavamo aktivne habite i filtriramo u memoriji.
         // Prihvatljivo za ličnu skalu (desetine habita); nije za velike skupove.
-        List<Habit> filtered = habitRepository.search(null, false, Pageable.unpaged())
-                .getContent()
+        List<Habit> filtered = habitRepository.findByArchivedFalse()
                 .stream()
                 .filter(habit -> isDueToday(habit, today))
                 .toList();
@@ -300,8 +299,7 @@ public class HabitService {
 
     @Transactional(readOnly = true)
     public long countDueToday(LocalDate today) {
-        return habitRepository.search(null, false, Pageable.unpaged())
-                .getContent()
+        return habitRepository.findByArchivedFalse()
                 .stream()
                 .filter(habit -> isDueToday(habit, today))
                 .count();

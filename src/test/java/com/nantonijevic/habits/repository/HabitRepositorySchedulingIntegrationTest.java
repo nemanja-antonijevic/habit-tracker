@@ -5,6 +5,7 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 
 import java.time.DayOfWeek;
 import java.util.EnumSet;
@@ -19,6 +20,9 @@ class HabitRepositorySchedulingIntegrationTest {
 
     @Autowired
     private EntityManager entityManager;
+
+    @MockBean
+    private HabitMapper habitMapper;
 
     @Test
     void persistsScheduledDays() {

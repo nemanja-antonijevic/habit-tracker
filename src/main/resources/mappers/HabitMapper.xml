@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.nantonijevic.habits.repository.HabitMapper">
+
+    <resultMap id="habitResultMap"
+               type="com.nantonijevic.habits.domain.Habit">
+        <id column="id" property="id"/>
+        <result column="version" property="version"/>
+        <result column="name" property="name"/>
+        <result column="completion_count" property="completionCount"/>
+        <result column="archived" property="archived"/>
+        <result column="longest_streak" property="longestStreak"/>
+        <result column="current_streak" property="currentStreak"/>
+        <result column="last_completed_at" property="lastCompletedAt"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="scheduled_days"
+                property="scheduledDays"
+                typeHandler="com.nantonijevic.habits.repository.DayOfWeekSetTypeHandler"/>
+    </resultMap>
+
+    <sql id="searchWhere">
+        <where>
+            <if test="includeArchived == false">
+                archived = FALSE
+            </if>
+            <if test="name != null">
+                AND LOWER(name) LIKE LOWER(CONCAT('%', #{name}, '%'))
+            </if>
+        </where>
+    </sql>
+
+    <select id="findById"
+            parameterType="java.lang.Long"
+            resultMap="habitResultMap">
+        SELECT id,
+        version,
+        name,
+        completion_count,
+        archived,
+        longest_streak,
+        current_streak,
+        last_completed_at,
+        created_at,
+        scheduled_days
+        FROM habits
+        WHERE id = #{id}
+    </select>
+
+    <insert id="insert"
+            parameterType="com.nantonijevic.habits.domain.Habit"
+            useGeneratedKeys="true"
+            keyProperty="id">
+        INSERT INTO habits (
+        name,
+        scheduled_days,
+        completion_count,
+        archived,
+        longest_streak,
+        current_streak,
+        last_completed_at,
+        created_at
+        )
+        VALUES (
+        #{name},
+        #{scheduledDays,
+            jdbcType=VARCHAR,
+            typeHandler=com.nantonijevic.habits.repository.DayOfWeekSetTypeHandler},
+        #{completionCount},
+        #{archived},
+        #{longestStreak},
+        #{currentStreak},
+        #{lastCompletedAt},
+        #{createdAt}
+        )
+    </insert>
+
+    <update id="update"
+            parameterType="com.nantonijevic.habits.domain.Habit">
+        UPDATE habits
+        SET name = #{name},
+        scheduled_days = #{scheduledDays,
+            jdbcType=VARCHAR,
+            typeHandler=com.nantonijevic.habits.repository.DayOfWeekSetTypeHandler},
+        completion_count = #{completionCount},
+        archived = #{archived},
+        longest_streak = #{longestStreak},
+        current_streak = #{currentStreak},
+        last_completed_at = #{lastCompletedAt},
+        version = version + 1
+        WHERE id = #{id}
+        AND version = #{version}
+    </update>
+
+    <select id="search"
+            resultMap="habitResultMap">
+        SELECT id,
+        version,
+        name,
+        completion_count,
+        archived,
+        longest_streak,
+        current_streak,
+        last_completed_at,
+        created_at,
+        scheduled_days
+        FROM habits
+        <include refid="searchWhere"/>
+        ORDER BY ${orderBy}
+        <if test="limit != null">
+            LIMIT #{limit}
+            OFFSET #{offset}
+        </if>
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*)
+        FROM habits
+        <include refid="searchWhere"/>
+    </select>
+
+</mapper>

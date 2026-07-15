@@ -64,6 +64,17 @@ public class Habit {
         return version;
     }
 
+    // Infrastructure hook for persistence adapters that do not manage @Version.
+    public void synchronizePersistenceVersion(long persistedVersion) {
+        if (persistedVersion < 0) {
+            throw new IllegalArgumentException(
+                "Persistence version must not be negative"
+            );
+        }
+
+        this.version = persistedVersion;
+    }
+
     public Long getId() {
         return id;
     }
