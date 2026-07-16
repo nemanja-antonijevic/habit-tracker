@@ -237,8 +237,8 @@ public class HabitService {
 
     @Transactional
     public Habit update(Long habitId, Long version, String name, Set<DayOfWeek> scheduledDays) {
-        Habit habit = habitRepository.findById(habitId)
-                .orElseThrow(() -> new HabitNotFoundException(habitId));
+        Habit habit = Optional.ofNullable(habitMapper.findById(habitId))
+            .orElseThrow(() -> new HabitNotFoundException(habitId));
 
         if (!habit.getVersion().equals(version)) {
             throw new HabitVersionConflictException(habitId);
@@ -251,7 +251,7 @@ public class HabitService {
         }
 
         logger.info("Habit updated, habitId: {}, version: {}", habitId, version);
-        return habitRepository.save(habit);
+        return habitRepository.saveWithMyBatis(habit);
     }
 
     @Transactional

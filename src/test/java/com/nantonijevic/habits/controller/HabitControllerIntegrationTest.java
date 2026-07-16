@@ -467,10 +467,6 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(put("/habits/" + saved.getId()).content(jsonBody).contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk());
 
-        // MockMvc requests share the test transaction; flush the JPA write
-        // to simulate the production transaction boundary before MyBatis reads.
-        repository.flush();
-
         mockMvc.perform(get("/habits/" + saved.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(saved.getId()))
@@ -485,7 +481,6 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         String jsonBody2 = "{\"name\": \"Eat\",\"version\": 0}";
 
         mockMvc.perform(put("/habits/" + saved.getId()).content(jsonBody1).contentType(MediaType.APPLICATION_JSON));
-        repository.flush();
         mockMvc.perform(put("/habits/" + saved.getId()).content(jsonBody2).contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value(containsString("Habit version conflict")));
