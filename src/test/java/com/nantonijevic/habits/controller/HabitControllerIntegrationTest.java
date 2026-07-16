@@ -954,6 +954,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/habits/" + archivedDue.getId() + "/archive"))
                 .andExpect(status().isOk());
 
+        repository.flush();
+
         mockMvc.perform(get("/habits/due-today"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
@@ -992,6 +994,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/habits/" + archivedDue.getId() + "/archive"))
             .andExpect(status().isOk());
 
+        repository.flush();
+
         mockMvc.perform(get("/habits/due-today/count"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.count").value(2));
@@ -1015,6 +1019,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/habits/" + habit.getId() + "/archive"))
             .andExpect(status().isOk());
+
+        repository.flush();
 
         mockMvc.perform(get("/habits/due-today/count"))
             .andExpect(status().isOk())

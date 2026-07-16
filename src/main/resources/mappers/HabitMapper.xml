@@ -57,6 +57,23 @@
         WHERE id = #{id}
     </select>
 
+    <select id="findActive"
+            resultMap="habitResultMap">
+        SELECT id,
+        version,
+        name,
+        completion_count,
+        archived,
+        longest_streak,
+        current_streak,
+        last_completed_at,
+        created_at,
+        scheduled_days
+        FROM habits
+        WHERE archived = FALSE
+        ORDER BY created_at DESC, id DESC
+    </select>
+
     <insert id="insert"
             parameterType="com.nantonijevic.habits.domain.Habit"
             useGeneratedKeys="true"
