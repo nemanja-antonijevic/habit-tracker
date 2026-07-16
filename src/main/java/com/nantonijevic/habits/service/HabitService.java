@@ -268,12 +268,14 @@ public class HabitService {
 
     @Transactional
     public Habit unarchive(Long habitId) {
-        Habit habit = habitRepository.findById(habitId)
-                .orElseThrow(() -> new HabitNotFoundException(habitId));
+        Habit habit = Optional.ofNullable(habitMapper.findById(habitId))
+            .orElseThrow(() -> new HabitNotFoundException(habitId));
+
         habit.unarchive();
-        logger.info("Habit unarchived, habitId: {}",
-                habitId);
-        return habitRepository.save(habit);
+
+        logger.info("Habit unarchived, habitId: {}", habitId);
+
+        return habitRepository.saveWithMyBatis(habit);
     }
 
     @Transactional

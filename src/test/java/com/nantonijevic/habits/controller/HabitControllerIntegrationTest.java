@@ -776,7 +776,6 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/habits/" + habit.getId() + "/archive"))
                 .andExpect(status().isOk());
-        entityManager.clear();
         mockMvc.perform(post("/habits/" + habit.getId() + "/unarchive"))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/habits"))

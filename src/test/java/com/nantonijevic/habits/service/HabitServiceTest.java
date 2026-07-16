@@ -144,4 +144,26 @@ class HabitServiceTest {
         verify(habitRepository, never()).findById(habitId);
         verify(habitRepository, never()).save(any(Habit.class));
     }
+
+    @Test
+    void unarchiveUsesMyBatisReadAndWritePath() {
+        Long habitId = 42L;
+        Habit existingHabit = new Habit("Read");
+        existingHabit.archive();
+        existingHabit.synchronizePersistenceVersion(2L);
+
+        when(habitMapper.findById(habitId)).thenReturn(existingHabit);
+        when(habitRepository.saveWithMyBatis(same(existingHabit)))
+            .thenReturn(existingHabit);
+
+        Habit unarchived = habitService.unarchive(habitId);
+
+        assertThat(unarchived.isArchived()).isFalse();
+
+        verify(habitMapper).findById(habitId);
+        verify(habitRepository).saveWithMyBatis(same(existingHabit));
+
+        verify(habitRepository, never()).findById(habitId);
+        verify(habitRepository, never()).save(any(Habit.class));
+    }
 }
