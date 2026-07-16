@@ -142,7 +142,7 @@ public class HabitService {
                 : EnumSet.copyOf(scheduledDays);
 
         habit.setScheduledDays(effectiveScheduledDays);
-        Habit saved = habitRepository.save(habit);
+        Habit saved = habitRepository.saveWithMyBatis(habit);
         logger.info("Habit created, habitId: {}", saved.getId());
         return saved;
     }
