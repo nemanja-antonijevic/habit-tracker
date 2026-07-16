@@ -17,6 +17,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.EnumSet;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -212,6 +213,37 @@ class HabitServiceTest {
 
         verify(habitMapper).findById(habitId);
         verify(completionRepository).save(any(HabitCompletion.class));
+        verify(habitRepository).saveWithMyBatis(same(existingHabit));
+
+        verify(habitRepository, never()).findById(habitId);
+        verify(habitRepository, never()).save(any(Habit.class));
+    }
+
+    @Test
+    void uncompleteUsesMyBatisReadAndWritePath() {
+        Long habitId = 42L;
+        LocalDate today = LocalDate.of(2024, 1, 5);
+
+        Habit existingHabit = new Habit("Read");
+        existingHabit.complete(today);
+        existingHabit.synchronizePersistenceVersion(2L);
+
+        when(habitMapper.findById(habitId)).thenReturn(existingHabit);
+        when(completionRepository.findByHabitIdOrderByCompletedOnDesc(habitId))
+            .thenReturn(List.of());
+        when(habitRepository.saveWithMyBatis(same(existingHabit)))
+            .thenReturn(existingHabit);
+
+        Habit uncompleted = habitService.uncomplete(habitId, today);
+
+        assertThat(uncompleted.getCompletionCount()).isZero();
+        assertThat(uncompleted.getLastCompletedAt()).isNull();
+
+        verify(habitMapper).findById(habitId);
+        verify(completionRepository)
+            .deleteByHabitIdAndCompletedOn(habitId, today);
+        verify(completionRepository)
+            .findByHabitIdOrderByCompletedOnDesc(habitId);
         verify(habitRepository).saveWithMyBatis(same(existingHabit));
 
         verify(habitRepository, never()).findById(habitId);

@@ -155,24 +155,26 @@ public class HabitService {
 
     @Transactional
     public Habit uncomplete(Long habitId, LocalDate today) {
-        Habit habit = habitRepository.findById(habitId)
-                .orElseThrow(() -> new HabitNotFoundException(habitId));
+        Habit habit = Optional.ofNullable(habitMapper.findById(habitId))
+            .orElseThrow(() -> new HabitNotFoundException(habitId));
 
         completionRepository.deleteByHabitIdAndCompletedOn(habitId, today);
 
         List<LocalDate> remainingCompletionDates = completionRepository
-                .findByHabitIdOrderByCompletedOnDesc(habitId)
-                .stream()
-                .map(HabitCompletion::getCompletedOn)
-                .toList();
+            .findByHabitIdOrderByCompletedOnDesc(habitId)
+            .stream()
+            .map(HabitCompletion::getCompletedOn)
+            .toList();
 
         habit.decrementCompletionCount(today, remainingCompletionDates);
 
-        applicationEventPublisher.publishEvent(new HabitUncompletedEvent(habitId, today));
+        applicationEventPublisher.publishEvent(
+            new HabitUncompletedEvent(habitId, today)
+        );
 
         logger.info("Habit uncompleted, habitId: {}, date: {}", habitId, today);
 
-        return habitRepository.save(habit);
+        return habitRepository.saveWithMyBatis(habit);
     }
 
     public Habit getById(Long habitId) {
