@@ -176,8 +176,9 @@ public class HabitService {
 
     @Transactional(readOnly = true)
     public HabitStatsView getStatsProjection(Long habitId, LocalDate today) {
-        Habit habit = habitRepository.findById(habitId)
-                .orElseThrow(() -> new HabitNotFoundException(habitId));
+        Habit habit = Optional.ofNullable(
+            habitMapper.findById(habitId)
+        ).orElseThrow(() -> new HabitNotFoundException(habitId));
         Optional<HabitCompletionStat> lastRow =
                 completionStatRepository.findFirstByHabitIdOrderByCompletedOnDesc(habitId);
         int currentStreak;
