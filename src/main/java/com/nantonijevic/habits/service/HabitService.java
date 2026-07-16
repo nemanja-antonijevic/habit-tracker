@@ -58,15 +58,19 @@ public class HabitService {
 
     @Transactional
     public Habit complete(Long habitId, LocalDate today) {
-        Habit habit = habitRepository.findById(habitId)
-                .orElseThrow(() -> new HabitNotFoundException(habitId));
+        Habit habit = Optional.ofNullable(habitMapper.findById(habitId))
+            .orElseThrow(() -> new HabitNotFoundException(habitId));
 
-        completeExistingHabit(habit, habitId, today);
+        boolean reallyCompleted = completeExistingHabit(habit, habitId, today);
 
-        return habitRepository.save(habit);
+        if (reallyCompleted) {
+            return habitRepository.saveWithMyBatis(habit);
+        }
+
+        return habit;
     }
 
-    private void completeExistingHabit(Habit habit, Long habitId, LocalDate today) {
+    private boolean completeExistingHabit(Habit habit, Long habitId, LocalDate today) {
         boolean reallyCompleted = habit.complete(today);
 
         if (reallyCompleted) {
@@ -87,6 +91,8 @@ public class HabitService {
         } else {
             logger.debug("Habit completion skipped (already completed), habitId: {}, date: {}", habitId, today);
         }
+
+        return reallyCompleted;
     }
 
     @Transactional

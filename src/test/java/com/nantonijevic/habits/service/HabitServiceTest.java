@@ -1,6 +1,7 @@
 package com.nantonijevic.habits.service;
 
 import com.nantonijevic.habits.domain.Habit;
+import com.nantonijevic.habits.domain.HabitCompletion;
 import com.nantonijevic.habits.domain.HabitVersionConflictException;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
@@ -14,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.util.EnumSet;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -161,6 +163,55 @@ class HabitServiceTest {
         assertThat(unarchived.isArchived()).isFalse();
 
         verify(habitMapper).findById(habitId);
+        verify(habitRepository).saveWithMyBatis(same(existingHabit));
+
+        verify(habitRepository, never()).findById(habitId);
+        verify(habitRepository, never()).save(any(Habit.class));
+    }
+
+    @Test
+    void completeDoesNotWriteOrIncrementVersionWhenAlreadyCompletedToday() {
+        Long habitId = 42L;
+        LocalDate today = LocalDate.of(2024, 1, 5);
+
+        Habit existingHabit = new Habit("Read");
+        existingHabit.complete(today);
+        existingHabit.synchronizePersistenceVersion(2L);
+
+        when(habitMapper.findById(habitId)).thenReturn(existingHabit);
+
+        Habit result = habitService.complete(habitId, today);
+
+        assertThat(result).isSameAs(existingHabit);
+        assertThat(result.getCompletionCount()).isEqualTo(1);
+        assertThat(result.getVersion()).isEqualTo(2L);
+
+        verify(habitMapper).findById(habitId);
+        verify(habitRepository, never())
+            .saveWithMyBatis(any(Habit.class));
+        verify(habitRepository, never())
+            .save(any(Habit.class));
+    }
+
+    @Test
+    void completeUsesMyBatisReadAndWritePathWhenStateChanges() {
+        Long habitId = 42L;
+        LocalDate today = LocalDate.of(2024, 1, 5);
+
+        Habit existingHabit = new Habit("Read");
+        existingHabit.synchronizePersistenceVersion(2L);
+
+        when(habitMapper.findById(habitId)).thenReturn(existingHabit);
+        when(habitRepository.saveWithMyBatis(same(existingHabit)))
+            .thenReturn(existingHabit);
+
+        Habit completed = habitService.complete(habitId, today);
+
+        assertThat(completed.getCompletionCount()).isEqualTo(1);
+        assertThat(completed.getCurrentStreak()).isEqualTo(1);
+
+        verify(habitMapper).findById(habitId);
+        verify(completionRepository).save(any(HabitCompletion.class));
         verify(habitRepository).saveWithMyBatis(same(existingHabit));
 
         verify(habitRepository, never()).findById(habitId);

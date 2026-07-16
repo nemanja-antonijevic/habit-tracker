@@ -553,10 +553,6 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/habits/" + saved.getId() + "/complete"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.completionCount").value(1));
-
-        // Flush the JPA update before the MyBatis GET (see updateHabit test).
-        repository.flush();
-
         mockMvc.perform(get("/habits/" + saved.getId()))
                 .andExpect(jsonPath("$.completionCount").value(1));
     }
@@ -584,10 +580,6 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         var saved = repository.save(new Habit("Read"));
 
         mockMvc.perform(post("/habits/" + saved.getId() + "/complete"));
-
-        // Flush the JPA update before the MyBatis GET (see updateHabit test).
-        repository.flush();
-
         mockMvc.perform(get("/habits/" + saved.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.currentStreak").value(1));
@@ -598,6 +590,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         var habit = repository.save(new Habit("Read"));
         habit.complete(LocalDate.now().minusDays(1));
         repository.save(habit);
+        repository.flush();
+
         mockMvc.perform(post("/habits/" + habit.getId() + "/complete"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.currentStreak").value(2));
@@ -619,9 +613,6 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/habits/" + saved.getId() + "/archive"))
                 .andExpect(status().isOk());
-
-        entityManager.clear();
-
         mockMvc.perform(post("/habits/" + saved.getId() + "/complete"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Cannot complete: archived"));
@@ -698,9 +689,11 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     void uncomplete_returns200_andDecrementsCount_andClearsTimestamp() throws Exception {
         var saved = repository.save(new Habit("Read 30 min"));
         mockMvc.perform(post("/habits/" + saved.getId() + "/complete"));
+        entityManager.clear();
         mockMvc.perform(post("/habits/" + saved.getId() + "/uncomplete"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.completionCount").value(0));
+        repository.flush();
         mockMvc.perform(get("/habits/" + saved.getId() + "/stats"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.completionCount").value(0))
@@ -823,6 +816,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/habits/" + habit.getId() + "/complete"))
                 .andExpect(status().isOk());
+        entityManager.clear();
         mockMvc.perform(post("/habits/" + habit.getId() + "/uncomplete"))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/habits/" + habit.getId() + "/history"))
