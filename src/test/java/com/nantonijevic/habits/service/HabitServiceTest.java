@@ -123,4 +123,25 @@ class HabitServiceTest {
         verify(habitRepository, never())
             .saveWithMyBatis(any(Habit.class));
     }
+
+    @Test
+    void archiveUsesMyBatisReadAndWritePath() {
+        Long habitId = 42L;
+        Habit existingHabit = new Habit("Read");
+        existingHabit.synchronizePersistenceVersion(2L);
+
+        when(habitMapper.findById(habitId)).thenReturn(existingHabit);
+        when(habitRepository.saveWithMyBatis(same(existingHabit)))
+            .thenReturn(existingHabit);
+
+        Habit archived = habitService.archive(habitId);
+
+        assertThat(archived.isArchived()).isTrue();
+
+        verify(habitMapper).findById(habitId);
+        verify(habitRepository).saveWithMyBatis(same(existingHabit));
+
+        verify(habitRepository, never()).findById(habitId);
+        verify(habitRepository, never()).save(any(Habit.class));
+    }
 }

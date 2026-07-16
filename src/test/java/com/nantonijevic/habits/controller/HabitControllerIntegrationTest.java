@@ -7,6 +7,7 @@ import com.nantonijevic.habits.dto.CreateHabitRequest;
 import com.nantonijevic.habits.AbstractIntegrationTest;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitRepository;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,6 +52,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     private HabitCompletionRepository completionRepository;
 
+    @Autowired
+    private EntityManager entityManager;
 
     @Test
     void createHabit_returns201_andPersistsHabit() throws Exception {
@@ -617,6 +620,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/habits/" + saved.getId() + "/archive"))
                 .andExpect(status().isOk());
 
+        entityManager.clear();
+
         mockMvc.perform(post("/habits/" + saved.getId() + "/complete"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Cannot complete: archived"));
@@ -771,6 +776,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/habits/" + habit.getId() + "/archive"))
                 .andExpect(status().isOk());
+        entityManager.clear();
         mockMvc.perform(post("/habits/" + habit.getId() + "/unarchive"))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/habits"))

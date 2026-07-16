@@ -256,12 +256,14 @@ public class HabitService {
 
     @Transactional
     public Habit archive(Long habitId) {
-        Habit habit = habitRepository.findById(habitId)
-                .orElseThrow(() -> new HabitNotFoundException(habitId));
+        Habit habit = Optional.ofNullable(habitMapper.findById(habitId))
+            .orElseThrow(() -> new HabitNotFoundException(habitId));
+
         habit.archive();
-        logger.info("Habit archived, habitId: {}",
-                habitId);
-        return habitRepository.save(habit);
+
+        logger.info("Habit archived, habitId: {}", habitId);
+
+        return habitRepository.saveWithMyBatis(habit);
     }
 
     @Transactional
