@@ -228,8 +228,9 @@ public class HabitService {
         if (from != null && to != null && from.isAfter(to)) {
             throw new InvalidDateRangeException();
         }
-        habitRepository.findById(habitId)
-                .orElseThrow(() -> new HabitNotFoundException(habitId));
+        if (!habitMapper.existsById(habitId)) {
+            throw new HabitNotFoundException(habitId);
+        }
         return completionRepository.findByHabitIdAndCompletedOnBetweenOptional(habitId, from, to, pageable);
     }
 

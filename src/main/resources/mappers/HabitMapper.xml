@@ -49,6 +49,14 @@
         WHERE id = #{id}
     </select>
 
+    <select id="existsById"
+            parameterType="java.lang.Long"
+            resultType="boolean">
+        SELECT COUNT(*)
+        FROM habits
+        WHERE id = #{id}
+    </select>
+
     <insert id="insert"
             parameterType="com.nantonijevic.habits.domain.Habit"
             useGeneratedKeys="true"

@@ -11,6 +11,8 @@ public interface HabitMapper {
 
     Habit findById(Long id);
 
+    boolean existsById(Long id);
+
     int insert(Habit habit);
 
     int update(Habit habit);
