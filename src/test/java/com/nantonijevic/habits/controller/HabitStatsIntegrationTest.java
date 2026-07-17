@@ -6,7 +6,7 @@ import com.nantonijevic.habits.event.HabitCompletedEventConsumer;
 import com.nantonijevic.habits.event.HabitEvent;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
-import com.nantonijevic.habits.repository.HabitRepository;
+import com.nantonijevic.habits.repository.HabitWriteRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.SpyBean;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.test.web.servlet.MockMvc;
@@ -59,7 +60,10 @@ public class HabitStatsIntegrationTest {
     private MockMvc mockMvc;
 
     @Autowired
-    private HabitRepository repository;
+    private HabitWriteRepository habitWriteRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @Autowired
     private HabitCompletionStatRepository statRepository;
@@ -79,7 +83,7 @@ public class HabitStatsIntegrationTest {
     void setUp() {
         completionRepository.deleteAll();
         statRepository.deleteAll();
-        repository.deleteAll();
+        jdbcTemplate.update("DELETE FROM habits");
 
         doAnswer(invocation -> {
             try {
@@ -96,14 +100,14 @@ public class HabitStatsIntegrationTest {
     void tearDown() {
         completionRepository.deleteAll();
         statRepository.deleteAll();
-        repository.deleteAll();
+        jdbcTemplate.update("DELETE FROM habits");
     }
 
     @Test
     void getStats_returnsCorrectCountAndTimestamp_afterComplete() throws Exception {
         expectEvents(1);
 
-        Habit saved = repository.save(new Habit("Read 30 min"));
+        Habit saved = habitWriteRepository.saveWithMyBatis(new Habit("Read 30 min"));
 
         mockMvc.perform(post("/habits/" + saved.getId() + "/complete"))
                 .andExpect(status().isOk());
@@ -120,7 +124,7 @@ public class HabitStatsIntegrationTest {
     void getStats_returnsCurrentStreak_afterConsecutiveCompletions() throws Exception {
         expectEvents(3);
 
-        var habit = repository.save(new Habit("Read"));
+        var habit = habitWriteRepository.saveWithMyBatis(new Habit("Read"));
         LocalDate today = LocalDate.now();
 
         publishCompletedEvent(habit.getId(), today.minusDays(2), 1, 1);
@@ -145,7 +149,7 @@ public class HabitStatsIntegrationTest {
         habit.complete(today.minusDays(1));
         habit.complete(today);
 
-        var saved = repository.save(habit);
+        var saved = habitWriteRepository.saveWithMyBatis(habit);
 
         publishCompletedEvent(saved.getId(), today.minusDays(2), 1, 1);
         publishCompletedEvent(saved.getId(), today.minusDays(1), 2, 2);
@@ -171,7 +175,7 @@ public class HabitStatsIntegrationTest {
         expectEvents(1);
 
         var habit = new Habit("Read 30 min");
-        repository.save(habit);
+        habitWriteRepository.saveWithMyBatis(habit);
 
         mockMvc.perform(post("/habits/" + habit.getId() + "/complete"))
                 .andExpect(status().isOk());
@@ -188,7 +192,7 @@ public class HabitStatsIntegrationTest {
     void streakResetDoesNotLowerLongestStreak() throws Exception {
         expectEvents(4);
 
-        var habit = repository.save(new Habit("Read 30 min"));
+        var habit = habitWriteRepository.saveWithMyBatis(new Habit("Read 30 min"));
         LocalDate today = LocalDate.now();
 
         publishCompletedEvent(habit.getId(), today.minusDays(4), 1, 1);
@@ -223,7 +227,7 @@ public class HabitStatsIntegrationTest {
 
         var habit = new Habit("Workout");
         habit.setScheduledDays(scheduledDays);
-        var saved = repository.save(habit);
+        var saved = habitWriteRepository.saveWithMyBatis(habit);
 
         publishCompletedEvent(saved.getId(), previousScheduledDay, 1, 1);
 

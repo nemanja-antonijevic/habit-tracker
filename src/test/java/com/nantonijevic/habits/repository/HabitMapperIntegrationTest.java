@@ -24,8 +24,7 @@ class HabitMapperIntegrationTest extends AbstractIntegrationTest {
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
-    private HabitRepository habitRepository;
-
+    private HabitSearchRepository habitSearchRepository;
     @Test
     void findsHabitById() {
         jdbcTemplate.update("""
@@ -66,7 +65,7 @@ class HabitMapperIntegrationTest extends AbstractIntegrationTest {
             VALUES (?, ?, ?, CURRENT_TIMESTAMP)
             """, 103L, "Archived Run", true);
 
-        Page<Habit> result = habitRepository.search(
+        Page<Habit> result = habitSearchRepository.search(
             "RUN",
             false,
             PageRequest.of(

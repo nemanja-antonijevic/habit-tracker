@@ -6,7 +6,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
-import com.nantonijevic.habits.repository.HabitRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,7 +36,7 @@ class HabitCompletedEventConsumerIntegrationTest {
     private KafkaTemplate<String, HabitEvent> kafkaTemplate;
 
     @Autowired
-    private HabitRepository repository;
+    private JdbcTemplate jdbcTemplate;
 
     @Autowired
     private HabitCompletionStatRepository statRepository;
@@ -54,7 +54,7 @@ class HabitCompletedEventConsumerIntegrationTest {
     void setUp() {
         completionRepository.deleteAll();
         statRepository.deleteAll();
-        repository.deleteAll();
+        jdbcTemplate.update("DELETE FROM habits");
 
         doAnswer(invocation -> {
             try {
@@ -78,7 +78,7 @@ class HabitCompletedEventConsumerIntegrationTest {
     void tearDown() {
         completionRepository.deleteAll();
         statRepository.deleteAll();
-        repository.deleteAll();
+        jdbcTemplate.update("DELETE FROM habits");
 
         Logger consumerLogger = (Logger) LoggerFactory.getLogger(HabitCompletedEventConsumer.class);
         consumerLogger.detachAppender(logAppender);

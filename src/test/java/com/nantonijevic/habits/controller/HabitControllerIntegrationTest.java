@@ -6,13 +6,14 @@ import com.nantonijevic.habits.domain.HabitCompletion;
 import com.nantonijevic.habits.dto.CreateHabitRequest;
 import com.nantonijevic.habits.AbstractIntegrationTest;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
-import com.nantonijevic.habits.repository.HabitRepository;
+import com.nantonijevic.habits.support.HabitTestFixtureRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -30,7 +31,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -46,7 +46,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     private ObjectMapper objectMapper;
 
     @Autowired
-    private HabitRepository repository;
+    private HabitTestFixtureRepository repository;
 
     @Autowired
     private HabitCompletionRepository completionRepository;
@@ -311,7 +311,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.content[0].name").value("Read"))
                 .andExpect(jsonPath("$.content[0].currentStreak").value(0));
 
-        var reloaded = repository.findAll().getFirst();
+        var reloaded = repository.findById(habit.getId()).orElseThrow();
         assertThat(reloaded.getCurrentStreak()).isEqualTo(2);
     }
 
@@ -582,7 +582,6 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         var habit = repository.save(new Habit("Read"));
         habit.complete(LocalDate.now().minusDays(1));
         repository.save(habit);
-        repository.flush();
 
         mockMvc.perform(post("/habits/" + habit.getId() + "/complete"))
                 .andExpect(status().isOk())
@@ -936,9 +935,6 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/habits/" + archivedDue.getId() + "/archive"))
                 .andExpect(status().isOk());
-
-        repository.flush();
-
         mockMvc.perform(get("/habits/due-today"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
@@ -976,9 +972,6 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/habits/" + archivedDue.getId() + "/archive"))
             .andExpect(status().isOk());
-
-        repository.flush();
-
         mockMvc.perform(get("/habits/due-today/count"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.count").value(2));
@@ -1002,9 +995,6 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/habits/" + habit.getId() + "/archive"))
             .andExpect(status().isOk());
-
-        repository.flush();
-
         mockMvc.perform(get("/habits/due-today/count"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.count").value(0));

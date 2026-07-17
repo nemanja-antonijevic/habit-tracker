@@ -7,7 +7,8 @@ import com.nantonijevic.habits.domain.HabitVersionConflictException;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
 import com.nantonijevic.habits.repository.HabitMapper;
-import com.nantonijevic.habits.repository.HabitRepository;
+import com.nantonijevic.habits.repository.HabitSearchRepository;
+import com.nantonijevic.habits.repository.HabitWriteRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -32,7 +33,10 @@ import static org.mockito.Mockito.when;
 class HabitServiceTest {
 
     @Mock
-    private HabitRepository habitRepository;
+    private HabitSearchRepository habitSearchRepository;
+
+    @Mock
+    private HabitWriteRepository habitWriteRepository;
 
     @Mock
     private HabitMapper habitMapper;
@@ -57,7 +61,7 @@ class HabitServiceTest {
             DayOfWeek.FRIDAY
         );
 
-        when(habitRepository.saveWithMyBatis(any(Habit.class)))
+        when(habitWriteRepository.saveWithMyBatis(any(Habit.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
 
         Habit created = habitService.create("Exercise", scheduledDays);
@@ -65,8 +69,7 @@ class HabitServiceTest {
         assertThat(created.getName()).isEqualTo("Exercise");
         assertThat(created.getScheduledDays()).isEqualTo(scheduledDays);
 
-        verify(habitRepository).saveWithMyBatis(same(created));
-        verify(habitRepository, never()).save(any(Habit.class));
+        verify(habitWriteRepository).saveWithMyBatis(same(created));
     }
 
     @Test
@@ -82,7 +85,7 @@ class HabitServiceTest {
         );
 
         when(habitMapper.findById(habitId)).thenReturn(existingHabit);
-        when(habitRepository.saveWithMyBatis(same(existingHabit)))
+        when(habitWriteRepository.saveWithMyBatis(same(existingHabit)))
             .thenReturn(existingHabit);
 
         Habit updated = habitService.update(
@@ -96,10 +99,7 @@ class HabitServiceTest {
         assertThat(updated.getScheduledDays()).isEqualTo(newScheduledDays);
 
         verify(habitMapper).findById(habitId);
-        verify(habitRepository).saveWithMyBatis(same(existingHabit));
-
-        verify(habitRepository, never()).findById(habitId);
-        verify(habitRepository, never()).save(any(Habit.class));
+        verify(habitWriteRepository).saveWithMyBatis(same(existingHabit));
     }
 
     @Test
@@ -124,7 +124,7 @@ class HabitServiceTest {
         assertThat(existingHabit.getName()).isEqualTo("Original name");
 
         verify(habitMapper).findById(habitId);
-        verify(habitRepository, never())
+        verify(habitWriteRepository, never())
             .saveWithMyBatis(any(Habit.class));
     }
 
@@ -135,7 +135,7 @@ class HabitServiceTest {
         existingHabit.synchronizePersistenceVersion(2L);
 
         when(habitMapper.findById(habitId)).thenReturn(existingHabit);
-        when(habitRepository.saveWithMyBatis(same(existingHabit)))
+        when(habitWriteRepository.saveWithMyBatis(same(existingHabit)))
             .thenReturn(existingHabit);
 
         Habit archived = habitService.archive(habitId);
@@ -143,10 +143,7 @@ class HabitServiceTest {
         assertThat(archived.isArchived()).isTrue();
 
         verify(habitMapper).findById(habitId);
-        verify(habitRepository).saveWithMyBatis(same(existingHabit));
-
-        verify(habitRepository, never()).findById(habitId);
-        verify(habitRepository, never()).save(any(Habit.class));
+        verify(habitWriteRepository).saveWithMyBatis(same(existingHabit));
     }
 
     @Test
@@ -157,7 +154,7 @@ class HabitServiceTest {
         existingHabit.synchronizePersistenceVersion(2L);
 
         when(habitMapper.findById(habitId)).thenReturn(existingHabit);
-        when(habitRepository.saveWithMyBatis(same(existingHabit)))
+        when(habitWriteRepository.saveWithMyBatis(same(existingHabit)))
             .thenReturn(existingHabit);
 
         Habit unarchived = habitService.unarchive(habitId);
@@ -165,10 +162,7 @@ class HabitServiceTest {
         assertThat(unarchived.isArchived()).isFalse();
 
         verify(habitMapper).findById(habitId);
-        verify(habitRepository).saveWithMyBatis(same(existingHabit));
-
-        verify(habitRepository, never()).findById(habitId);
-        verify(habitRepository, never()).save(any(Habit.class));
+        verify(habitWriteRepository).saveWithMyBatis(same(existingHabit));
     }
 
     @Test
@@ -189,10 +183,8 @@ class HabitServiceTest {
         assertThat(result.getVersion()).isEqualTo(2L);
 
         verify(habitMapper).findById(habitId);
-        verify(habitRepository, never())
+        verify(habitWriteRepository, never())
             .saveWithMyBatis(any(Habit.class));
-        verify(habitRepository, never())
-            .save(any(Habit.class));
     }
 
     @Test
@@ -204,7 +196,7 @@ class HabitServiceTest {
         existingHabit.synchronizePersistenceVersion(2L);
 
         when(habitMapper.findById(habitId)).thenReturn(existingHabit);
-        when(habitRepository.saveWithMyBatis(same(existingHabit)))
+        when(habitWriteRepository.saveWithMyBatis(same(existingHabit)))
             .thenReturn(existingHabit);
 
         Habit completed = habitService.complete(habitId, today);
@@ -214,10 +206,7 @@ class HabitServiceTest {
 
         verify(habitMapper).findById(habitId);
         verify(completionRepository).save(any(HabitCompletion.class));
-        verify(habitRepository).saveWithMyBatis(same(existingHabit));
-
-        verify(habitRepository, never()).findById(habitId);
-        verify(habitRepository, never()).save(any(Habit.class));
+        verify(habitWriteRepository).saveWithMyBatis(same(existingHabit));
     }
 
     @Test
@@ -232,7 +221,7 @@ class HabitServiceTest {
         when(habitMapper.findById(habitId)).thenReturn(existingHabit);
         when(completionRepository.findByHabitIdOrderByCompletedOnDesc(habitId))
             .thenReturn(List.of());
-        when(habitRepository.saveWithMyBatis(same(existingHabit)))
+        when(habitWriteRepository.saveWithMyBatis(same(existingHabit)))
             .thenReturn(existingHabit);
 
         Habit uncompleted = habitService.uncomplete(habitId, today);
@@ -245,10 +234,7 @@ class HabitServiceTest {
             .deleteByHabitIdAndCompletedOn(habitId, today);
         verify(completionRepository)
             .findByHabitIdOrderByCompletedOnDesc(habitId);
-        verify(habitRepository).saveWithMyBatis(same(existingHabit));
-
-        verify(habitRepository, never()).findById(habitId);
-        verify(habitRepository, never()).save(any(Habit.class));
+        verify(habitWriteRepository).saveWithMyBatis(same(existingHabit));
     }
 
     @Test
@@ -262,9 +248,6 @@ class HabitServiceTest {
 
         verify(habitMapper).existsById(habitId);
         verify(habitMapper).deleteById(habitId);
-
-        verify(habitRepository, never()).findById(habitId);
-        verify(habitRepository, never()).deleteById(habitId);
     }
 
     @Test
@@ -279,8 +262,5 @@ class HabitServiceTest {
 
         verify(habitMapper).existsById(habitId);
         verify(habitMapper, never()).deleteById(habitId);
-
-        verify(habitRepository, never()).findById(habitId);
-        verify(habitRepository, never()).deleteById(habitId);
     }
 }

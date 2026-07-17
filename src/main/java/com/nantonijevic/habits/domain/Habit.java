@@ -1,14 +1,5 @@
 package com.nantonijevic.habits.domain;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Convert;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import jakarta.persistence.Version;
-
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -16,40 +7,26 @@ import java.time.ZoneId;
 import java.util.EnumSet;
 import java.util.List;
 
-@Entity
-@Table(name = "habits")
 public class Habit {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Version
     private Long version;
 
-    @Column(nullable = false)
     private String name;
 
-    @Column(name = "scheduled_days", nullable = false)
-    @Convert(converter = DayOfWeekSetConverter.class)
     private EnumSet<DayOfWeek> scheduledDays = EnumSet.allOf(DayOfWeek.class);
 
-    @Column(name = "completion_count", nullable = false)
     private int completionCount;
 
-    @Column(nullable = false)
     private boolean archived;
 
-    @Column(name = "longest_streak")
     private int longestStreak;
 
-    @Column(name = "current_streak")
     private int currentStreak;
 
-    @Column(name = "last_completed_at")
     private Instant lastCompletedAt;
 
-    @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
     protected Habit() {

@@ -13,7 +13,8 @@ import com.nantonijevic.habits.exception.InvalidDateRangeException;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
 import com.nantonijevic.habits.repository.HabitMapper;
-import com.nantonijevic.habits.repository.HabitRepository;
+import com.nantonijevic.habits.repository.HabitSearchRepository;
+import com.nantonijevic.habits.repository.HabitWriteRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -38,18 +39,21 @@ public class HabitService {
 
     private static final Logger logger = LoggerFactory.getLogger(HabitService.class);
 
-    private final HabitRepository habitRepository;
+    private final HabitSearchRepository habitSearchRepository;
+    private final HabitWriteRepository habitWriteRepository;
     private final HabitMapper habitMapper;
     private final HabitCompletionRepository completionRepository;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final HabitCompletionStatRepository completionStatRepository;
 
-    public HabitService(HabitRepository habitRepository,
+    public HabitService(HabitSearchRepository habitSearchRepository,
+                        HabitWriteRepository habitWriteRepository,
                         HabitMapper habitMapper,
                         HabitCompletionRepository completionRepository,
                         ApplicationEventPublisher applicationEventPublisher,
                         HabitCompletionStatRepository completionStatRepository) {
-        this.habitRepository = habitRepository;
+        this.habitSearchRepository = habitSearchRepository;
+        this.habitWriteRepository = habitWriteRepository;
         this.habitMapper = habitMapper;
         this.completionRepository = completionRepository;
         this.applicationEventPublisher = applicationEventPublisher;
@@ -64,7 +68,7 @@ public class HabitService {
         boolean reallyCompleted = completeExistingHabit(habit, habitId, today);
 
         if (reallyCompleted) {
-            return habitRepository.saveWithMyBatis(habit);
+            return habitWriteRepository.saveWithMyBatis(habit);
         }
 
         return habit;
@@ -140,7 +144,7 @@ public class HabitService {
             );
 
             if (reallyCompleted) {
-                habitRepository.saveWithMyBatis(habit);
+                habitWriteRepository.saveWithMyBatis(habit);
             }
 
             completed.add(habitId);
@@ -158,7 +162,7 @@ public class HabitService {
                 : EnumSet.copyOf(scheduledDays);
 
         habit.setScheduledDays(effectiveScheduledDays);
-        Habit saved = habitRepository.saveWithMyBatis(habit);
+        Habit saved = habitWriteRepository.saveWithMyBatis(habit);
         logger.info("Habit created, habitId: {}", saved.getId());
         return saved;
     }
@@ -184,7 +188,7 @@ public class HabitService {
 
         logger.info("Habit uncompleted, habitId: {}, date: {}", habitId, today);
 
-        return habitRepository.saveWithMyBatis(habit);
+        return habitWriteRepository.saveWithMyBatis(habit);
     }
 
     public Habit getById(Long habitId) {
@@ -218,8 +222,6 @@ public class HabitService {
                 currentStreak);
     }
 
-    // readOnly: list() may return N entities — skips dirty-check snapshots.
-    // getById/getHistory intentionally omit it: single entity, benefit ≈ 0.
     @Transactional(readOnly = true)
     public Page<Habit> list(boolean includeArchived, String name, Pageable pageable) {
         Pageable effectivePageable = pageable.getSort().isUnsorted() ?
@@ -233,11 +235,9 @@ public class HabitService {
                 ? null
                 : name.trim();
 
-        return habitRepository.search(normalizedName, includeArchived, effectivePageable);
+        return habitSearchRepository.search(normalizedName, includeArchived, effectivePageable);
     }
 
-    // readOnly: list()/getHistory() may return N entities — skips dirty-check snapshots.
-    // getById intentionally omits it: single entity, benefit ≈ 0.
     @Transactional(readOnly = true)
     public Page<HabitCompletion> getHistory(
             Long habitId,
@@ -269,7 +269,7 @@ public class HabitService {
         }
 
         logger.info("Habit updated, habitId: {}, version: {}", habitId, version);
-        return habitRepository.saveWithMyBatis(habit);
+        return habitWriteRepository.saveWithMyBatis(habit);
     }
 
     @Transactional
@@ -281,7 +281,7 @@ public class HabitService {
 
         logger.info("Habit archived, habitId: {}", habitId);
 
-        return habitRepository.saveWithMyBatis(habit);
+        return habitWriteRepository.saveWithMyBatis(habit);
     }
 
     @Transactional
@@ -293,7 +293,7 @@ public class HabitService {
 
         logger.info("Habit unarchived, habitId: {}", habitId);
 
-        return habitRepository.saveWithMyBatis(habit);
+        return habitWriteRepository.saveWithMyBatis(habit);
     }
 
     @Transactional
@@ -309,8 +309,8 @@ public class HabitService {
 
     @Transactional(readOnly = true)
     public Page<Habit> dueToday(LocalDate today, Pageable pageable) {
-        // scheduledDays je @Convert-ovana kolona (serijalizovan string), pa se ne može
-        // filtrirati u SQL WHERE — učitavamo aktivne habite i filtriramo u memoriji.
+        // scheduled_days je CSV-serijalizovana kolona, pa filtriranje po danu ne
+        // radimo u SQL WHERE — učitavamo aktivne habite i filtriramo u memoriji.
         // Prihvatljivo za ličnu skalu (desetine habita); nije za velike skupove.
         List<Habit> filtered = habitMapper.findActive()
                 .stream()

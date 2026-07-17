@@ -2,7 +2,9 @@ package com.nantonijevic.habits.repository;
 
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.domain.HabitVersionConflictException;
+import org.springframework.stereotype.Repository;
 
+@Repository
 public class HabitWriteRepositoryImpl implements HabitWriteRepository {
 
     private final HabitMapper habitMapper;

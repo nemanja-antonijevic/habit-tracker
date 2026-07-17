@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.SpyBean;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.test.context.EmbeddedKafka;
 
@@ -32,7 +33,7 @@ class HabitCompletionStatRepositoryIntegrationTest {
     private KafkaTemplate<String, HabitEvent> kafkaTemplate;
 
     @Autowired
-    private HabitRepository repository;
+    private JdbcTemplate jdbcTemplate;
 
     @Autowired
     private HabitCompletionStatRepository statRepository;
@@ -49,7 +50,7 @@ class HabitCompletionStatRepositoryIntegrationTest {
     void setUp() {
         completionRepository.deleteAll();
         statRepository.deleteAll();
-        repository.deleteAll();
+        jdbcTemplate.update("DELETE FROM habits");
 
         doAnswer(invocation -> {
             try {
@@ -66,7 +67,7 @@ class HabitCompletionStatRepositoryIntegrationTest {
     void tearDown() {
         completionRepository.deleteAll();
         statRepository.deleteAll();
-        repository.deleteAll();
+        jdbcTemplate.update("DELETE FROM habits");
     }
 
     @Test

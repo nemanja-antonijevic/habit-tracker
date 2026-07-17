@@ -5,7 +5,7 @@ import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.domain.HabitCompletionStat;
 import com.nantonijevic.habits.dto.HabitStatsView;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
-import com.nantonijevic.habits.repository.HabitRepository;
+import com.nantonijevic.habits.repository.HabitWriteRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,7 +23,7 @@ class HabitServiceStatsIntegrationTest extends AbstractIntegrationTest {
     private HabitService habitService;
 
     @Autowired
-    private HabitRepository habitRepository;
+    private HabitWriteRepository habitWriteRepository;
 
     @Autowired
     private HabitCompletionStatRepository completionStatRepository;
@@ -42,7 +42,7 @@ class HabitServiceStatsIntegrationTest extends AbstractIntegrationTest {
             )
         );
 
-        Habit saved = habitRepository.save(habit);
+        Habit saved = habitWriteRepository.saveWithMyBatis(habit);
 
         completionStatRepository.save(
             new HabitCompletionStat(

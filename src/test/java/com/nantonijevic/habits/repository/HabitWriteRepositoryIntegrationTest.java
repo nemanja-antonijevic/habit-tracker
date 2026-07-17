@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class HabitWriteRepositoryIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
-    private HabitRepository habitRepository;
+    private HabitWriteRepository habitRepository;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;

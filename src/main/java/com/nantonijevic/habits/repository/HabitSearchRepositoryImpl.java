@@ -1,16 +1,17 @@
 package com.nantonijevic.habits.repository;
 
 import com.nantonijevic.habits.domain.Habit;
-import jakarta.persistence.EntityManager;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Repository
 public class HabitSearchRepositoryImpl implements HabitSearchRepository {
 
     private static final Map<String, String> SORT_COLUMNS = Map.of(
@@ -27,14 +28,10 @@ public class HabitSearchRepositoryImpl implements HabitSearchRepository {
 
     private final HabitMapper habitMapper;
 
-    private final EntityManager entityManager;
-
     public HabitSearchRepositoryImpl(
-        HabitMapper habitMapper,
-        EntityManager entityManager
+        HabitMapper habitMapper
     ) {
         this.habitMapper = habitMapper;
-        this.entityManager = entityManager;
     }
 
     @Override
@@ -43,7 +40,6 @@ public class HabitSearchRepositoryImpl implements HabitSearchRepository {
         boolean includeArchived,
         Pageable pageable
     ) {
-        entityManager.flush();
         String orderBy = toOrderBy(pageable.getSort());
 
         Integer limit = pageable.isPaged()
