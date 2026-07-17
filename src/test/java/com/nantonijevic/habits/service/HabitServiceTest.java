@@ -2,6 +2,7 @@ package com.nantonijevic.habits.service;
 
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.domain.HabitCompletion;
+import com.nantonijevic.habits.domain.HabitNotFoundException;
 import com.nantonijevic.habits.domain.HabitVersionConflictException;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
@@ -248,5 +249,38 @@ class HabitServiceTest {
 
         verify(habitRepository, never()).findById(habitId);
         verify(habitRepository, never()).save(any(Habit.class));
+    }
+
+    @Test
+    void deleteUsesMyBatisExistenceCheckAndDelete() {
+        Long habitId = 42L;
+
+        when(habitMapper.existsById(habitId)).thenReturn(true);
+        when(habitMapper.deleteById(habitId)).thenReturn(1);
+
+        habitService.delete(habitId);
+
+        verify(habitMapper).existsById(habitId);
+        verify(habitMapper).deleteById(habitId);
+
+        verify(habitRepository, never()).findById(habitId);
+        verify(habitRepository, never()).deleteById(habitId);
+    }
+
+    @Test
+    void deleteThrowsNotFoundAndDoesNotDeleteWhenHabitDoesNotExist() {
+        Long habitId = 42L;
+
+        when(habitMapper.existsById(habitId)).thenReturn(false);
+
+        assertThatThrownBy(() -> habitService.delete(habitId))
+            .isInstanceOf(HabitNotFoundException.class)
+            .hasMessage("Habit not found: " + habitId);
+
+        verify(habitMapper).existsById(habitId);
+        verify(habitMapper, never()).deleteById(habitId);
+
+        verify(habitRepository, never()).findById(habitId);
+        verify(habitRepository, never()).deleteById(habitId);
     }
 }

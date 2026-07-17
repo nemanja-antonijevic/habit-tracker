@@ -57,6 +57,11 @@
         WHERE id = #{id}
     </select>
 
+    <delete id="deleteById">
+        DELETE FROM habits
+        WHERE id = #{id}
+    </delete>
+
     <select id="findActive"
             resultMap="habitResultMap">
         SELECT id,

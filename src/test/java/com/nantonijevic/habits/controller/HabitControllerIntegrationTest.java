@@ -384,10 +384,6 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(delete("/habits/" + saved.getId()))
                 .andExpect(status().isNoContent());
-
-        // Flush the JPA delete before the MyBatis GET (see updateHabit test).
-        repository.flush();
-
         mockMvc.perform(get("/habits/" + saved.getId()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Habit not found: " + saved.getId()));

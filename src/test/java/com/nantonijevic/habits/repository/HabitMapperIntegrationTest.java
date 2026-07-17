@@ -82,4 +82,21 @@ class HabitMapperIntegrationTest extends AbstractIntegrationTest {
             .extracting(Habit::getName)
             .containsExactly("Evening Run");
     }
+
+    @Test
+    void deletesHabitByIdAndReturnsAffectedRows() {
+        jdbcTemplate.update("""
+            INSERT INTO habits (id, name, created_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            """, 201L, "Delete me");
+
+        assertThat(habitMapper.existsById(201L)).isTrue();
+
+        int firstDeleteAffectedRows = habitMapper.deleteById(201L);
+        int secondDeleteAffectedRows = habitMapper.deleteById(201L);
+
+        assertThat(firstDeleteAffectedRows).isEqualTo(1);
+        assertThat(secondDeleteAffectedRows).isZero();
+        assertThat(habitMapper.existsById(201L)).isFalse();
+    }
 }

@@ -288,11 +288,13 @@ public class HabitService {
 
     @Transactional
     public void delete(Long habitId) {
-        habitRepository.findById(habitId)
-                .orElseThrow(() -> new HabitNotFoundException(habitId));
-        habitRepository.deleteById(habitId);
-        logger.info("Habit deleted, habitId: {}",
-                habitId);
+        if (!habitMapper.existsById(habitId)) {
+            throw new HabitNotFoundException(habitId);
+        }
+
+        habitMapper.deleteById(habitId);
+
+        logger.info("Habit deleted, habitId: {}", habitId);
     }
 
     @Transactional(readOnly = true)

@@ -13,6 +13,8 @@ public interface HabitMapper {
 
     boolean existsById(Long id);
 
+    int deleteById(Long id);
+
     List<Habit> findActive();
 
     int insert(Habit habit);
