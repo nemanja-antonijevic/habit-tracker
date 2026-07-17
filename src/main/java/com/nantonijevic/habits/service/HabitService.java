@@ -108,8 +108,9 @@ public class HabitService {
         // capped at 100 by @Size on the request); a batch findAllById would not tell
         // us which specific ids were missing without extra bookkeeping.
         for (Long habitId : habitIds) {
-            var maybeHabit = habitRepository.findById(habitId);
-
+            var maybeHabit = Optional.ofNullable(
+                habitMapper.findById(habitId)
+            );
             if (maybeHabit.isEmpty()) {
                 notFound.add(habitId);
                 continue;
@@ -132,7 +133,16 @@ public class HabitService {
                 continue;
             }
 
-            completeExistingHabit(habit, habitId, today);
+            boolean reallyCompleted = completeExistingHabit(
+                habit,
+                habitId,
+                today
+            );
+
+            if (reallyCompleted) {
+                habitRepository.saveWithMyBatis(habit);
+            }
+
             completed.add(habitId);
         }
 
