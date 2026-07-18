@@ -28,6 +28,7 @@ All routes live under `/habits` (`HabitController`).
 | 13 | `POST` | `/habits/bulk-complete` | Mark many habits as done today (best-effort, per-item result) | Write + event |
 | 14 | `GET` | `/habits/due-today/count` | Number of habits due today | Write (direct read) |
 | 15 | `GET` | `/habits/stats` | Cross-habit dashboard summary over all active habits | Write + read model (Kafka projection) |
+| 16 | `GET` | `/habits/{id}/completion-rate` | Completion rate over a date window | Read model (Kafka projection) |
 
 ## Data model
 
@@ -65,6 +66,16 @@ Aggregate statistics. Returned by endpoint 11.
 | `longestStreak` | `int` | Longest streak ever recorded |
 | `lastCompletedOn` | `string` (ISO-8601 date) \| `null` | Last completed date |
 | `currentStreak` | `int` | Current streak, corrected at read time against the schedule (see endpoint 11) |
+
+### HabitCompletionRateResponse
+
+Completion rate over a date window. Returned by endpoint 16.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `scheduled` | `long` | Number of scheduled occurrences in the effective window |
+| `completed` | `long` | Of those, how many were actually completed |
+| `rate` | `number` (0..1, scale 4) \| `null` | `completed / scheduled`, rounded `HALF_UP` to 4 decimals; `null` when `scheduled` is `0` (rate is undefined, not `0`) |
 
 ### ErrorResponse
 
@@ -516,3 +527,41 @@ Behavior:
 - **Two data sources, by design.** `dueToday` / `completedToday` / `totalHabits` come from the write side (direct read of active habits), so they are immediately consistent. `activeStreaks` / `longestActiveStreak` come from the read model `habit_completion_stats` (Kafka projection), so they are **eventually consistent** — in the short window after a `complete` before the consumer processes the event, a habit can count toward `completedToday` while its streak has not yet landed in the read model.
 - **Streak liveness is corrected at read time against the schedule** — same rule as [endpoint 11](#11-habit-stats): a stored streak counts only if the last completion was today or the previous scheduled day, otherwise it is treated as `0`. The rule lives in one place (`Habit.isStreakAliveGiven`) shared by both endpoints so the two can never disagree.
 - **No N+1.** The summary is computed with exactly two queries regardless of habit count: one for the active habits, one batch query for their latest completion stats.
+
+## 16. Completion rate over a window
+
+```
+GET /habits/{id}/completion-rate?from=2026-07-01&to=2026-07-31
+```
+
+Returns how consistently a habit was kept over a date window: the ratio of completed scheduled days to total scheduled days. This is a historical consistency metric, not a current snapshot (see [endpoint 11](#11-habit-stats) for the snapshot).
+
+Query parameters:
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `from` | `LocalDate` (`YYYY-MM-DD`) | yes | Start of the window (inclusive) |
+| `to` | `LocalDate` (`YYYY-MM-DD`) | yes | End of the window (inclusive) |
+
+**Response:** `200 OK`, `HabitCompletionRateResponse`.
+
+```json
+{ "scheduled": 4, "completed": 3, "rate": 0.7500 }
+```
+
+| Status | Condition |
+|--------|-----------|
+| `200` | OK |
+| `400` | `from` after `to`, or a required parameter is missing / unparseable |
+| `404` | Habit does not exist |
+
+Behavior:
+- **Inclusive window, clamped to the habit's age.** Both `from` and `to` count. The effective start is `max(from, habitCreatedDate)` — scheduled occurrences before the habit existed are never counted (`createdAt` is converted to a date with the system default zone, consistent with the rest of the domain). If the effective start is after `to` the window is empty and the response is `{ "scheduled": 0, "completed": 0, "rate": null }` without touching the read model.
+- **Numerator and denominator share the same effective window.** `completed` can therefore never exceed `scheduled`, so `rate` is always in `0..1`. The `UNIQUE(habit_id, completed_on)` constraint (migration V10) guarantees one completion row per day, so there is no double counting.
+- **Day-of-week filtering happens in Java, not SQL.** Completed dates are read with a plain `BETWEEN` query, then filtered against the current `scheduledDays` using `LocalDate.getDayOfWeek()`. This deliberately avoids the database `DAYOFWEEK` function, whose weekday numbering differs between H2 and MySQL (and from Java's `DayOfWeek`).
+- **`rate` is `null` vs `0`, on purpose.** `scheduled == 0` (nothing was ever scheduled in the window) returns `rate: null` — undefined, not zero. `scheduled > 0` with `completed == 0` returns `rate: 0.0000` — a defined zero rate. The rate is rounded `HALF_UP` to scale 4 (e.g. `1/3` → `0.3333`).
+- **Eventual consistency.** Completed dates come from the read model `habit_completion_stats` (Kafka projection), so a very recent `complete` may not yet be reflected.
+
+### Known limitation — schedule history
+
+The rate is computed against the habit's **current** `scheduledDays` for the whole window. There is no schedule-change history, so if the schedule changed within the window the older portion is measured against today's schedule. A completion on a day that is no longer scheduled does not count toward `completed`. Historically accurate rates across schedule changes would require a separate schedule-history model, which is out of scope.
