@@ -15,19 +15,19 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.EnumSet;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.same;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class HabitServiceTest {
@@ -262,5 +262,271 @@ class HabitServiceTest {
 
         verify(habitMapper).existsById(habitId);
         verify(habitMapper, never()).deleteById(habitId);
+    }
+
+    @Test
+    void completionRateRoundsOneThirdToFourDecimalPlaces() {
+        Long habitId = 42L;
+        Habit habit = new Habit("Read");
+
+        LocalDate createdDate = LocalDate.ofInstant(
+            habit.getCreatedAt(),
+            ZoneId.systemDefault()
+        );
+
+        LocalDate from = createdDate.plusDays(1);
+        LocalDate to = from.plusDays(2);
+
+        habit.setScheduledDays(EnumSet.of(
+            from.getDayOfWeek(),
+            from.plusDays(1).getDayOfWeek(),
+            to.getDayOfWeek()
+        ));
+
+        when(habitMapper.findById(habitId)).thenReturn(habit);
+        when(completionStatRepository.findCompletedDatesInPeriod(
+            habitId,
+            from,
+            to
+        )).thenReturn(List.of(from));
+
+        var response = habitService.getCompletionRate(
+            habitId,
+            from,
+            to
+        );
+
+        assertThat(response.scheduled()).isEqualTo(3);
+        assertThat(response.completed()).isEqualTo(1);
+        assertThat(response.rate())
+            .isEqualByComparingTo("0.3333");
+    }
+
+    @Test
+    void completionRateReturnsEmptyResponseWithoutQueryWhenHabitWasCreatedAfterWindow() {
+        Long habitId = 42L;
+        Habit habit = new Habit("Read");
+
+        LocalDate from = LocalDate.of(2000, 1, 1);
+        LocalDate to = LocalDate.of(2000, 1, 31);
+
+        when(habitMapper.findById(habitId)).thenReturn(habit);
+
+        var response = habitService.getCompletionRate(
+            habitId,
+            from,
+            to
+        );
+
+        assertThat(response.scheduled()).isZero();
+        assertThat(response.completed()).isZero();
+        assertThat(response.rate()).isNull();
+
+        verifyNoInteractions(completionStatRepository);
+    }
+
+    @Test
+    void completionRateStartsAtHabitCreationDateWhenHabitIsYoungerThanWindow() {
+        Long habitId = 42L;
+        Habit habit = new Habit("Read");
+
+        Instant createdAt =
+            Instant.parse("2024-01-03T12:00:00Z");
+
+        ReflectionTestUtils.setField(
+            habit,
+            "createdAt",
+            createdAt
+        );
+
+        LocalDate createdDate = LocalDate.ofInstant(
+            createdAt,
+            ZoneId.systemDefault()
+        );
+
+        LocalDate from = createdDate.minusDays(2);
+        LocalDate to = createdDate.plusDays(2);
+
+        habit.setScheduledDays(
+            EnumSet.allOf(DayOfWeek.class)
+        );
+
+        when(habitMapper.findById(habitId))
+            .thenReturn(habit);
+
+        when(completionStatRepository.findCompletedDatesInPeriod(
+            habitId,
+            createdDate,
+            to
+        )).thenReturn(List.of(
+            createdDate,
+            createdDate.plusDays(1)
+        ));
+
+        var response = habitService.getCompletionRate(
+            habitId,
+            from,
+            to
+        );
+
+        assertThat(response.scheduled()).isEqualTo(3);
+        assertThat(response.completed()).isEqualTo(2);
+        assertThat(response.rate())
+            .isEqualByComparingTo("0.6667");
+
+        verify(completionStatRepository)
+            .findCompletedDatesInPeriod(
+                habitId,
+                createdDate,
+                to
+            );
+    }
+
+    @Test
+    void completionRateThrowsNotFoundWhenHabitDoesNotExist() {
+        Long habitId = 42L;
+        LocalDate from = LocalDate.of(2024, 1, 1);
+        LocalDate to = LocalDate.of(2024, 1, 31);
+
+        when(habitMapper.findById(habitId))
+            .thenReturn(null);
+
+        assertThatThrownBy(() ->
+            habitService.getCompletionRate(
+                habitId,
+                from,
+                to
+            )
+        )
+            .isInstanceOf(HabitNotFoundException.class)
+            .hasMessage("Habit not found: " + habitId);
+
+        verifyNoInteractions(completionStatRepository);
+    }
+
+    @Test
+    void completionRateExcludesCompletionsOnUnscheduledDays() {
+        Long habitId = 42L;
+        Habit habit = new Habit("Read");
+
+        Instant createdAt =
+            Instant.parse("2024-01-01T12:00:00Z");
+
+        ReflectionTestUtils.setField(
+            habit,
+            "createdAt",
+            createdAt
+        );
+
+        LocalDate scheduledDate = LocalDate.ofInstant(
+            createdAt,
+            ZoneId.systemDefault()
+        );
+
+        LocalDate offDay = scheduledDate.plusDays(1);
+
+        habit.setScheduledDays(
+            EnumSet.of(scheduledDate.getDayOfWeek())
+        );
+
+        when(habitMapper.findById(habitId))
+            .thenReturn(habit);
+
+        when(completionStatRepository.findCompletedDatesInPeriod(
+            habitId,
+            scheduledDate,
+            offDay
+        )).thenReturn(List.of(
+            scheduledDate,
+            offDay
+        ));
+
+        var response = habitService.getCompletionRate(
+            habitId,
+            scheduledDate,
+            offDay
+        );
+
+        assertThat(response.scheduled()).isEqualTo(1);
+        assertThat(response.completed()).isEqualTo(1);
+        assertThat(response.rate())
+            .isEqualByComparingTo("1.0000");
+    }
+
+    @Test
+    void completionRateReturnsNullWhenWindowHasNoScheduledOccurrences() {
+        Long habitId = 42L;
+        Habit habit = new Habit("Read");
+
+        LocalDate createdDate = LocalDate.ofInstant(
+            habit.getCreatedAt(),
+            ZoneId.systemDefault()
+        );
+
+        LocalDate from = createdDate.plusDays(1);
+        LocalDate to = from.plusDays(1);
+
+        DayOfWeek scheduledDayOutsideWindow =
+            to.plusDays(1).getDayOfWeek();
+
+        habit.setScheduledDays(
+            EnumSet.of(scheduledDayOutsideWindow)
+        );
+
+        when(habitMapper.findById(habitId))
+            .thenReturn(habit);
+
+        when(completionStatRepository.findCompletedDatesInPeriod(
+            habitId,
+            from,
+            to
+        )).thenReturn(List.of());
+
+        var response = habitService.getCompletionRate(
+            habitId,
+            from,
+            to
+        );
+
+        assertThat(response.scheduled()).isZero();
+        assertThat(response.completed()).isZero();
+        assertThat(response.rate()).isNull();
+    }
+
+    @Test
+    void completionRateReturnsZeroWhenSingleScheduledDayWasNotCompleted() {
+        Long habitId = 42L;
+        Habit habit = new Habit("Read");
+
+        LocalDate createdDate = LocalDate.ofInstant(
+            habit.getCreatedAt(),
+            ZoneId.systemDefault()
+        );
+
+        LocalDate date = createdDate.plusDays(1);
+
+        habit.setScheduledDays(
+            EnumSet.of(date.getDayOfWeek())
+        );
+
+        when(habitMapper.findById(habitId))
+            .thenReturn(habit);
+
+        when(completionStatRepository.findCompletedDatesInPeriod(
+            habitId,
+            date,
+            date
+        )).thenReturn(List.of());
+
+        var response = habitService.getCompletionRate(
+            habitId,
+            date,
+            date
+        );
+
+        assertThat(response.scheduled()).isEqualTo(1);
+        assertThat(response.completed()).isZero();
+        assertThat(response.rate())
+            .isEqualByComparingTo("0.0000");
     }
 }

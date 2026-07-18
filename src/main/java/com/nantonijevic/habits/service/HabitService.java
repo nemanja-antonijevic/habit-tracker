@@ -6,6 +6,7 @@ import com.nantonijevic.habits.domain.HabitCompletionStat;
 import com.nantonijevic.habits.domain.HabitNotFoundException;
 import com.nantonijevic.habits.domain.HabitVersionConflictException;
 import com.nantonijevic.habits.dto.BulkCompleteResponse;
+import com.nantonijevic.habits.dto.HabitCompletionRateResponse;
 import com.nantonijevic.habits.dto.HabitDashboardResponse;
 import com.nantonijevic.habits.dto.HabitStatsView;
 import com.nantonijevic.habits.event.HabitCompletedEvent;
@@ -27,8 +28,11 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -226,6 +230,68 @@ public class HabitService {
     }
 
     @Transactional(readOnly = true)
+    public HabitCompletionRateResponse getCompletionRate(
+        Long habitId,
+        LocalDate from,
+        LocalDate to) {
+        if (from.isAfter(to)) {
+            throw new InvalidDateRangeException();
+        }
+
+        Habit habit = Optional.ofNullable(habitMapper.findById(habitId))
+            .orElseThrow(() -> new HabitNotFoundException(habitId));
+
+        LocalDate createdDate = LocalDate.ofInstant(
+            habit.getCreatedAt(),
+            ZoneId.systemDefault()
+        );
+
+        LocalDate effectiveFrom = from.isAfter(createdDate)
+            ? from
+            : createdDate;
+
+        if (effectiveFrom.isAfter(to)) {
+            return new HabitCompletionRateResponse(0, 0, null);
+        }
+
+        Set<DayOfWeek> scheduledDays = habit.getScheduledDays();
+
+        long scheduled = countScheduledOccurrences(
+            effectiveFrom,
+            to,
+            scheduledDays
+        );
+
+        List<LocalDate> completedDates =
+            completionStatRepository.findCompletedDatesInPeriod(
+                habitId,
+                effectiveFrom,
+                to
+            );
+
+        long completed = completedDates.stream()
+            .filter(date ->
+                scheduledDays.contains(date.getDayOfWeek())
+            )
+            .count();
+
+        BigDecimal rate = scheduled == 0
+            ? null
+            : BigDecimal.valueOf(completed)
+            .divide(
+                BigDecimal.valueOf(scheduled),
+                4,
+                RoundingMode.HALF_UP
+            );
+
+        return new HabitCompletionRateResponse(
+            scheduled,
+            completed,
+            rate
+        );
+    }
+
+    @Transactional(readOnly = true)
     public Page<Habit> list(boolean includeArchived, String name, Pageable pageable) {
         Pageable effectivePageable = pageable.getSort().isUnsorted() ?
                 PageRequest.of(
@@ -407,5 +473,27 @@ public class HabitService {
             longestActiveStreak,
             activeHabits.size()
         );
+    }
+
+    private long countScheduledOccurrences(
+        LocalDate from,
+        LocalDate to,
+        Set<DayOfWeek> scheduledDays) {
+        long count = 0;
+        LocalDate date = from;
+
+        while (!date.isAfter(to)) {
+            if (scheduledDays.contains(date.getDayOfWeek())) {
+                count++;
+            }
+
+            if (date.equals(to)) {
+                break;
+            }
+
+            date = date.plusDays(1);
+        }
+
+        return count;
     }
 }

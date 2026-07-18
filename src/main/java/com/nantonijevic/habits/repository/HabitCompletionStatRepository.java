@@ -34,6 +34,19 @@ public interface HabitCompletionStatRepository extends JpaRepository<HabitComple
         @Param("habitIds") Collection<Long> habitIds
     );
 
+    @Query("""
+    SELECT s.completedOn
+    FROM HabitCompletionStat s
+    WHERE s.habitId = :habitId
+        AND s.completedOn BETWEEN :from AND :to
+    ORDER BY s.completedOn
+    """)
+    List<LocalDate> findCompletedDatesInPeriod(
+        @Param("habitId") Long habitId,
+        @Param("from") LocalDate from,
+        @Param("to") LocalDate to
+    );
+
     void deleteByHabitIdAndCompletedOn(Long habitId, LocalDate completedOn);
 
     Optional<HabitCompletionStat> findFirstByHabitIdOrderByCompletedOnDesc(Long habitId);

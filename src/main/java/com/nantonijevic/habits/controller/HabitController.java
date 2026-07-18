@@ -5,6 +5,7 @@ import com.nantonijevic.habits.dto.BulkCompleteRequest;
 import com.nantonijevic.habits.dto.BulkCompleteResponse;
 import com.nantonijevic.habits.dto.CreateHabitRequest;
 import com.nantonijevic.habits.dto.DueTodayCountResponse;
+import com.nantonijevic.habits.dto.HabitCompletionRateResponse;
 import com.nantonijevic.habits.dto.HabitCompletionResponse;
 import com.nantonijevic.habits.dto.HabitDashboardResponse;
 import com.nantonijevic.habits.dto.HabitResponse;
@@ -127,6 +128,18 @@ public class HabitController {
             Pageable pageable) {
         return habitService.getHistory(id, from, to, pageable)
                 .map(HabitCompletionResponse::from);
+    }
+
+    @GetMapping("/{id}/completion-rate")
+    public HabitCompletionRateResponse getCompletionRate(
+        @PathVariable Long id,
+        @RequestParam LocalDate from,
+        @RequestParam LocalDate to) {
+        return habitService.getCompletionRate(
+            id,
+            from,
+            to
+        );
     }
 
     @GetMapping("/due-today")

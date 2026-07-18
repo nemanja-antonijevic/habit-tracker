@@ -3,9 +3,11 @@ package com.nantonijevic.habits.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.domain.HabitCompletion;
+import com.nantonijevic.habits.domain.HabitCompletionStat;
 import com.nantonijevic.habits.dto.CreateHabitRequest;
 import com.nantonijevic.habits.AbstractIntegrationTest;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
+import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
 import com.nantonijevic.habits.support.HabitTestFixtureRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.EnumSet;
 
 import static org.hamcrest.Matchers.containsInAnyOrder;
@@ -50,6 +53,9 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private HabitCompletionRepository completionRepository;
+
+    @Autowired
+    private HabitCompletionStatRepository completionStatRepository;
 
     @Test
     void createHabit_returns201_andPersistsHabit() throws Exception {
@@ -1100,5 +1106,68 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                             }
                             """))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void completionRate_returnsScheduledCompletedAndRoundedRate() throws Exception {
+        Habit habit = new Habit("Read");
+        LocalDate createdDate = LocalDate.ofInstant(
+            habit.getCreatedAt(),
+            ZoneId.systemDefault()
+        );
+
+        LocalDate from = createdDate.plusDays(1);
+        LocalDate to = from.plusDays(2);
+
+        habit.setScheduledDays(EnumSet.of(
+            from.getDayOfWeek(),
+            from.plusDays(1).getDayOfWeek(),
+            to.getDayOfWeek()
+        ));
+
+        Habit saved = repository.save(habit);
+
+        completionStatRepository.save(
+            new HabitCompletionStat(
+                saved.getId(),
+                from,
+                1,
+                1
+            )
+        );
+
+        mockMvc.perform(get(
+                "/habits/{id}/completion-rate",
+                saved.getId()
+            )
+                .param("from", from.toString())
+                .param("to", to.toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.scheduled").value(3))
+            .andExpect(jsonPath("$.completed").value(1))
+            .andExpect(jsonPath("$.rate").value(0.3333));
+    }
+
+    @Test
+    void completionRate_returns400_whenFromIsMissing() throws Exception {
+        mockMvc.perform(get("/habits/{id}/completion-rate", 42L)
+                .param("to", "2026-07-31"))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void completionRate_returns400_whenFromIsAfterTo() throws Exception {
+        mockMvc.perform(get("/habits/{id}/completion-rate", 42L)
+                .param("from", "2026-07-31")
+                .param("to", "2026-07-01"))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void completionRate_returns404_whenHabitDoesNotExist() throws Exception {
+        mockMvc.perform(get("/habits/{id}/completion-rate", 999_999L)
+                .param("from", "2026-07-01")
+                .param("to", "2026-07-31"))
+            .andExpect(status().isNotFound());
     }
 }
