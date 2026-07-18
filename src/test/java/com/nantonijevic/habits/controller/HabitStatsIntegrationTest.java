@@ -258,4 +258,119 @@ public class HabitStatsIntegrationTest {
                 new HabitCompletedEvent(habitId, completedDate, currentStreak, completionCount)
         ).get(10, SECONDS);
     }
+
+    @Test
+    void getDashboardStats_aggregatesOnlyActiveHabits() throws Exception {
+        LocalDate today = LocalDate.now();
+        DayOfWeek todayDay = today.getDayOfWeek();
+        DayOfWeek tomorrowDay = today.plusDays(1).getDayOfWeek();
+
+        var completedDueHabit = new Habit("Completed today");
+        completedDueHabit.setScheduledDays(EnumSet.of(todayDay));
+        habitWriteRepository.saveWithMyBatis(completedDueHabit);
+
+        var incompleteDueHabit = new Habit("Still due today");
+        incompleteDueHabit.setScheduledDays(EnumSet.of(todayDay));
+        habitWriteRepository.saveWithMyBatis(incompleteDueHabit);
+
+        var notDueTodayHabit = new Habit("Not due today");
+        notDueTodayHabit.setScheduledDays(EnumSet.of(tomorrowDay));
+        habitWriteRepository.saveWithMyBatis(notDueTodayHabit);
+
+        var archivedHabit = new Habit("Archived habit");
+        archivedHabit.setScheduledDays(EnumSet.of(todayDay));
+        habitWriteRepository.saveWithMyBatis(archivedHabit);
+
+        expectEvents(2);
+
+        mockMvc.perform(post("/habits/" + completedDueHabit.getId() + "/complete"))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(post("/habits/" + archivedHabit.getId() + "/complete"))
+            .andExpect(status().isOk());
+
+        awaitEvents();
+
+        mockMvc.perform(post("/habits/" + archivedHabit.getId() + "/archive"))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/habits/stats"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.dueToday").value(2))
+            .andExpect(jsonPath("$.completedToday").value(1))
+            .andExpect(jsonPath("$.activeStreaks").value(1))
+            .andExpect(jsonPath("$.longestActiveStreak").value(1))
+            .andExpect(jsonPath("$.totalHabits").value(3));
+    }
+
+    @Test
+    void getDashboardStats_returnsZerosWhenThereAreNoActiveHabits() throws Exception {
+        mockMvc.perform(get("/habits/stats"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.dueToday").value(0))
+            .andExpect(jsonPath("$.completedToday").value(0))
+            .andExpect(jsonPath("$.activeStreaks").value(0))
+            .andExpect(jsonPath("$.longestActiveStreak").value(0))
+            .andExpect(jsonPath("$.totalHabits").value(0));
+    }
+
+    @Test
+    void getDashboardStats_returnsZeroLongestStreakWhenNoActiveStreaksExist() throws Exception {
+        LocalDate today = LocalDate.now();
+
+        var firstHabit = habitWriteRepository.saveWithMyBatis(new Habit("Read"));
+        var secondHabit = habitWriteRepository.saveWithMyBatis(new Habit("Workout"));
+
+        expectEvents(2);
+
+        publishCompletedEvent(firstHabit.getId(), today.minusDays(3), 5, 5);
+        publishCompletedEvent(secondHabit.getId(), today.minusDays(4), 2, 2);
+
+        awaitEvents();
+
+        mockMvc.perform(get("/habits/stats"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.dueToday").value(2))
+            .andExpect(jsonPath("$.completedToday").value(0))
+            .andExpect(jsonPath("$.activeStreaks").value(0))
+            .andExpect(jsonPath("$.longestActiveStreak").value(0))
+            .andExpect(jsonPath("$.totalHabits").value(2));
+    }
+
+    @Test
+    void getDashboardStats_returnsLongestAmongMultipleActiveStreaks() throws Exception {
+        LocalDate today = LocalDate.now();
+
+        var threeDayStreakHabit = habitWriteRepository.saveWithMyBatis(
+            new Habit("Three day streak")
+        );
+
+        var sevenDayStreakHabit = habitWriteRepository.saveWithMyBatis(
+            new Habit("Seven day streak")
+        );
+
+        expectEvents(2);
+
+        publishCompletedEvent(
+            threeDayStreakHabit.getId(),
+            today,
+            3,
+            3
+        );
+
+        publishCompletedEvent(
+            sevenDayStreakHabit.getId(),
+            today,
+            7,
+            7
+        );
+
+        awaitEvents();
+
+        mockMvc.perform(get("/habits/stats"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.activeStreaks").value(2))
+            .andExpect(jsonPath("$.longestActiveStreak").value(7))
+            .andExpect(jsonPath("$.totalHabits").value(2));
+    }
 }

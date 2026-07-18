@@ -84,3 +84,11 @@ curl -s "http://localhost:8080/habits/1/history?from=2024-01-10&to=2024-01-31"
 # "Today" is server-side; there is no date query parameter
 curl -s "http://localhost:8080/habits/due-today"
 ```
+
+## Dashboard
+
+```bash
+# Cross-habit summary over all active habits (archived excluded)
+# dueToday, completedToday, activeStreaks, longestActiveStreak, totalHabits
+curl -s http://localhost:8080/habits/stats
+```

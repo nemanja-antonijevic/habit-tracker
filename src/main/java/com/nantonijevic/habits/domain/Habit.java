@@ -234,6 +234,16 @@ public class Habit {
         return candidate;
     }
 
+    public boolean isStreakAliveGiven(
+        LocalDate lastCompletedOn,
+        LocalDate today
+    ) {
+        return lastCompletedOn.equals(today)
+            || lastCompletedOn.equals(
+            previousScheduledDateBefore(today)
+        );
+    }
+
     private void requireNonEmptySchedule(EnumSet<DayOfWeek> scheduledDays) {
         if (scheduledDays == null || scheduledDays.isEmpty()) {
             throw new IllegalArgumentException("Habit schedule must contain at least one day.");

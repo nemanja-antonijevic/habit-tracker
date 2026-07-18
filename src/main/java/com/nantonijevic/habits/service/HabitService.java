@@ -6,6 +6,7 @@ import com.nantonijevic.habits.domain.HabitCompletionStat;
 import com.nantonijevic.habits.domain.HabitNotFoundException;
 import com.nantonijevic.habits.domain.HabitVersionConflictException;
 import com.nantonijevic.habits.dto.BulkCompleteResponse;
+import com.nantonijevic.habits.dto.HabitDashboardResponse;
 import com.nantonijevic.habits.dto.HabitStatsView;
 import com.nantonijevic.habits.event.HabitCompletedEvent;
 import com.nantonijevic.habits.event.HabitUncompletedEvent;
@@ -31,8 +32,11 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class HabitService {
@@ -209,8 +213,7 @@ public class HabitService {
         } else {
             LocalDate lastCompleted = lastRow.get().getCompletedOn();
             boolean streakIsAlive =
-                    lastCompleted.equals(today)
-                            || lastCompleted.equals(habit.previousScheduledDateBefore(today));
+                habit.isStreakAliveGiven(lastCompleted, today);
             currentStreak = streakIsAlive ? lastRow.get().getCurrentStreak() : 0;
         }
         HabitStatsView aggregate = completionStatRepository.findStatsByHabitId(habitId);
@@ -338,5 +341,71 @@ public class HabitService {
     private boolean isDueToday(Habit habit, LocalDate today) {
         return habit.isScheduledFor(today)
                 && !habit.wasCompletedOn(today);
+    }
+
+    @Transactional(readOnly = true)
+    public HabitDashboardResponse getDashboardStats(LocalDate today) {
+        List<Habit> activeHabits = habitMapper.findActive();
+
+        List<Long> activeHabitIds = activeHabits.stream()
+            .map(Habit::getId)
+            .toList();
+
+        Map<Long, HabitCompletionStat> latestStatsByHabitId =
+            activeHabitIds.isEmpty()
+                ? Map.of()
+                : completionStatRepository.findLatestByHabitIds(activeHabitIds)
+                .stream()
+                .collect(Collectors.toMap(
+                    HabitCompletionStat::getHabitId,
+                    Function.identity()
+                ));
+
+        long dueToday = 0;
+        long completedToday = 0;
+        long activeStreaks = 0;
+        int longestActiveStreak = 0;
+
+        for (Habit habit : activeHabits) {
+            if (habit.isScheduledFor(today)) {
+                dueToday++;
+
+                if (habit.wasCompletedOn(today)) {
+                    completedToday++;
+                }
+            }
+
+            HabitCompletionStat latestStat =
+                latestStatsByHabitId.get(habit.getId());
+
+            int currentStreak = 0;
+
+            if (latestStat != null) {
+                LocalDate lastCompleted = latestStat.getCompletedOn();
+
+                boolean streakIsAlive =
+                    habit.isStreakAliveGiven(lastCompleted, today);
+
+                if (streakIsAlive) {
+                    currentStreak = latestStat.getCurrentStreak();
+                }
+            }
+
+            if (currentStreak > 0) {
+                activeStreaks++;
+                longestActiveStreak = Math.max(
+                    longestActiveStreak,
+                    currentStreak
+                );
+            }
+        }
+
+        return new HabitDashboardResponse(
+            dueToday,
+            completedToday,
+            activeStreaks,
+            longestActiveStreak,
+            activeHabits.size()
+        );
     }
 }

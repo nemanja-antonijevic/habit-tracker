@@ -6,6 +6,7 @@ import com.nantonijevic.habits.dto.BulkCompleteResponse;
 import com.nantonijevic.habits.dto.CreateHabitRequest;
 import com.nantonijevic.habits.dto.DueTodayCountResponse;
 import com.nantonijevic.habits.dto.HabitCompletionResponse;
+import com.nantonijevic.habits.dto.HabitDashboardResponse;
 import com.nantonijevic.habits.dto.HabitResponse;
 import com.nantonijevic.habits.dto.HabitStatsResponse;
 import com.nantonijevic.habits.dto.HabitStatsView;
@@ -142,5 +143,10 @@ public class HabitController {
         long count = habitService.countDueToday(today);
 
         return new DueTodayCountResponse(count);
+    }
+
+    @GetMapping("/stats")
+    public HabitDashboardResponse getDashboardStats() {
+        return habitService.getDashboardStats(LocalDate.now());
     }
 }

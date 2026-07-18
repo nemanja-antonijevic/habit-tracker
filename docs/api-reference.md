@@ -27,6 +27,7 @@ All routes live under `/habits` (`HabitController`).
 | 12 | `GET` | `/habits/due-today` | Active habits scheduled for today and not yet completed | Write (direct read) |
 | 13 | `POST` | `/habits/bulk-complete` | Mark many habits as done today (best-effort, per-item result) | Write + event |
 | 14 | `GET` | `/habits/due-today/count` | Number of habits due today | Write (direct read) |
+| 15 | `GET` | `/habits/stats` | Cross-habit dashboard summary over all active habits | Write + read model (Kafka projection) |
 
 ## Data model
 
@@ -484,3 +485,34 @@ Like endpoint 12, the count is computed in memory over the active habits (the sc
 | Status | Condition |
 |--------|-----------|
 | `200` | OK (`{ "count": 0 }` when nothing is due today) |
+
+## 15. Cross-habit dashboard stats
+
+```
+GET /habits/stats
+```
+
+Returns a single aggregate summary across **all active habits** — a dashboard header, not per-habit detail. Archived habits are excluded from every field. "Today" is resolved server-side from the system clock; there is no date query parameter and no pagination.
+
+**Response:** `200 OK`, `HabitDashboardResponse`.
+
+```json
+{ "dueToday": 2, "completedToday": 1, "activeStreaks": 1, "longestActiveStreak": 4, "totalHabits": 3 }
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `dueToday` | `long` | Active habits scheduled for today |
+| `completedToday` | `long` | Of those due today, how many are already completed |
+| `activeStreaks` | `long` | Active habits whose streak is still alive today |
+| `longestActiveStreak` | `int` | Largest live streak among active habits; `0` when none is alive |
+| `totalHabits` | `long` | Total active habits |
+
+| Status | Condition |
+|--------|-----------|
+| `200` | OK (all fields `0` when there are no active habits) |
+
+Behavior:
+- **Two data sources, by design.** `dueToday` / `completedToday` / `totalHabits` come from the write side (direct read of active habits), so they are immediately consistent. `activeStreaks` / `longestActiveStreak` come from the read model `habit_completion_stats` (Kafka projection), so they are **eventually consistent** — in the short window after a `complete` before the consumer processes the event, a habit can count toward `completedToday` while its streak has not yet landed in the read model.
+- **Streak liveness is corrected at read time against the schedule** — same rule as [endpoint 11](#11-habit-stats): a stored streak counts only if the last completion was today or the previous scheduled day, otherwise it is treated as `0`. The rule lives in one place (`Habit.isStreakAliveGiven`) shared by both endpoints so the two can never disagree.
+- **No N+1.** The summary is computed with exactly two queries regardless of habit count: one for the active habits, one batch query for their latest completion stats.
