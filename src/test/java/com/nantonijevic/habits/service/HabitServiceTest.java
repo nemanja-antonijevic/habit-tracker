@@ -4,6 +4,7 @@ import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.domain.HabitCompletion;
 import com.nantonijevic.habits.domain.HabitNotFoundException;
 import com.nantonijevic.habits.domain.HabitVersionConflictException;
+import com.nantonijevic.habits.event.DashboardChangedEvent;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
 import com.nantonijevic.habits.repository.HabitMapper;
@@ -100,6 +101,8 @@ class HabitServiceTest {
 
         verify(habitMapper).findById(habitId);
         verify(habitWriteRepository).saveWithMyBatis(same(existingHabit));
+        verify(applicationEventPublisher)
+            .publishEvent(any(DashboardChangedEvent.class));
     }
 
     @Test
@@ -126,6 +129,8 @@ class HabitServiceTest {
         verify(habitMapper).findById(habitId);
         verify(habitWriteRepository, never())
             .saveWithMyBatis(any(Habit.class));
+        verify(applicationEventPublisher, never())
+            .publishEvent(any(DashboardChangedEvent.class));
     }
 
     @Test
@@ -144,6 +149,8 @@ class HabitServiceTest {
 
         verify(habitMapper).findById(habitId);
         verify(habitWriteRepository).saveWithMyBatis(same(existingHabit));
+        verify(applicationEventPublisher)
+            .publishEvent(any(DashboardChangedEvent.class));
     }
 
     @Test
@@ -163,6 +170,8 @@ class HabitServiceTest {
 
         verify(habitMapper).findById(habitId);
         verify(habitWriteRepository).saveWithMyBatis(same(existingHabit));
+        verify(applicationEventPublisher)
+            .publishEvent(any(DashboardChangedEvent.class));
     }
 
     @Test
@@ -185,6 +194,8 @@ class HabitServiceTest {
         verify(habitMapper).findById(habitId);
         verify(habitWriteRepository, never())
             .saveWithMyBatis(any(Habit.class));
+        verify(applicationEventPublisher, never())
+            .publishEvent(any(DashboardChangedEvent.class));
     }
 
     @Test
@@ -207,6 +218,50 @@ class HabitServiceTest {
         verify(habitMapper).findById(habitId);
         verify(completionRepository).save(any(HabitCompletion.class));
         verify(habitWriteRepository).saveWithMyBatis(same(existingHabit));
+        verify(applicationEventPublisher)
+            .publishEvent(any(DashboardChangedEvent.class));
+    }
+
+    @Test
+    void bulkCompletePublishesSingleDashboardChangeWhenMultipleHabitsChange() {
+        LocalDate today = LocalDate.of(2024, 1, 5);
+
+        Habit firstHabit = new Habit("Read");
+        firstHabit.synchronizePersistenceVersion(1L);
+
+        Habit secondHabit = new Habit("Exercise");
+        secondHabit.synchronizePersistenceVersion(2L);
+
+        when(habitMapper.findById(41L)).thenReturn(firstHabit);
+        when(habitMapper.findById(42L)).thenReturn(secondHabit);
+
+        habitService.bulkComplete(List.of(41L, 42L), today);
+
+        verify(habitWriteRepository).saveWithMyBatis(same(firstHabit));
+        verify(habitWriteRepository).saveWithMyBatis(same(secondHabit));
+
+        verify(applicationEventPublisher, times(1))
+            .publishEvent(any(DashboardChangedEvent.class));
+    }
+
+    @Test
+    void bulkCompleteDoesNotPublishDashboardChangeWhenNothingChanges() {
+        Long habitId = 42L;
+        LocalDate today = LocalDate.of(2024, 1, 5);
+
+        Habit alreadyCompleted = new Habit("Read");
+        alreadyCompleted.complete(today);
+        alreadyCompleted.synchronizePersistenceVersion(2L);
+
+        when(habitMapper.findById(habitId)).thenReturn(alreadyCompleted);
+
+        habitService.bulkComplete(List.of(habitId), today);
+
+        verify(habitWriteRepository, never())
+            .saveWithMyBatis(any(Habit.class));
+
+        verify(applicationEventPublisher, never())
+            .publishEvent(any(DashboardChangedEvent.class));
     }
 
     @Test
@@ -235,6 +290,8 @@ class HabitServiceTest {
         verify(completionRepository)
             .findByHabitIdOrderByCompletedOnDesc(habitId);
         verify(habitWriteRepository).saveWithMyBatis(same(existingHabit));
+        verify(applicationEventPublisher)
+            .publishEvent(any(DashboardChangedEvent.class));
     }
 
     @Test
@@ -248,6 +305,8 @@ class HabitServiceTest {
 
         verify(habitMapper).existsById(habitId);
         verify(habitMapper).deleteById(habitId);
+        verify(applicationEventPublisher)
+            .publishEvent(any(DashboardChangedEvent.class));
     }
 
     @Test
@@ -262,6 +321,8 @@ class HabitServiceTest {
 
         verify(habitMapper).existsById(habitId);
         verify(habitMapper, never()).deleteById(habitId);
+        verify(applicationEventPublisher, never())
+            .publishEvent(any(DashboardChangedEvent.class));
     }
 
     @Test

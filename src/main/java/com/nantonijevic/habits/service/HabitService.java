@@ -1,5 +1,6 @@
 package com.nantonijevic.habits.service;
 
+import com.nantonijevic.habits.config.RedisCacheConfig;
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.domain.HabitCompletion;
 import com.nantonijevic.habits.domain.HabitCompletionStat;
@@ -9,6 +10,7 @@ import com.nantonijevic.habits.dto.BulkCompleteResponse;
 import com.nantonijevic.habits.dto.HabitCompletionRateResponse;
 import com.nantonijevic.habits.dto.HabitDashboardResponse;
 import com.nantonijevic.habits.dto.HabitStatsView;
+import com.nantonijevic.habits.event.DashboardChangedEvent;
 import com.nantonijevic.habits.event.HabitCompletedEvent;
 import com.nantonijevic.habits.event.HabitUncompletedEvent;
 import com.nantonijevic.habits.exception.InvalidDateRangeException;
@@ -19,6 +21,7 @@ import com.nantonijevic.habits.repository.HabitSearchRepository;
 import com.nantonijevic.habits.repository.HabitWriteRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -76,7 +79,14 @@ public class HabitService {
         boolean reallyCompleted = completeExistingHabit(habit, habitId, today);
 
         if (reallyCompleted) {
-            return habitWriteRepository.saveWithMyBatis(habit);
+            Habit saved =
+                habitWriteRepository.saveWithMyBatis(habit);
+
+            applicationEventPublisher.publishEvent(
+                new DashboardChangedEvent()
+            );
+
+            return saved;
         }
 
         return habit;
@@ -158,6 +168,12 @@ public class HabitService {
             completed.add(habitId);
         }
 
+        if (!completed.isEmpty()) {
+            applicationEventPublisher.publishEvent(
+                new DashboardChangedEvent()
+            );
+        }
+
         return new BulkCompleteResponse(completed, skipped, failed, notFound);
     }
 
@@ -171,6 +187,9 @@ public class HabitService {
 
         habit.setScheduledDays(effectiveScheduledDays);
         Habit saved = habitWriteRepository.saveWithMyBatis(habit);
+        applicationEventPublisher.publishEvent(
+            new DashboardChangedEvent()
+        );
         logger.info("Habit created, habitId: {}", saved.getId());
         return saved;
     }
@@ -196,7 +215,14 @@ public class HabitService {
 
         logger.info("Habit uncompleted, habitId: {}, date: {}", habitId, today);
 
-        return habitWriteRepository.saveWithMyBatis(habit);
+        Habit saved =
+            habitWriteRepository.saveWithMyBatis(habit);
+
+        applicationEventPublisher.publishEvent(
+            new DashboardChangedEvent()
+        );
+
+        return saved;
     }
 
     public Habit getById(Long habitId) {
@@ -338,7 +364,13 @@ public class HabitService {
         }
 
         logger.info("Habit updated, habitId: {}, version: {}", habitId, version);
-        return habitWriteRepository.saveWithMyBatis(habit);
+        Habit saved = habitWriteRepository.saveWithMyBatis(habit);
+
+        applicationEventPublisher.publishEvent(
+            new DashboardChangedEvent()
+        );
+
+        return saved;
     }
 
     @Transactional
@@ -350,7 +382,13 @@ public class HabitService {
 
         logger.info("Habit archived, habitId: {}", habitId);
 
-        return habitWriteRepository.saveWithMyBatis(habit);
+        Habit saved = habitWriteRepository.saveWithMyBatis(habit);
+
+        applicationEventPublisher.publishEvent(
+            new DashboardChangedEvent()
+        );
+
+        return saved;
     }
 
     @Transactional
@@ -362,7 +400,13 @@ public class HabitService {
 
         logger.info("Habit unarchived, habitId: {}", habitId);
 
-        return habitWriteRepository.saveWithMyBatis(habit);
+        Habit saved = habitWriteRepository.saveWithMyBatis(habit);
+
+        applicationEventPublisher.publishEvent(
+            new DashboardChangedEvent()
+        );
+
+        return saved;
     }
 
     @Transactional
@@ -372,6 +416,10 @@ public class HabitService {
         }
 
         habitMapper.deleteById(habitId);
+
+        applicationEventPublisher.publishEvent(
+            new DashboardChangedEvent()
+        );
 
         logger.info("Habit deleted, habitId: {}", habitId);
     }
@@ -410,6 +458,10 @@ public class HabitService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(
+        cacheNames = RedisCacheConfig.DASHBOARD_STATS_CACHE,
+        key = "#today.toString()"
+    )
     public HabitDashboardResponse getDashboardStats(LocalDate today) {
         List<Habit> activeHabits = habitMapper.findActive();
 

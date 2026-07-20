@@ -4,6 +4,7 @@ import com.nantonijevic.habits.domain.HabitCompletionStat;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
@@ -16,11 +17,15 @@ public class HabitCompletedEventConsumer {
 
     private final HabitCompletionStatRepository repository;
 
+    private final ApplicationEventPublisher applicationEventPublisher;
 
-    public HabitCompletedEventConsumer(HabitCompletionStatRepository repository) {
+    public HabitCompletedEventConsumer(
+        HabitCompletionStatRepository repository,
+        ApplicationEventPublisher applicationEventPublisher
+    ) {
         this.repository = repository;
+        this.applicationEventPublisher = applicationEventPublisher;
     }
-
     @Transactional
     @KafkaListener(topics = "habit-completed", groupId = "habit-stats")
     public void on(HabitEvent event) {
@@ -31,12 +36,23 @@ public class HabitCompletedEventConsumer {
                     new HabitCompletionStat(event.habitId(), event.completedOn(), e.currentStreak(), e.completionCount());
                 try {
                     repository.save(habitCompletionStat);
+                    applicationEventPublisher.publishEvent(
+                        new DashboardChangedEvent()
+                    );
                 } catch (DataIntegrityViolationException ex) {
                     logger.debug("Skipped duplicate completion event for habit {} on {}",
                             event.habitId(), event.completedOn());
                 }
             }
-            case HabitUncompletedEvent e -> { repository.deleteByHabitIdAndCompletedOn(e.habitId(), e.completedOn());
+            case HabitUncompletedEvent e -> {
+                repository.deleteByHabitIdAndCompletedOn(
+                    e.habitId(),
+                    e.completedOn()
+                );
+
+                applicationEventPublisher.publishEvent(
+                    new DashboardChangedEvent()
+                );
             }
         }
     }

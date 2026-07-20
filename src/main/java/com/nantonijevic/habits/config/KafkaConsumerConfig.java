@@ -36,11 +36,16 @@ public class KafkaConsumerConfig {
     }
 
     @Bean
-    public ConcurrentKafkaListenerContainerFactory<String, HabitCompletedEvent> kafkaListenerContainerFactory(
-            ConsumerFactory<String, HabitCompletedEvent> consumerFactory) {
+    public ConcurrentKafkaListenerContainerFactory<String, HabitCompletedEvent>
+    kafkaListenerContainerFactory(
+        ConsumerFactory<String, HabitCompletedEvent> consumerFactory,
+        KafkaProperties kafkaProperties) {
         ConcurrentKafkaListenerContainerFactory<String, HabitCompletedEvent> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory);
+        factory.setAutoStartup(
+            kafkaProperties.getListener().isAutoStartup()
+        );
         return factory;
     }
 }
