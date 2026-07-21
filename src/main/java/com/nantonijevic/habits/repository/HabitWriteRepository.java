@@ -4,5 +4,5 @@ import com.nantonijevic.habits.domain.Habit;
 
 public interface HabitWriteRepository {
 
-    Habit saveWithMyBatis(Habit habit);
+    Habit save(Habit habit);
 }

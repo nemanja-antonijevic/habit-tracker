@@ -62,7 +62,7 @@ class HabitServiceTest {
             DayOfWeek.FRIDAY
         );
 
-        when(habitWriteRepository.saveWithMyBatis(any(Habit.class)))
+        when(habitWriteRepository.save(any(Habit.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
 
         Habit created = habitService.create("Exercise", scheduledDays);
@@ -70,7 +70,7 @@ class HabitServiceTest {
         assertThat(created.getName()).isEqualTo("Exercise");
         assertThat(created.getScheduledDays()).isEqualTo(scheduledDays);
 
-        verify(habitWriteRepository).saveWithMyBatis(same(created));
+        verify(habitWriteRepository).save(same(created));
     }
 
     @Test
@@ -86,7 +86,7 @@ class HabitServiceTest {
         );
 
         when(habitMapper.findById(habitId)).thenReturn(existingHabit);
-        when(habitWriteRepository.saveWithMyBatis(same(existingHabit)))
+        when(habitWriteRepository.save(same(existingHabit)))
             .thenReturn(existingHabit);
 
         Habit updated = habitService.update(
@@ -100,7 +100,7 @@ class HabitServiceTest {
         assertThat(updated.getScheduledDays()).isEqualTo(newScheduledDays);
 
         verify(habitMapper).findById(habitId);
-        verify(habitWriteRepository).saveWithMyBatis(same(existingHabit));
+        verify(habitWriteRepository).save(same(existingHabit));
         verify(applicationEventPublisher)
             .publishEvent(any(DashboardChangedEvent.class));
     }
@@ -128,7 +128,7 @@ class HabitServiceTest {
 
         verify(habitMapper).findById(habitId);
         verify(habitWriteRepository, never())
-            .saveWithMyBatis(any(Habit.class));
+            .save(any(Habit.class));
         verify(applicationEventPublisher, never())
             .publishEvent(any(DashboardChangedEvent.class));
     }
@@ -140,7 +140,7 @@ class HabitServiceTest {
         existingHabit.synchronizePersistenceVersion(2L);
 
         when(habitMapper.findById(habitId)).thenReturn(existingHabit);
-        when(habitWriteRepository.saveWithMyBatis(same(existingHabit)))
+        when(habitWriteRepository.save(same(existingHabit)))
             .thenReturn(existingHabit);
 
         Habit archived = habitService.archive(habitId);
@@ -148,7 +148,7 @@ class HabitServiceTest {
         assertThat(archived.isArchived()).isTrue();
 
         verify(habitMapper).findById(habitId);
-        verify(habitWriteRepository).saveWithMyBatis(same(existingHabit));
+        verify(habitWriteRepository).save(same(existingHabit));
         verify(applicationEventPublisher)
             .publishEvent(any(DashboardChangedEvent.class));
     }
@@ -161,7 +161,7 @@ class HabitServiceTest {
         existingHabit.synchronizePersistenceVersion(2L);
 
         when(habitMapper.findById(habitId)).thenReturn(existingHabit);
-        when(habitWriteRepository.saveWithMyBatis(same(existingHabit)))
+        when(habitWriteRepository.save(same(existingHabit)))
             .thenReturn(existingHabit);
 
         Habit unarchived = habitService.unarchive(habitId);
@@ -169,7 +169,7 @@ class HabitServiceTest {
         assertThat(unarchived.isArchived()).isFalse();
 
         verify(habitMapper).findById(habitId);
-        verify(habitWriteRepository).saveWithMyBatis(same(existingHabit));
+        verify(habitWriteRepository).save(same(existingHabit));
         verify(applicationEventPublisher)
             .publishEvent(any(DashboardChangedEvent.class));
     }
@@ -193,7 +193,7 @@ class HabitServiceTest {
 
         verify(habitMapper).findById(habitId);
         verify(habitWriteRepository, never())
-            .saveWithMyBatis(any(Habit.class));
+            .save(any(Habit.class));
         verify(applicationEventPublisher, never())
             .publishEvent(any(DashboardChangedEvent.class));
     }
@@ -207,7 +207,7 @@ class HabitServiceTest {
         existingHabit.synchronizePersistenceVersion(2L);
 
         when(habitMapper.findById(habitId)).thenReturn(existingHabit);
-        when(habitWriteRepository.saveWithMyBatis(same(existingHabit)))
+        when(habitWriteRepository.save(same(existingHabit)))
             .thenReturn(existingHabit);
 
         Habit completed = habitService.complete(habitId, today);
@@ -217,7 +217,7 @@ class HabitServiceTest {
 
         verify(habitMapper).findById(habitId);
         verify(completionRepository).save(any(HabitCompletion.class));
-        verify(habitWriteRepository).saveWithMyBatis(same(existingHabit));
+        verify(habitWriteRepository).save(same(existingHabit));
         verify(applicationEventPublisher)
             .publishEvent(any(DashboardChangedEvent.class));
     }
@@ -237,8 +237,8 @@ class HabitServiceTest {
 
         habitService.bulkComplete(List.of(41L, 42L), today);
 
-        verify(habitWriteRepository).saveWithMyBatis(same(firstHabit));
-        verify(habitWriteRepository).saveWithMyBatis(same(secondHabit));
+        verify(habitWriteRepository).save(same(firstHabit));
+        verify(habitWriteRepository).save(same(secondHabit));
 
         verify(applicationEventPublisher, times(1))
             .publishEvent(any(DashboardChangedEvent.class));
@@ -258,7 +258,7 @@ class HabitServiceTest {
         habitService.bulkComplete(List.of(habitId), today);
 
         verify(habitWriteRepository, never())
-            .saveWithMyBatis(any(Habit.class));
+            .save(any(Habit.class));
 
         verify(applicationEventPublisher, never())
             .publishEvent(any(DashboardChangedEvent.class));
@@ -276,7 +276,7 @@ class HabitServiceTest {
         when(habitMapper.findById(habitId)).thenReturn(existingHabit);
         when(completionRepository.findByHabitIdOrderByCompletedOnDesc(habitId))
             .thenReturn(List.of());
-        when(habitWriteRepository.saveWithMyBatis(same(existingHabit)))
+        when(habitWriteRepository.save(same(existingHabit)))
             .thenReturn(existingHabit);
 
         Habit uncompleted = habitService.uncomplete(habitId, today);
@@ -289,7 +289,7 @@ class HabitServiceTest {
             .deleteByHabitIdAndCompletedOn(habitId, today);
         verify(completionRepository)
             .findByHabitIdOrderByCompletedOnDesc(habitId);
-        verify(habitWriteRepository).saveWithMyBatis(same(existingHabit));
+        verify(habitWriteRepository).save(same(existingHabit));
         verify(applicationEventPublisher)
             .publishEvent(any(DashboardChangedEvent.class));
     }

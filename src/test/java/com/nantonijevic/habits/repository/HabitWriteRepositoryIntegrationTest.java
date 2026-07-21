@@ -38,7 +38,7 @@ class HabitWriteRepositoryIntegrationTest extends AbstractIntegrationTest {
             )
         );
 
-        Habit saved = habitRepository.saveWithMyBatis(habit);
+        Habit saved = habitRepository.save(habit);
 
         assertThat(saved).isSameAs(habit);
         assertThat(saved.getId()).isNotNull();
@@ -78,7 +78,7 @@ class HabitWriteRepositoryIntegrationTest extends AbstractIntegrationTest {
     @Test
     void updatesHabitAndIncrementsVersionInDatabaseAndMemory() {
         Habit habit = new Habit("Workout");
-        habitRepository.saveWithMyBatis(habit);
+        habitRepository.save(habit);
 
         assertThat(habit.getVersion()).isZero();
 
@@ -90,7 +90,7 @@ class HabitWriteRepositoryIntegrationTest extends AbstractIntegrationTest {
             )
         );
 
-        Habit updated = habitRepository.saveWithMyBatis(habit);
+        Habit updated = habitRepository.save(habit);
 
         assertThat(updated).isSameAs(habit);
         assertThat(updated.getVersion()).isEqualTo(1L);
@@ -122,10 +122,10 @@ class HabitWriteRepositoryIntegrationTest extends AbstractIntegrationTest {
     @Test
     void rejectsUpdateWhenVersionIsStale() {
         Habit habit = new Habit("Workout");
-        habitRepository.saveWithMyBatis(habit);
+        habitRepository.save(habit);
 
         habit.setName("Current name");
-        habitRepository.saveWithMyBatis(habit);
+        habitRepository.save(habit);
 
         assertThat(habit.getVersion()).isEqualTo(1L);
 
@@ -135,7 +135,7 @@ class HabitWriteRepositoryIntegrationTest extends AbstractIntegrationTest {
         staleHabit.synchronizePersistenceVersion(0L);
 
         assertThatThrownBy(
-            () -> habitRepository.saveWithMyBatis(staleHabit)
+            () -> habitRepository.save(staleHabit)
         )
             .isInstanceOf(HabitVersionConflictException.class)
             .hasMessage("Habit version conflict: " + habit.getId());

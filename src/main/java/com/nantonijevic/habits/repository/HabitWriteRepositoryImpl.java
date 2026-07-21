@@ -14,7 +14,7 @@ public class HabitWriteRepositoryImpl implements HabitWriteRepository {
     }
 
     @Override
-    public Habit saveWithMyBatis(Habit habit) {
+    public Habit save(Habit habit) {
         if (habit.getId() == null) {
             habitMapper.insert(habit);
             habit.synchronizePersistenceVersion(0L);

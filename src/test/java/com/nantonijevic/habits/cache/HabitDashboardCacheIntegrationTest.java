@@ -198,7 +198,7 @@ class HabitDashboardCacheIntegrationTest {
 
         assertThat(redisTemplate.hasKey(key)).isTrue();
 
-        when(habitWriteRepository.saveWithMyBatis(
+        when(habitWriteRepository.save(
             any(Habit.class)
         )).thenAnswer(invocation -> invocation.getArgument(0));
 

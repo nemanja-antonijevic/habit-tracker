@@ -42,7 +42,7 @@ class HabitServiceStatsIntegrationTest extends AbstractIntegrationTest {
             )
         );
 
-        Habit saved = habitWriteRepository.saveWithMyBatis(habit);
+        Habit saved = habitWriteRepository.save(habit);
 
         completionStatRepository.save(
             new HabitCompletionStat(

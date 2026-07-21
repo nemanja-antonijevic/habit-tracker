@@ -107,7 +107,7 @@ public class HabitStatsIntegrationTest {
     void getStats_returnsCorrectCountAndTimestamp_afterComplete() throws Exception {
         expectEvents(1);
 
-        Habit saved = habitWriteRepository.saveWithMyBatis(new Habit("Read 30 min"));
+        Habit saved = habitWriteRepository.save(new Habit("Read 30 min"));
 
         mockMvc.perform(post("/habits/" + saved.getId() + "/complete"))
                 .andExpect(status().isOk());
@@ -124,7 +124,7 @@ public class HabitStatsIntegrationTest {
     void getStats_returnsCurrentStreak_afterConsecutiveCompletions() throws Exception {
         expectEvents(3);
 
-        var habit = habitWriteRepository.saveWithMyBatis(new Habit("Read"));
+        var habit = habitWriteRepository.save(new Habit("Read"));
         LocalDate today = LocalDate.now();
 
         publishCompletedEvent(habit.getId(), today.minusDays(2), 1, 1);
@@ -149,7 +149,7 @@ public class HabitStatsIntegrationTest {
         habit.complete(today.minusDays(1));
         habit.complete(today);
 
-        var saved = habitWriteRepository.saveWithMyBatis(habit);
+        var saved = habitWriteRepository.save(habit);
 
         publishCompletedEvent(saved.getId(), today.minusDays(2), 1, 1);
         publishCompletedEvent(saved.getId(), today.minusDays(1), 2, 2);
@@ -175,7 +175,7 @@ public class HabitStatsIntegrationTest {
         expectEvents(1);
 
         var habit = new Habit("Read 30 min");
-        habitWriteRepository.saveWithMyBatis(habit);
+        habitWriteRepository.save(habit);
 
         mockMvc.perform(post("/habits/" + habit.getId() + "/complete"))
                 .andExpect(status().isOk());
@@ -192,7 +192,7 @@ public class HabitStatsIntegrationTest {
     void streakResetDoesNotLowerLongestStreak() throws Exception {
         expectEvents(4);
 
-        var habit = habitWriteRepository.saveWithMyBatis(new Habit("Read 30 min"));
+        var habit = habitWriteRepository.save(new Habit("Read 30 min"));
         LocalDate today = LocalDate.now();
 
         publishCompletedEvent(habit.getId(), today.minusDays(4), 1, 1);
@@ -227,7 +227,7 @@ public class HabitStatsIntegrationTest {
 
         var habit = new Habit("Workout");
         habit.setScheduledDays(scheduledDays);
-        var saved = habitWriteRepository.saveWithMyBatis(habit);
+        var saved = habitWriteRepository.save(habit);
 
         publishCompletedEvent(saved.getId(), previousScheduledDay, 1, 1);
 
@@ -267,19 +267,19 @@ public class HabitStatsIntegrationTest {
 
         var completedDueHabit = new Habit("Completed today");
         completedDueHabit.setScheduledDays(EnumSet.of(todayDay));
-        habitWriteRepository.saveWithMyBatis(completedDueHabit);
+        habitWriteRepository.save(completedDueHabit);
 
         var incompleteDueHabit = new Habit("Still due today");
         incompleteDueHabit.setScheduledDays(EnumSet.of(todayDay));
-        habitWriteRepository.saveWithMyBatis(incompleteDueHabit);
+        habitWriteRepository.save(incompleteDueHabit);
 
         var notDueTodayHabit = new Habit("Not due today");
         notDueTodayHabit.setScheduledDays(EnumSet.of(tomorrowDay));
-        habitWriteRepository.saveWithMyBatis(notDueTodayHabit);
+        habitWriteRepository.save(notDueTodayHabit);
 
         var archivedHabit = new Habit("Archived habit");
         archivedHabit.setScheduledDays(EnumSet.of(todayDay));
-        habitWriteRepository.saveWithMyBatis(archivedHabit);
+        habitWriteRepository.save(archivedHabit);
 
         expectEvents(2);
 
@@ -318,8 +318,8 @@ public class HabitStatsIntegrationTest {
     void getDashboardStats_returnsZeroLongestStreakWhenNoActiveStreaksExist() throws Exception {
         LocalDate today = LocalDate.now();
 
-        var firstHabit = habitWriteRepository.saveWithMyBatis(new Habit("Read"));
-        var secondHabit = habitWriteRepository.saveWithMyBatis(new Habit("Workout"));
+        var firstHabit = habitWriteRepository.save(new Habit("Read"));
+        var secondHabit = habitWriteRepository.save(new Habit("Workout"));
 
         expectEvents(2);
 
@@ -341,11 +341,11 @@ public class HabitStatsIntegrationTest {
     void getDashboardStats_returnsLongestAmongMultipleActiveStreaks() throws Exception {
         LocalDate today = LocalDate.now();
 
-        var threeDayStreakHabit = habitWriteRepository.saveWithMyBatis(
+        var threeDayStreakHabit = habitWriteRepository.save(
             new Habit("Three day streak")
         );
 
-        var sevenDayStreakHabit = habitWriteRepository.saveWithMyBatis(
+        var sevenDayStreakHabit = habitWriteRepository.save(
             new Habit("Seven day streak")
         );
 

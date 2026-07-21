@@ -26,7 +26,7 @@ public class HabitTestFixtureRepository {
     }
 
     public Habit save(Habit habit) {
-        return habitWriteRepository.saveWithMyBatis(habit);
+        return habitWriteRepository.save(habit);
     }
 
     public Optional<Habit> findById(Long habitId) {

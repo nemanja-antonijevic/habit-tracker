@@ -80,7 +80,7 @@ public class HabitService {
 
         if (reallyCompleted) {
             Habit saved =
-                habitWriteRepository.saveWithMyBatis(habit);
+                habitWriteRepository.save(habit);
 
             applicationEventPublisher.publishEvent(
                 new DashboardChangedEvent()
@@ -162,7 +162,7 @@ public class HabitService {
             );
 
             if (reallyCompleted) {
-                habitWriteRepository.saveWithMyBatis(habit);
+                habitWriteRepository.save(habit);
             }
 
             completed.add(habitId);
@@ -186,7 +186,7 @@ public class HabitService {
                 : EnumSet.copyOf(scheduledDays);
 
         habit.setScheduledDays(effectiveScheduledDays);
-        Habit saved = habitWriteRepository.saveWithMyBatis(habit);
+        Habit saved = habitWriteRepository.save(habit);
         applicationEventPublisher.publishEvent(
             new DashboardChangedEvent()
         );
@@ -216,7 +216,7 @@ public class HabitService {
         logger.info("Habit uncompleted, habitId: {}, date: {}", habitId, today);
 
         Habit saved =
-            habitWriteRepository.saveWithMyBatis(habit);
+            habitWriteRepository.save(habit);
 
         applicationEventPublisher.publishEvent(
             new DashboardChangedEvent()
@@ -364,7 +364,7 @@ public class HabitService {
         }
 
         logger.info("Habit updated, habitId: {}, version: {}", habitId, version);
-        Habit saved = habitWriteRepository.saveWithMyBatis(habit);
+        Habit saved = habitWriteRepository.save(habit);
 
         applicationEventPublisher.publishEvent(
             new DashboardChangedEvent()
@@ -382,7 +382,7 @@ public class HabitService {
 
         logger.info("Habit archived, habitId: {}", habitId);
 
-        Habit saved = habitWriteRepository.saveWithMyBatis(habit);
+        Habit saved = habitWriteRepository.save(habit);
 
         applicationEventPublisher.publishEvent(
             new DashboardChangedEvent()
@@ -400,7 +400,7 @@ public class HabitService {
 
         logger.info("Habit unarchived, habitId: {}", habitId);
 
-        Habit saved = habitWriteRepository.saveWithMyBatis(habit);
+        Habit saved = habitWriteRepository.save(habit);
 
         applicationEventPublisher.publishEvent(
             new DashboardChangedEvent()
