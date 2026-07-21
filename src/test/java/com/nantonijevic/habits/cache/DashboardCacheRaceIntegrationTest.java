@@ -109,11 +109,13 @@ class DashboardCacheRaceIntegrationTest {
         clearState();
     }
 
-    @Test
-    void redisContainerStarts() {
-        assertThat(redis.isRunning()).isTrue();
-    }
-
+    // CHARACTERIZATION: proves the existing read-old -> evict -> put-old
+    // window. This is NOT the desired behavior: it demonstrates a real
+    // stale-cache bug where a reader that captured the old DB snapshot
+    // before the after-commit eviction repopulates Redis with that stale
+    // value afterwards (bounded only by TTL). When a lock / version token /
+    // anti-stampede mechanism is introduced, INVERT these assertions so the
+    // test requires that Redis can no longer end up older than the database.
     @Test
     void concurrentReaderCanRepopulateCacheWithStaleSnapshotAfterEviction()
         throws Exception {
