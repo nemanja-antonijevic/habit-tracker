@@ -19,8 +19,15 @@ public class DashboardCacheInvalidator {
 
     private final CacheManager cacheManager;
 
-    public DashboardCacheInvalidator(CacheManager cacheManager) {
+    private final DashboardCacheGeneration dashboardCacheGeneration;
+
+    public DashboardCacheInvalidator(
+        CacheManager cacheManager,
+        DashboardCacheGeneration dashboardCacheGeneration
+    ) {
         this.cacheManager = cacheManager;
+        this.dashboardCacheGeneration =
+            dashboardCacheGeneration;
     }
 
     @TransactionalEventListener(
@@ -38,6 +45,7 @@ public class DashboardCacheInvalidator {
         }
 
         try {
+            dashboardCacheGeneration.advance();
             cache.clear();
         } catch (DataAccessException ex) {
             logger.warn(

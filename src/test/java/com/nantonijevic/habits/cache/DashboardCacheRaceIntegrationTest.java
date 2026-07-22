@@ -99,6 +99,9 @@ class DashboardCacheRaceIntegrationTest {
     @Autowired
     private BlockingStatsReadAspect statsReadHook;
 
+    @Autowired
+    private DashboardCacheGeneration dashboardCacheGeneration;
+
     @BeforeEach
     void clearStateBeforeTest() {
         clearState();
@@ -109,15 +112,11 @@ class DashboardCacheRaceIntegrationTest {
         clearState();
     }
 
-    // CHARACTERIZATION: proves the existing read-old -> evict -> put-old
-    // window. This is NOT the desired behavior: it demonstrates a real
-    // stale-cache bug where a reader that captured the old DB snapshot
-    // before the after-commit eviction repopulates Redis with that stale
-    // value afterwards (bounded only by TTL). When a lock / version token /
-    // anti-stampede mechanism is introduced, INVERT these assertions so the
-    // test requires that Redis can no longer end up older than the database.
+    // REGRESSION: a reader may finish with an old snapshot after
+    // invalidation, but it must only populate its captured generation.
+    // Requests using the new generation must observe the committed state.
     @Test
-    void concurrentReaderCanRepopulateCacheWithStaleSnapshotAfterEviction()
+    void staleReaderCannotRepopulateTheActiveCacheGeneration()
         throws Exception {
 
         LocalDate today =
@@ -145,8 +144,13 @@ class DashboardCacheRaceIntegrationTest {
             RedisCacheConfig.DASHBOARD_STATS_CACHE
                 + "::eviction-sentinel";
 
-        String dashboardKey =
+        long readerGeneration =
+            dashboardCacheGeneration.current();
+
+        String staleDashboardKey =
             RedisCacheConfig.DASHBOARD_STATS_CACHE
+                + "::"
+                + readerGeneration
                 + "::"
                 + today;
 
@@ -217,7 +221,9 @@ class DashboardCacheRaceIntegrationTest {
                 .isFalse();
 
             assertThat(
-                redisTemplate.hasKey(dashboardKey)
+                redisTemplate.hasKey(
+                    staleDashboardKey
+                )
             )
                 .as(
                     "dashboard entry must still be "
@@ -237,8 +243,8 @@ class DashboardCacheRaceIntegrationTest {
                 readerResult.longestActiveStreak()
             )
                 .as(
-                    "reader must return its captured "
-                        + "old snapshot"
+                    "in-flight reader may still return "
+                        + "its captured old snapshot"
                 )
                 .isEqualTo(1);
 
@@ -259,19 +265,66 @@ class DashboardCacheRaceIntegrationTest {
                     ).isEqualTo(2);
                 });
 
-            String cachedJson =
+            String staleCachedJson =
                 redisTemplate.opsForValue().get(
-                    dashboardKey
+                    staleDashboardKey
                 );
 
-            assertThat(cachedJson)
+            assertThat(staleCachedJson)
                 .as(
-                    "reader must repopulate Redis "
-                        + "with the old snapshot "
-                        + "after eviction"
+                    "late reader may still populate "
+                        + "its old generation"
                 )
                 .isNotNull()
                 .contains(
+                    "\"longestActiveStreak\":1"
+                );
+
+            long activeGeneration =
+                dashboardCacheGeneration.current();
+
+            assertThat(activeGeneration)
+                .as(
+                    "writer must advance the active "
+                        + "cache generation"
+                )
+                .isGreaterThan(readerGeneration);
+
+            HabitDashboardResponse dashboardAfterInvalidation =
+                habitService.getDashboardStats(today);
+
+            assertThat(
+                dashboardAfterInvalidation
+                    .longestActiveStreak()
+            )
+                .as(
+                    "requests after invalidation must "
+                        + "not observe the stale snapshot"
+                )
+                .isEqualTo(2);
+
+            String activeDashboardKey =
+                RedisCacheConfig.DASHBOARD_STATS_CACHE
+                    + "::"
+                    + activeGeneration
+                    + "::"
+                    + today;
+
+            String activeCachedJson =
+                redisTemplate.opsForValue().get(
+                    activeDashboardKey
+                );
+
+            assertThat(activeCachedJson)
+                .as(
+                    "the active cache generation must "
+                        + "match the database"
+                )
+                .isNotNull()
+                .contains(
+                    "\"longestActiveStreak\":2"
+                )
+                .doesNotContain(
                     "\"longestActiveStreak\":1"
                 );
         } finally {

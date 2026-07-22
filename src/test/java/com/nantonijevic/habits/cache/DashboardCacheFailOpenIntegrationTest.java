@@ -41,6 +41,9 @@ class DashboardCacheFailOpenIntegrationTest {
     @MockBean
     private CacheManager cacheManager;
 
+    @MockBean
+    private DashboardCacheGeneration dashboardCacheGeneration;
+
     private Cache cache;
 
     @BeforeEach
@@ -71,6 +74,7 @@ class DashboardCacheFailOpenIntegrationTest {
         assertThat(created.getId()).isNotNull();
         assertThat(habitMapper.findById(created.getId())).isNotNull();
 
+        verify(dashboardCacheGeneration).advance();
         verify(cache).clear();
     }
 }

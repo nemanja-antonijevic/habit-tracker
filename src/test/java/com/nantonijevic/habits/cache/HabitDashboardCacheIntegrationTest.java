@@ -78,6 +78,9 @@ class HabitDashboardCacheIntegrationTest {
     @Autowired
     private PlatformTransactionManager transactionManager;
 
+    @Autowired
+    private DashboardCacheGeneration dashboardCacheGeneration;
+
     @MockBean
     private HabitWriteRepository habitWriteRepository;
 
@@ -124,10 +127,7 @@ class HabitDashboardCacheIntegrationTest {
 
         habitService.getDashboardStats(today);
 
-        String key =
-            RedisCacheConfig.DASHBOARD_STATS_CACHE
-                + "::"
-                + today;
+        String key = dashboardKey(today);
 
         String cachedJson =
             redisTemplate.opsForValue().get(key);
@@ -157,10 +157,7 @@ class HabitDashboardCacheIntegrationTest {
 
         habitService.getDashboardStats(today);
 
-        String key =
-            RedisCacheConfig.DASHBOARD_STATS_CACHE
-                + "::"
-                + today;
+        String key = dashboardKey(today);
 
         assertThat(redisTemplate.hasKey(key)).isTrue();
 
@@ -191,10 +188,7 @@ class HabitDashboardCacheIntegrationTest {
 
         habitService.getDashboardStats(today);
 
-        String key =
-            RedisCacheConfig.DASHBOARD_STATS_CACHE
-                + "::"
-                + today;
+        String key = dashboardKey(today);
 
         assertThat(redisTemplate.hasKey(key)).isTrue();
 
@@ -210,5 +204,13 @@ class HabitDashboardCacheIntegrationTest {
         assertThat(redisTemplate.hasKey(key))
             .as("create must evict dashboard cache after commit")
             .isFalse();
+    }
+
+    private String dashboardKey(LocalDate today) {
+        return RedisCacheConfig.DASHBOARD_STATS_CACHE
+            + "::"
+            + dashboardCacheGeneration.current()
+            + "::"
+            + today;
     }
 }

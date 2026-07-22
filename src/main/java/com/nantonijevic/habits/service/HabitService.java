@@ -460,7 +460,11 @@ public class HabitService {
     @Transactional(readOnly = true)
     @Cacheable(
         cacheNames = RedisCacheConfig.DASHBOARD_STATS_CACHE,
-        key = "#today.toString()"
+        key = "@dashboardCacheGeneration.current()"
+            + " + '::' + #today.toString()",
+        condition = "@environment.getProperty("
+            + "'spring.cache.type', 'redis'"
+            + ") == 'redis'"
     )
     public HabitDashboardResponse getDashboardStats(LocalDate today) {
         List<Habit> activeHabits = habitMapper.findActive();
