@@ -9,6 +9,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -62,5 +63,19 @@ class DashboardCacheGenerationTest {
         long advanced = generation.advance();
 
         assertThat(advanced).isEqualTo(8L);
+    }
+
+    @Test
+    void advanceFailsWhenRedisDoesNotReturnGeneration() {
+        when(valueOperations.increment(
+            DashboardCacheGeneration.GENERATION_KEY
+        )).thenReturn(null);
+
+        assertThatThrownBy(() -> generation.advance())
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage(
+                "Redis did not return the advanced "
+                    + "dashboard cache generation"
+            );
     }
 }

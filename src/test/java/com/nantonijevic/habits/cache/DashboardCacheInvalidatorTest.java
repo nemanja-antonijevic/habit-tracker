@@ -90,4 +90,48 @@ class DashboardCacheInvalidatorTest {
 
         verifyNoInteractions(generation);
     }
+
+    @Test
+    void invalidatorDoesNotSwallowGenerationFailure() {
+        CacheManager cacheManager =
+            mock(CacheManager.class);
+
+        Cache cache =
+            mock(Cache.class);
+
+        DashboardCacheGeneration generation =
+            mock(DashboardCacheGeneration.class);
+
+        when(cacheManager.getCache(
+            RedisCacheConfig.DASHBOARD_STATS_CACHE
+        )).thenReturn(cache);
+
+        doThrow(
+            new IllegalStateException(
+                "Redis did not return the advanced "
+                    + "dashboard cache generation"
+            )
+        )
+            .when(generation)
+            .advance();
+
+        DashboardCacheInvalidator invalidator =
+            new DashboardCacheInvalidator(
+                cacheManager,
+                generation
+            );
+
+        assertThatThrownBy(() ->
+            invalidator.on(
+                new DashboardChangedEvent()
+            )
+        )
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage(
+                "Redis did not return the advanced "
+                    + "dashboard cache generation"
+            );
+
+        verifyNoInteractions(cache);
+    }
 }
