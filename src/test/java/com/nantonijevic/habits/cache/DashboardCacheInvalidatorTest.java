@@ -7,9 +7,15 @@ import org.mockito.InOrder;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.RedisConnectionFailureException;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import org.slf4j.LoggerFactory;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -133,5 +139,76 @@ class DashboardCacheInvalidatorTest {
             );
 
         verifyNoInteractions(cache);
+    }
+
+    @Test
+    void redisFailureIsLoggedAsWarningWithThrowable() {
+        CacheManager cacheManager =
+            mock(CacheManager.class);
+
+        Cache cache =
+            mock(Cache.class);
+
+        DashboardCacheGeneration generation =
+            mock(DashboardCacheGeneration.class);
+
+        when(cacheManager.getCache(
+            RedisCacheConfig.DASHBOARD_STATS_CACHE
+        )).thenReturn(cache);
+
+        doThrow(
+            new RedisConnectionFailureException(
+                "Redis unavailable"
+            )
+        )
+            .when(cache)
+            .clear();
+
+        DashboardCacheInvalidator invalidator =
+            new DashboardCacheInvalidator(
+                cacheManager,
+                generation
+            );
+
+        Logger invalidatorLogger =
+            (Logger) LoggerFactory.getLogger(
+                DashboardCacheInvalidator.class
+            );
+
+        ListAppender<ILoggingEvent> logAppender =
+            new ListAppender<>();
+
+        logAppender.start();
+        invalidatorLogger.addAppender(logAppender);
+
+        try {
+            invalidator.on(
+                new DashboardChangedEvent()
+            );
+
+            assertThat(logAppender.list)
+                .singleElement()
+                .satisfies(event -> {
+                    assertThat(event.getLevel())
+                        .isEqualTo(Level.WARN);
+
+                    assertThat(
+                        event.getFormattedMessage()
+                    ).isEqualTo(
+                        "Dashboard cache eviction failed; "
+                            + "stale data may remain until "
+                            + "TTL expiry"
+                    );
+
+                    assertThat(
+                        event.getThrowableProxy()
+                    ).isNotNull();
+                });
+        } finally {
+            invalidatorLogger.detachAppender(
+                logAppender
+            );
+            logAppender.stop();
+        }
     }
 }
