@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class DashboardCacheGeneration {
 
+    // One ':' is deliberate: clear() evicts "dashboard-stats::*"; "::" here would reset the counter.
     static final String GENERATION_KEY =
         "dashboard-stats:generation";
 
