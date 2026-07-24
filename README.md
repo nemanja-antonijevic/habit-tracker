@@ -18,7 +18,7 @@ Event-driven habit tracking app. Side project for the 100-day BE plan.
 ## Run locally
 
 ```bash
-docker compose up -d        # MySQL 8.0 on port 3306
+docker compose up -d        # MySQL 8.0 (3306), Kafka (9092), Redis 7 (6379)
 ./mvnw spring-boot:run      # app on http://localhost:8080
 ```
 
@@ -26,7 +26,7 @@ Flyway applies the migrations from `src/main/resources/db/migration/` on startup
 
 Stop:
 ```bash
-docker compose down         # stop MySQL (named volume habits_data keeps the data)
+docker compose down         # stop the infra (named volume habits_data keeps the MySQL data)
 docker compose down -v      # also drop the volume for a clean database
 ```
 
@@ -54,7 +54,8 @@ src/main/java/com/nantonijevic/habits/
   dto/                           # request/response records
   repository/                    # Spring Data JPA
   event/                         # domain events, Kafka publisher/consumer
-  config/                        # Kafka producer/consumer config
+  cache/                         # dashboard cache: generation key, invalidator, fail-open policy
+  config/                        # Kafka producer/consumer + Redis cache config
   exception/                     # GlobalExceptionHandler
 src/main/resources/
   application.yml                # MySQL datasource (prod) + Kafka
@@ -67,6 +68,15 @@ src/test/resources/
 
 - **Prod (local run):** MySQL 8.0 via docker-compose, data persisted in the named volume `habits_data`.
 - **Test:** H2 in-memory with `MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE`. Flyway runs the same migrations.
+
+## Cache
+
+- **Redis 7** via docker-compose caches the dashboard stats (`GET /habits/stats`) with a 5-minute TTL.
+- `maxmemory-policy` is pinned to `noeviction` in `docker-compose.yml` — the versioned generation key must never be evicted; this is a deliberate infrastructure decision, not a default.
+- Reads are **fail-open**: if Redis is down, the dashboard falls back to the database and logs a WARN — no user-facing failure.
+- No volume on purpose: the cache is derived data, the database stays the source of truth.
+- The compose app reaches Redis via `SPRING_DATA_REDIS_HOST=redis`; a host-run app uses the published `localhost:6379` port (Spring Boot default).
+- **Test:** integration tests start their own Redis via Testcontainers and do not need the compose Redis.
 
 Configuration:
 - Prod: `src/main/resources/application.yml`
