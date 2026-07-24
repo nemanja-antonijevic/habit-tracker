@@ -30,6 +30,16 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
 
+  redis:
+    image: redis:7
+    container_name: habits-redis
+    ports:
+      - "6379:6379"
+    command:
+      - redis-server
+      - --maxmemory-policy
+      - noeviction
+
   app:
     build: .
     ports:
@@ -37,10 +47,13 @@ services:
     depends_on:
       - mysql
       - kafka
+      - redis
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/habits
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
 
 volumes:
   habits_data:
