@@ -460,8 +460,7 @@ public class HabitService {
     @Transactional(readOnly = true)
     @Cacheable(
         cacheNames = RedisCacheConfig.DASHBOARD_STATS_CACHE,
-        key = "@dashboardCacheGeneration.current()"
-            + " + '::' + #today.toString()",
+        keyGenerator = "dashboardCacheKeyGenerator",
         condition = "@environment.getProperty("
             + "'spring.cache.type', 'redis'"
             + ") == 'redis'"

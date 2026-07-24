@@ -1,7 +1,10 @@
 package com.nantonijevic.habits.config;
 
+import com.nantonijevic.habits.cache.FailOpenCacheErrorHandler;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
@@ -15,7 +18,7 @@ import java.time.Duration;
 
 @Configuration
 @EnableCaching
-public class RedisCacheConfig {
+public class RedisCacheConfig implements CachingConfigurer {
 
     public static final String DASHBOARD_STATS_CACHE =
         "dashboard-stats";
@@ -54,5 +57,10 @@ public class RedisCacheConfig {
                 dashboardConfiguration
             )
             .build();
+    }
+
+    @Override
+    public CacheErrorHandler errorHandler() {
+        return new FailOpenCacheErrorHandler();
     }
 }
