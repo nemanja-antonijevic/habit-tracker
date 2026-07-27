@@ -79,14 +79,11 @@ public class HabitService {
         boolean reallyCompleted = completeExistingHabit(habit, habitId, today);
 
         if (reallyCompleted) {
-            Habit saved =
-                habitWriteRepository.save(habit);
-
             applicationEventPublisher.publishEvent(
                 new DashboardChangedEvent()
             );
 
-            return saved;
+            return habit;
         }
 
         return habit;
@@ -96,6 +93,7 @@ public class HabitService {
         boolean reallyCompleted = habit.complete(today);
 
         if (reallyCompleted) {
+            habitWriteRepository.save(habit);
             completionRepository.save(new HabitCompletion(habitId, today));
 
             logger.info("Habit completed, habitId: {}, date: {}, currentStreak: {}",
@@ -155,15 +153,11 @@ public class HabitService {
                 continue;
             }
 
-            boolean reallyCompleted = completeExistingHabit(
+            completeExistingHabit(
                 habit,
                 habitId,
                 today
             );
-
-            if (reallyCompleted) {
-                habitWriteRepository.save(habit);
-            }
 
             completed.add(habitId);
         }
