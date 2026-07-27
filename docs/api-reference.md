@@ -94,7 +94,7 @@ Body of every error.
 | `204 No Content` | Success with no body (delete) |
 | `400 Bad Request` | Validation failed, malformed JSON, or an illegal state transition (`InvalidHabitStateException`) |
 | `404 Not Found` | Habit does not exist (`HabitNotFoundException`) |
-| `409 Conflict` | Version mismatch on update (`HabitVersionConflictException`) |
+| `409 Conflict` | Version mismatch on update; on `complete`, only when the single automatic retry loses the optimistic-lock race again (`HabitVersionConflictException`) |
 
 `GlobalExceptionHandler` (`@RestControllerAdvice`) centralizes the exception-to-status mapping.
 
@@ -249,6 +249,8 @@ No body. The server takes the date (`LocalDate.now()`). Increments `completionCo
 
 A repeated `complete` on the same day is a no-op — no duplicate row, no new event, streak unchanged.
 
+Concurrent same-day completions converge to the same result regardless of timing: the request that loses the optimistic-lock race retries once against the fresh state (in a new transaction), so both callers receive `200` and all side effects (completion row, Kafka event, version bump) apply exactly once. `409` remains possible only when that single retry loses another optimistic-lock race.
+
 **The habit can only be completed on a scheduled day.** If today is not in the habit's `scheduledDays`, the call is rejected with `400`. The streak counts consecutive *scheduled* days: completing on Friday and then Monday keeps the streak alive for a Mon/Wed/Fri habit, because Saturday and Sunday are not scheduled.
 
 **Response:** `200 OK`, `HabitResponse`.
@@ -258,6 +260,7 @@ A repeated `complete` on the same day is a no-op — no duplicate row, no new ev
 | `200` | Marked (or a no-op if already marked today) |
 | `400` | Habit is archived, or today is not a scheduled day |
 | `404` | Does not exist |
+| `409` | The single automatic retry lost another optimistic-lock race (rare) |
 
 ## 7. Undo today's completion
 

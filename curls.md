@@ -44,6 +44,7 @@ curl -s -X DELETE http://localhost:8080/habits/1
 ```bash
 # Complete (emits HabitCompletedEvent to the Kafka topic habit-completed)
 # A second complete on the same day is a no-op (idempotent domain) — no event emitted
+# Concurrent same-day completes converge: the optimistic-lock loser retries once → both get 200
 # Rejected with 400 if today is not one of the habit's scheduledDays
 curl -s -X POST http://localhost:8080/habits/1/complete
 

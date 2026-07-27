@@ -30,6 +30,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -56,34 +57,56 @@ public class HabitService {
     private final HabitCompletionRepository completionRepository;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final HabitCompletionStatRepository completionStatRepository;
+    private final TransactionTemplate transactionTemplate;
 
     public HabitService(HabitSearchRepository habitSearchRepository,
                         HabitWriteRepository habitWriteRepository,
                         HabitMapper habitMapper,
                         HabitCompletionRepository completionRepository,
                         ApplicationEventPublisher applicationEventPublisher,
-                        HabitCompletionStatRepository completionStatRepository) {
+                        HabitCompletionStatRepository completionStatRepository,
+                        TransactionTemplate transactionTemplate) {
         this.habitSearchRepository = habitSearchRepository;
         this.habitWriteRepository = habitWriteRepository;
         this.habitMapper = habitMapper;
         this.completionRepository = completionRepository;
         this.applicationEventPublisher = applicationEventPublisher;
         this.completionStatRepository = completionStatRepository;
+        this.transactionTemplate = transactionTemplate;
     }
 
-    @Transactional
     public Habit complete(Long habitId, LocalDate today) {
-        Habit habit = Optional.ofNullable(habitMapper.findById(habitId))
-            .orElseThrow(() -> new HabitNotFoundException(habitId));
+        try {
+            return executeCompleteAttempt(habitId, today);
+        } catch (HabitVersionConflictException ex) {
+            return executeCompleteAttempt(habitId, today);
+        }
+    }
 
-        boolean reallyCompleted = completeExistingHabit(habit, habitId, today);
+    private Habit executeCompleteAttempt(
+        Long habitId,
+        LocalDate today
+    ) {
+        return transactionTemplate.execute(
+            status -> completeAttempt(habitId, today)
+        );
+    }
+
+    private Habit completeAttempt(Long habitId, LocalDate today) {
+        Habit habit = Optional.ofNullable(
+                habitMapper.findById(habitId)
+            )
+            .orElseThrow(
+                () -> new HabitNotFoundException(habitId)
+            );
+
+        boolean reallyCompleted =
+            completeExistingHabit(habit, habitId, today);
 
         if (reallyCompleted) {
             applicationEventPublisher.publishEvent(
                 new DashboardChangedEvent()
             );
-
-            return habit;
         }
 
         return habit;

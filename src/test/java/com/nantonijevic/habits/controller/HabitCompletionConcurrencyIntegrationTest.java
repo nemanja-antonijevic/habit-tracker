@@ -164,18 +164,11 @@ class HabitCompletionConcurrencyIntegrationTest
 
             assertThat(responseStatuses)
                 .as(
-                    "both concurrent calls must either "
-                        + "succeed idempotently or expose "
-                        + "an optimistic-lock conflict"
+                    "both concurrent same-day completions "
+                        + "must converge to an idempotent success"
                 )
-                .contains(
+                .containsOnly(
                     HttpStatus.OK.value()
-                )
-                .allMatch(
-                    status ->
-                        status == HttpStatus.OK.value()
-                            || status
-                            == HttpStatus.CONFLICT.value()
                 );
 
             Habit persisted =

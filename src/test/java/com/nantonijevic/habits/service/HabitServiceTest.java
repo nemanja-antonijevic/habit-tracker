@@ -10,6 +10,7 @@ import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
 import com.nantonijevic.habits.repository.HabitMapper;
 import com.nantonijevic.habits.repository.HabitSearchRepository;
 import com.nantonijevic.habits.repository.HabitWriteRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -17,6 +18,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.DayOfWeek;
 import java.time.Instant;
@@ -51,8 +55,25 @@ class HabitServiceTest {
     @Mock
     private HabitCompletionStatRepository completionStatRepository;
 
+    @Mock
+    private TransactionTemplate transactionTemplate;
+
     @InjectMocks
     private HabitService habitService;
+
+    @BeforeEach
+    void executeTransactionCallbacks() {
+        lenient()
+            .when(transactionTemplate.execute(any()))
+            .thenAnswer(invocation -> {
+                TransactionCallback<?> callback =
+                    invocation.getArgument(0);
+
+                return callback.doInTransaction(
+                    mock(TransactionStatus.class)
+                );
+            });
+    }
 
     @Test
     void createUsesMyBatisWritePath() {
@@ -589,5 +610,91 @@ class HabitServiceTest {
         assertThat(response.completed()).isZero();
         assertThat(response.rate())
             .isEqualByComparingTo("0.0000");
+    }
+
+    @Test
+    void completeReturnsFreshStateWhenRetryFindsHabitAlreadyCompletedToday() {
+        Long habitId = 42L;
+        LocalDate today = LocalDate.of(2024, 1, 5);
+
+        Habit staleHabit = new Habit("Read");
+        staleHabit.synchronizePersistenceVersion(0L);
+
+        Habit freshlyCompletedHabit = new Habit("Read");
+        freshlyCompletedHabit.complete(today);
+        freshlyCompletedHabit.synchronizePersistenceVersion(1L);
+
+        when(habitMapper.findById(habitId))
+            .thenReturn(
+                staleHabit,
+                freshlyCompletedHabit
+            );
+
+        when(habitWriteRepository.save(same(staleHabit)))
+            .thenThrow(
+                new HabitVersionConflictException(habitId)
+            );
+
+        Habit result = habitService.complete(habitId, today);
+
+        assertThat(result).isSameAs(freshlyCompletedHabit);
+        assertThat(result.getCompletionCount()).isEqualTo(1);
+        assertThat(result.getVersion()).isEqualTo(1L);
+
+        verify(habitMapper, times(2))
+            .findById(habitId);
+        verify(habitWriteRepository)
+            .save(same(staleHabit));
+        verify(habitWriteRepository, never())
+            .save(same(freshlyCompletedHabit));
+        verify(completionRepository, never())
+            .save(any(HabitCompletion.class));
+        verify(applicationEventPublisher, never())
+            .publishEvent(any(DashboardChangedEvent.class));
+    }
+
+    @Test
+    void completePropagatesConflictAfterSingleRetryIsExhausted() {
+        Long habitId = 42L;
+        LocalDate today = LocalDate.of(2024, 1, 5);
+
+        Habit firstSnapshot = new Habit("Read");
+        firstSnapshot.synchronizePersistenceVersion(0L);
+
+        Habit secondSnapshot = new Habit("Read");
+        secondSnapshot.synchronizePersistenceVersion(1L);
+
+        when(habitMapper.findById(habitId))
+            .thenReturn(
+                firstSnapshot,
+                secondSnapshot
+            );
+
+        when(habitWriteRepository.save(same(firstSnapshot)))
+            .thenThrow(
+                new HabitVersionConflictException(habitId)
+            );
+
+        when(habitWriteRepository.save(same(secondSnapshot)))
+            .thenThrow(
+                new HabitVersionConflictException(habitId)
+            );
+
+        assertThatThrownBy(
+            () -> habitService.complete(habitId, today)
+        )
+            .isInstanceOf(HabitVersionConflictException.class)
+            .hasMessage("Habit version conflict: " + habitId);
+
+        verify(habitMapper, times(2))
+            .findById(habitId);
+        verify(habitWriteRepository)
+            .save(same(firstSnapshot));
+        verify(habitWriteRepository)
+            .save(same(secondSnapshot));
+        verify(completionRepository, never())
+            .save(any(HabitCompletion.class));
+        verify(applicationEventPublisher, never())
+            .publishEvent(any(DashboardChangedEvent.class));
     }
 }
