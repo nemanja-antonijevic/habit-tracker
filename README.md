@@ -13,7 +13,7 @@ Event-driven habit tracking app. Side project for the 100-day BE plan.
 
 - Java 21
 - Maven (via the `./mvnw` wrapper)
-- Docker (only for a prod-style local run; tests do not need Docker)
+- Docker (for a prod-style local run and the full `./mvnw verify` test suite; the fast `./mvnw test` suite does not need Docker)
 
 ## Run locally
 
@@ -33,10 +33,13 @@ docker compose down -v      # also drop the volume for a clean database
 ## Run tests
 
 ```bash
-./mvnw test
+./mvnw test          # fast suite — unit + H2 + Embedded Kafka, no Docker needed
+./mvnw verify        # full suite — also runs Redis Testcontainers tests, requires Docker
 ```
 
-Tests run on **H2 in-memory** in MySQL-compatible mode (`MODE=MySQL`) and do not need Docker. The Spring context starts in ~3s, Flyway migrates H2, and each run gets a clean database.
+The fast suite runs on **H2 in-memory** in MySQL-compatible mode (`MODE=MySQL`) and does not need Docker. The Spring context starts in ~3s, Flyway migrates H2, and each run gets a clean database.
+
+Docker-dependent tests (Redis via Testcontainers) are named `*IT` and run under the Maven Failsafe plugin in the `verify` lifecycle. Without Docker, `./mvnw verify` **fails loudly** instead of silently skipping them — a green `verify` always means the integration tests actually ran. Note that `./mvnw integration-test` is not a substitute for `verify`: Failsafe records failures during `integration-test` but only fails the build in the `verify` goal.
 
 ## API
 
@@ -76,7 +79,7 @@ src/test/resources/
 - Reads are **fail-open**: if Redis is down, the dashboard falls back to the database and logs a WARN — no user-facing failure.
 - No volume on purpose: the cache is derived data, the database stays the source of truth.
 - The compose app reaches Redis via `SPRING_DATA_REDIS_HOST=redis`; a host-run app uses the published `localhost:6379` port (Spring Boot default).
-- **Test:** integration tests start their own Redis via Testcontainers and do not need the compose Redis.
+- **Test:** the `*IT` integration tests (run via `./mvnw verify`) start their own Redis via Testcontainers and do not need the compose Redis.
 
 Configuration:
 - Prod: `src/main/resources/application.yml`

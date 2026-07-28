@@ -41,7 +41,7 @@ import static org.assertj.core.api.Assertions.assertThat;
     "spring.kafka.listener.auto-startup=false",
     "spring.cache.type=redis"
 })
-class HabitDashboardCacheIntegrationTest {
+class HabitDashboardCacheIT {
 
     private static final int REDIS_PORT = 6379;
 

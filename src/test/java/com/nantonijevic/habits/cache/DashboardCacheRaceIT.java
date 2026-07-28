@@ -48,10 +48,10 @@ import static org.assertj.core.api.Assertions.assertThat;
     "spring.cache.type=redis"
 })
 @Import(
-    DashboardCacheRaceIntegrationTest
+    DashboardCacheRaceIT
         .RaceHookConfiguration.class
 )
-class DashboardCacheRaceIntegrationTest {
+class DashboardCacheRaceIT {
 
     private static final int REDIS_PORT = 6379;
 
