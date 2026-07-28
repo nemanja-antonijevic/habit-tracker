@@ -1,5 +1,9 @@
 package com.nantonijevic.habits.service;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.domain.HabitCompletion;
 import com.nantonijevic.habits.domain.HabitNotFoundException;
@@ -10,12 +14,14 @@ import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
 import com.nantonijevic.habits.repository.HabitMapper;
 import com.nantonijevic.habits.repository.HabitSearchRepository;
 import com.nantonijevic.habits.repository.HabitWriteRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.TransactionStatus;
@@ -61,6 +67,10 @@ class HabitServiceTest {
     @InjectMocks
     private HabitService habitService;
 
+    private Logger habitServiceLogger;
+
+    private ListAppender<ILoggingEvent> logAppender;
+
     @BeforeEach
     void executeTransactionCallbacks() {
         lenient()
@@ -73,6 +83,22 @@ class HabitServiceTest {
                     mock(TransactionStatus.class)
                 );
             });
+    }
+
+    @BeforeEach
+    void attachHabitServiceLogAppender() {
+        habitServiceLogger =
+            (Logger) LoggerFactory.getLogger(HabitService.class);
+
+        logAppender = new ListAppender<>();
+        logAppender.start();
+        habitServiceLogger.addAppender(logAppender);
+    }
+
+    @AfterEach
+    void detachHabitServiceLogAppender() {
+        habitServiceLogger.detachAppender(logAppender);
+        logAppender.stop();
     }
 
     @Test
@@ -651,6 +677,36 @@ class HabitServiceTest {
             .save(any(HabitCompletion.class));
         verify(applicationEventPublisher, never())
             .publishEvent(any(DashboardChangedEvent.class));
+
+        assertThat(logAppender.list)
+            .filteredOn(
+                logEvent ->
+                    logEvent.getFormattedMessage()
+                        .startsWith(
+                            "Habit completion version conflict"
+                        )
+            )
+            .singleElement()
+            .satisfies(logEvent -> {
+                assertThat(logEvent.getLevel())
+                    .isEqualTo(Level.INFO);
+                assertThat(logEvent.getFormattedMessage())
+                    .isEqualTo(
+                        "Habit completion version conflict; "
+                            + "retrying once, habitId: 42, "
+                            + "date: 2024-01-05, reason: "
+                            + "Habit version conflict: 42"
+                    );
+            });
+
+        assertThat(logAppender.list)
+            .noneMatch(
+                logEvent ->
+                    logEvent.getFormattedMessage()
+                        .startsWith(
+                            "Habit completion retry exhausted"
+                        )
+            );
     }
 
     @Test
@@ -696,5 +752,60 @@ class HabitServiceTest {
             .save(any(HabitCompletion.class));
         verify(applicationEventPublisher, never())
             .publishEvent(any(DashboardChangedEvent.class));
+
+        assertThat(logAppender.list)
+            .filteredOn(
+                logEvent ->
+                    logEvent.getFormattedMessage()
+                        .startsWith("Habit completion")
+            )
+            .satisfiesExactly(
+                firstLog -> {
+                    assertThat(firstLog.getLevel())
+                        .isEqualTo(Level.INFO);
+                    assertThat(firstLog.getFormattedMessage())
+                        .isEqualTo(
+                            "Habit completion version conflict; "
+                                + "retrying once, habitId: 42, "
+                                + "date: 2024-01-05, reason: "
+                                + "Habit version conflict: 42"
+                        );
+                },
+                secondLog -> {
+                    assertThat(secondLog.getLevel())
+                        .isEqualTo(Level.WARN);
+                    assertThat(secondLog.getFormattedMessage())
+                        .isEqualTo(
+                            "Habit completion retry exhausted, "
+                                + "habitId: 42, date: 2024-01-05, "
+                                + "reason: Habit version conflict: 42"
+                        );
+                }
+            );
+    }
+
+    @Test
+    void completeFailsLoudlyWhenTransactionReturnsNull() {
+        Long habitId = 42L;
+        LocalDate today = LocalDate.of(2024, 1, 5);
+
+        doReturn(null)
+            .when(transactionTemplate)
+            .execute(any());
+
+        assertThatThrownBy(
+            () -> habitService.complete(habitId, today)
+        )
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage(
+                "Completion transaction must return a Habit"
+            );
+
+        verifyNoInteractions(
+            habitMapper,
+            habitWriteRepository,
+            completionRepository,
+            applicationEventPublisher
+        );
     }
 }

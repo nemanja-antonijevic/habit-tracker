@@ -41,6 +41,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
@@ -78,8 +79,28 @@ public class HabitService {
     public Habit complete(Long habitId, LocalDate today) {
         try {
             return executeCompleteAttempt(habitId, today);
-        } catch (HabitVersionConflictException ex) {
-            return executeCompleteAttempt(habitId, today);
+        } catch (HabitVersionConflictException firstConflict) {
+            logger.info(
+                "Habit completion version conflict; retrying once, "
+                    + "habitId: {}, date: {}, reason: {}",
+                habitId,
+                today,
+                firstConflict.getMessage()
+            );
+
+            try {
+                return executeCompleteAttempt(habitId, today);
+            } catch (HabitVersionConflictException retryConflict) {
+                logger.warn(
+                    "Habit completion retry exhausted, "
+                        + "habitId: {}, date: {}, reason: {}",
+                    habitId,
+                    today,
+                    retryConflict.getMessage()
+                );
+
+                throw retryConflict;
+            }
         }
     }
 
@@ -87,8 +108,11 @@ public class HabitService {
         Long habitId,
         LocalDate today
     ) {
-        return transactionTemplate.execute(
-            status -> completeAttempt(habitId, today)
+        return Objects.requireNonNull(
+            transactionTemplate.execute(
+                status -> completeAttempt(habitId, today)
+            ),
+            "Completion transaction must return a Habit"
         );
     }
 
@@ -128,9 +152,6 @@ public class HabitService {
                     habit.getCurrentStreak(),
                     habit.getCompletionCount()
             ));
-
-            logger.info("HabitCompletedEvent published, habitId: {}, date: {}, currentStreak: {}",
-                    habitId, today, habit.getCurrentStreak());
         } else {
             logger.debug("Habit completion skipped (already completed), habitId: {}, date: {}", habitId, today);
         }
