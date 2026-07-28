@@ -1053,7 +1053,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                 )))
                 .andExpect(jsonPath("$.notFound", containsInAnyOrder(
                         (int) missingId
-                )));
+                )))
+                .andExpect(jsonPath("$.conflicted.length()").value(0));
     }
 
     @Test
@@ -1082,7 +1083,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                         habit.getId().intValue()
                 )))
                 .andExpect(jsonPath("$.failed.length()").value(0))
-                .andExpect(jsonPath("$.notFound.length()").value(0));
+                .andExpect(jsonPath("$.notFound.length()").value(0))
+                .andExpect(jsonPath("$.conflicted.length()").value(0));
     }
 
     @Test

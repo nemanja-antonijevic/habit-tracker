@@ -270,7 +270,7 @@ class HabitServiceTest {
     }
 
     @Test
-    void bulkCompletePublishesSingleDashboardChangeWhenMultipleHabitsChange() {
+    void bulkCompletePublishesDashboardChangePerCompletedHabit() {
         LocalDate today = LocalDate.of(2024, 1, 5);
 
         Habit firstHabit = new Habit("Read");
@@ -287,7 +287,7 @@ class HabitServiceTest {
         verify(habitWriteRepository).save(same(firstHabit));
         verify(habitWriteRepository).save(same(secondHabit));
 
-        verify(applicationEventPublisher, times(1))
+        verify(applicationEventPublisher, times(2))
             .publishEvent(any(DashboardChangedEvent.class));
     }
 
@@ -309,6 +309,200 @@ class HabitServiceTest {
 
         verify(applicationEventPublisher, never())
             .publishEvent(any(DashboardChangedEvent.class));
+    }
+
+    @Test
+    void bulkCompleteRetriesConflictedItemOnceAndReportsItAsCompleted() {
+        Long habitId = 42L;
+        LocalDate today = LocalDate.of(2024, 1, 5);
+
+        Habit firstSnapshot = new Habit("Read");
+        firstSnapshot.synchronizePersistenceVersion(0L);
+
+        Habit retrySnapshot = new Habit("Read");
+        retrySnapshot.synchronizePersistenceVersion(1L);
+
+        when(habitMapper.findById(habitId))
+            .thenReturn(
+                firstSnapshot,
+                retrySnapshot
+            );
+
+        when(habitWriteRepository.save(same(firstSnapshot)))
+            .thenThrow(
+                new HabitVersionConflictException(habitId)
+            );
+
+        when(habitWriteRepository.save(same(retrySnapshot)))
+            .thenReturn(retrySnapshot);
+
+        var response =
+            habitService.bulkComplete(List.of(habitId), today);
+
+        assertThat(response.completed())
+            .containsExactly(habitId);
+        assertThat(response.conflicted()).isEmpty();
+
+        verify(habitMapper, times(2))
+            .findById(habitId);
+        verify(habitWriteRepository)
+            .save(same(firstSnapshot));
+        verify(habitWriteRepository)
+            .save(same(retrySnapshot));
+        verify(completionRepository)
+            .save(any(HabitCompletion.class));
+        verify(applicationEventPublisher)
+            .publishEvent(any(DashboardChangedEvent.class));
+
+        assertThat(logAppender.list)
+            .anySatisfy(logEvent -> {
+                assertThat(logEvent.getLevel())
+                    .isEqualTo(Level.INFO);
+                assertThat(logEvent.getFormattedMessage())
+                    .isEqualTo(
+                        "Bulk habit completion version conflict; "
+                            + "retrying once, habitId: 42, "
+                            + "date: 2024-01-05, reason: "
+                            + "Habit version conflict: 42"
+                    );
+            });
+    }
+
+    @Test
+    void bulkCompleteReportsExhaustedConflictAndContinuesWithNextItem() {
+        Long conflictedHabitId = 41L;
+        Long completedHabitId = 42L;
+        LocalDate today = LocalDate.of(2024, 1, 5);
+
+        Habit firstConflictedSnapshot = new Habit("Read");
+        firstConflictedSnapshot.synchronizePersistenceVersion(0L);
+
+        Habit retryConflictedSnapshot = new Habit("Read");
+        retryConflictedSnapshot.synchronizePersistenceVersion(1L);
+
+        Habit completedHabit = new Habit("Exercise");
+        completedHabit.synchronizePersistenceVersion(0L);
+
+        when(habitMapper.findById(conflictedHabitId))
+            .thenReturn(
+                firstConflictedSnapshot,
+                retryConflictedSnapshot
+            );
+
+        when(habitMapper.findById(completedHabitId))
+            .thenReturn(completedHabit);
+
+        when(habitWriteRepository.save(
+            same(firstConflictedSnapshot)
+        )).thenThrow(
+            new HabitVersionConflictException(conflictedHabitId)
+        );
+
+        when(habitWriteRepository.save(
+            same(retryConflictedSnapshot)
+        )).thenThrow(
+            new HabitVersionConflictException(conflictedHabitId)
+        );
+
+        when(habitWriteRepository.save(same(completedHabit)))
+            .thenReturn(completedHabit);
+
+        var response = habitService.bulkComplete(
+            List.of(conflictedHabitId, completedHabitId),
+            today
+        );
+
+        assertThat(response.conflicted())
+            .containsExactly(conflictedHabitId);
+        assertThat(response.completed())
+            .containsExactly(completedHabitId);
+        assertThat(response.skipped()).isEmpty();
+        assertThat(response.failed()).isEmpty();
+        assertThat(response.notFound()).isEmpty();
+
+        verify(habitMapper, times(2))
+            .findById(conflictedHabitId);
+        verify(habitMapper)
+            .findById(completedHabitId);
+
+        verify(completionRepository, times(1))
+            .save(any(HabitCompletion.class));
+        verify(applicationEventPublisher, times(1))
+            .publishEvent(any(DashboardChangedEvent.class));
+
+        assertThat(logAppender.list)
+            .anySatisfy(logEvent -> {
+                assertThat(logEvent.getLevel())
+                    .isEqualTo(Level.WARN);
+                assertThat(logEvent.getFormattedMessage())
+                    .isEqualTo(
+                        "Bulk habit completion retry exhausted, "
+                            + "habitId: 41, date: 2024-01-05, "
+                            + "reason: Habit version conflict: 41"
+                    );
+            });
+    }
+
+    @Test
+    void bulkCompleteDoesNotSwallowUnexpectedException() {
+        Long completedHabitId = 41L;
+        Long brokenHabitId = 42L;
+        LocalDate today = LocalDate.of(2024, 1, 5);
+
+        Habit completedHabit = new Habit("Read");
+        completedHabit.synchronizePersistenceVersion(0L);
+
+        when(habitMapper.findById(completedHabitId))
+            .thenReturn(completedHabit);
+
+        when(habitMapper.findById(brokenHabitId))
+            .thenThrow(
+                new IllegalStateException("Unexpected database failure")
+            );
+
+        assertThatThrownBy(
+            () -> habitService.bulkComplete(
+                List.of(completedHabitId, brokenHabitId),
+                today
+            )
+        )
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("Unexpected database failure");
+
+        verify(habitWriteRepository)
+            .save(same(completedHabit));
+        verify(completionRepository)
+            .save(any(HabitCompletion.class));
+        verify(applicationEventPublisher)
+            .publishEvent(any(DashboardChangedEvent.class));
+    }
+
+    @Test
+    void bulkCompleteFailsWhenTransactionReturnsNoOutcome() {
+        Long habitId = 42L;
+        LocalDate today = LocalDate.of(2024, 1, 5);
+
+        doReturn(null)
+            .when(transactionTemplate)
+            .execute(any());
+
+        assertThatThrownBy(
+            () -> habitService.bulkComplete(
+                List.of(habitId),
+                today
+            )
+        )
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage(
+                "Bulk completion transaction must return an outcome"
+            );
+
+        verifyNoInteractions(
+            habitMapper,
+            habitWriteRepository,
+            completionRepository,
+            applicationEventPublisher
+        );
     }
 
     @Test

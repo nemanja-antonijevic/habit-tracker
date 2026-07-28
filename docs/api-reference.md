@@ -430,7 +430,7 @@ POST /habits/bulk-complete
 
 Mark many habits as done today in one call. "Today" is resolved server-side from the system clock — there is no date in the request.
 
-**Why this exists alongside [endpoint 6](#6-mark-as-done).** The two are not redundant — they are two different *contracts* over the same operation, the same way Spring Data exposes both `save` and `saveAll`. Endpoint 6 is resource-scoped and fail-fast: it targets one habit and reports the outcome through the HTTP status (`404` for a missing habit, `400` for archived / off-day), which is the right ergonomics for the common single-habit case. Bulk-complete is best-effort: it always returns `200` and reports each id's outcome in the body, so one bad id never rolls back the others — the right shape for a "close out the day" action over several habits. The shared domain logic is not duplicated: both paths funnel through the same `completeExistingHabit` method in `HabitService`, so only the contract (error model, response shape, target cardinality) differs.
+**Why this exists alongside [endpoint 6](#6-mark-as-done).** The two are not redundant — they are two different *contracts* over the same operation, the same way Spring Data exposes both `save` and `saveAll`. Endpoint 6 is resource-scoped and fail-fast: it targets one habit and reports the outcome through the HTTP status (`404` for a missing habit, `400` for archived / off-day), which is the right ergonomics for the common single-habit case. Bulk-complete is best-effort: expected per-item outcomes always return `200` with each id's verdict in the body, and every id runs in its own transaction, so one bad id never rolls back the others — the right shape for a "close out the day" action over several habits. The shared domain logic is not duplicated: both paths funnel through the same `completeExistingHabit` method in `HabitService`, so only the contract (error model, response shape, target cardinality) differs.
 
 Request body (`BulkCompleteRequest`):
 
@@ -442,34 +442,39 @@ Request body (`BulkCompleteRequest`):
 |-------|------|-------------|
 | `habitIds` | `long[]` | Required, non-empty, at most 100 ids |
 
-**Best-effort semantics.** Each id is processed independently — one bad id never rolls back the others. The call returns `200 OK` with a per-item breakdown; the outcome is in the body, not the status code. For each id, exactly one bucket applies (checked in this order):
+**Best-effort semantics.** Each id is processed independently, in **its own transaction** — one bad id never rolls back the others. All expected per-item outcomes return `200 OK` with a per-item breakdown; the outcome is in the body, not the status code. For each id, exactly one bucket applies (checked in this order):
 
 - `notFound` — no habit with that id;
-- `failed` — the habit exists but cannot be completed today (archived, or today is not a scheduled day);
+- `failed` — the habit exists but cannot be completed today (archived, or today is not a scheduled day); a permanent reason — retrying without changing the habit cannot succeed;
 - `skipped` — already completed today (idempotent no-op, not an error);
+- `conflicted` — a concurrent write raced this item and the bounded retry (one fresh-read attempt in a new transaction) also hit a conflict; a transient reason — the item produced no write and **may be retried**;
 - `completed` — newly marked done today.
 
-Each newly `completed` habit follows the same path as [endpoint 6](#6-mark-as-done): it writes a history row and emits `HabitCompletedEvent`. `skipped`/`failed`/`notFound` produce no write and no event.
+**Per-item transactions and concurrency.** Each id gets a fresh read, all checks, and the write in one transaction; an optimistic-lock conflict triggers at most one retry in a new transaction against fresh state (mirroring [endpoint 6](#6-mark-as-done), which converges to an idempotent `200` the same way). Only an exhausted retry lands in `conflicted`. Because items commit independently, an *unexpected* infrastructure or programming failure mid-request (not an expected per-item outcome) surfaces as `500` — items committed before the failure stay committed. The "always `200`" promise covers expected per-item outcomes, not system failures.
 
-A duplicate id within the same request (e.g. `[1, 1]`) completes on the first occurrence and is `skipped` on the second, so the same id can appear in both `completed` and `skipped`.
+Each newly `completed` habit follows the same path as [endpoint 6](#6-mark-as-done): it writes a history row and emits `HabitCompletedEvent` after **its own** commit. `skipped`/`failed`/`notFound`/`conflicted` produce no write and no event.
+
+A duplicate id within the same request (e.g. `[1, 1]`) completes on the first occurrence and is `skipped` on the second (the second attempt's fresh read sees the first one's commit), so the same id can appear in both `completed` and `skipped`.
 
 **Response:** `200 OK`, `BulkCompleteResponse`.
 
 ```json
-{ "completed": [1], "skipped": [2], "failed": [3], "notFound": [999] }
+{ "completed": [1], "skipped": [2], "failed": [3], "notFound": [999], "conflicted": [] }
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `completed` | `long[]` | Newly marked done today |
 | `skipped` | `long[]` | Already completed today |
-| `failed` | `long[]` | Archived, or today is not a scheduled day |
+| `failed` | `long[]` | Archived, or today is not a scheduled day (permanent — do not retry) |
 | `notFound` | `long[]` | No habit with that id |
+| `conflicted` | `long[]` | Lost a concurrent race after one retry (transient — safe to retry) |
 
 | Status | Condition |
 |--------|-----------|
 | `200` | Processed (see body for the per-item breakdown) |
 | `400` | `habitIds` is missing, empty, or has more than 100 ids |
+| `500` | Unexpected system failure mid-request; items committed before it stay committed |
 
 ## 14. Count of habits due today
 
@@ -530,7 +535,7 @@ Behavior:
 - **Two data sources, by design.** `dueToday` / `completedToday` / `totalHabits` come from the write side (direct read of active habits), so they are immediately consistent. `activeStreaks` / `longestActiveStreak` come from the read model `habit_completion_stats` (Kafka projection), so they are **eventually consistent** — in the short window after a `complete` before the consumer processes the event, a habit can count toward `completedToday` while its streak has not yet landed in the read model.
 - **Streak liveness is corrected at read time against the schedule** — same rule as [endpoint 11](#11-habit-stats): a stored streak counts only if the last completion was today or the previous scheduled day, otherwise it is treated as `0`. The rule lives in one place (`Habit.isStreakAliveGiven`) shared by both endpoints so the two can never disagree.
 - **No N+1.** The summary is computed with exactly two queries regardless of habit count: one for the active habits, one batch query for their latest completion stats.
-- **Cached in Redis (cache-aside), keyed by date.** The response is cached under `dashboard-stats::<today>` with a 5-minute TTL. The cache is invalidated (whole `dashboard-stats` region cleared) *after commit* on any write that can affect the summary — `create`, `update`, `archive`, `unarchive`, `delete`, `complete`, `uncomplete`, `bulkComplete` — and again after the Kafka consumer updates the read model for `complete` / `uncomplete`. Because invalidation fires only after the transaction commits, a concurrent read cannot repopulate the cache with pre-commit state. The TTL is a safety net (missed invalidation, stalled consumer, manual data change), not the primary mechanism; it bounds how long a stale entry can live, but does not by itself close the eventual-consistency window described above.
+- **Cached in Redis (cache-aside), keyed by date.** The response is cached under `dashboard-stats::<today>` with a 5-minute TTL. The cache is invalidated (whole `dashboard-stats` region cleared) *after commit* on any write that can affect the summary — `create`, `update`, `archive`, `unarchive`, `delete`, `complete`, `uncomplete`, `bulkComplete` (once per completed item, after that item's own commit) — and again after the Kafka consumer updates the read model for `complete` / `uncomplete`. Because invalidation fires only after the transaction commits, a concurrent read cannot repopulate the cache with pre-commit state. The TTL is a safety net (missed invalidation, stalled consumer, manual data change), not the primary mechanism; it bounds how long a stale entry can live, but does not by itself close the eventual-consistency window described above.
 
 ## 16. Completion rate over a window
 

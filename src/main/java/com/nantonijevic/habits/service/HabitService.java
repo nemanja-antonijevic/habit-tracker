@@ -159,60 +159,121 @@ public class HabitService {
         return reallyCompleted;
     }
 
-    @Transactional
-    public BulkCompleteResponse bulkComplete(List<Long> habitIds, LocalDate today) {
+    // Intentionally not @Transactional: every item attempt owns its transaction.
+    // Wrapping this method in a transaction would make TransactionTemplate join it
+    // through REQUIRED propagation and break per-item durability.
+    public BulkCompleteResponse bulkComplete(
+        List<Long> habitIds,
+        LocalDate today
+    ) {
         List<Long> completed = new ArrayList<>();
         List<Long> skipped = new ArrayList<>();
         List<Long> failed = new ArrayList<>();
         List<Long> notFound = new ArrayList<>();
+        List<Long> conflicted = new ArrayList<>();
 
-        // One findById per id (N queries). This is a deliberate trade-off, not an
-        // oversight: best-effort semantics need a per-item notFound verdict, so each
-        // id is looked up individually. Acceptable at personal scale (tens of habits,
-        // capped at 100 by @Size on the request); a batch findAllById would not tell
-        // us which specific ids were missing without extra bookkeeping.
+        // One transactional findById attempt per id. This is deliberate:
+        // best-effort semantics require an independent verdict and commit boundary
+        // for every item. The request is capped at 100 ids.
         for (Long habitId : habitIds) {
-            var maybeHabit = Optional.ofNullable(
-                habitMapper.findById(habitId)
-            );
-            if (maybeHabit.isEmpty()) {
-                notFound.add(habitId);
-                continue;
+            BulkCompleteOutcome outcome =
+                completeBulkItemWithRetry(habitId, today);
+
+            switch (outcome) {
+                case COMPLETED -> completed.add(habitId);
+                case SKIPPED -> skipped.add(habitId);
+                case FAILED -> failed.add(habitId);
+                case NOT_FOUND -> notFound.add(habitId);
+                case CONFLICTED -> conflicted.add(habitId);
             }
+        }
 
-            Habit habit = maybeHabit.get();
+        return new BulkCompleteResponse(
+            completed,
+            skipped,
+            failed,
+            notFound,
+            conflicted
+        );
+    }
 
-            if (habit.isArchived()) {
-                failed.add(habitId);
-                continue;
-            }
-
-            if (!habit.isScheduledFor(today)) {
-                failed.add(habitId);
-                continue;
-            }
-
-            if (habit.wasCompletedOn(today)) {
-                skipped.add(habitId);
-                continue;
-            }
-
-            completeExistingHabit(
-                habit,
+    private BulkCompleteOutcome completeBulkItemWithRetry(
+        Long habitId,
+        LocalDate today
+    ) {
+        try {
+            return executeBulkCompleteAttempt(habitId, today);
+        } catch (HabitVersionConflictException firstConflict) {
+            logger.info(
+                "Bulk habit completion version conflict; retrying once, "
+                    + "habitId: {}, date: {}, reason: {}",
                 habitId,
-                today
+                today,
+                firstConflict.getMessage()
             );
 
-            completed.add(habitId);
+            try {
+                return executeBulkCompleteAttempt(habitId, today);
+            } catch (HabitVersionConflictException retryConflict) {
+                logger.warn(
+                    "Bulk habit completion retry exhausted, "
+                        + "habitId: {}, date: {}, reason: {}",
+                    habitId,
+                    today,
+                    retryConflict.getMessage()
+                );
+
+                return BulkCompleteOutcome.CONFLICTED;
+            }
+        }
+    }
+
+    private BulkCompleteOutcome executeBulkCompleteAttempt(
+        Long habitId,
+        LocalDate today
+    ) {
+        return Objects.requireNonNull(
+            transactionTemplate.execute(
+                status -> bulkCompleteAttempt(habitId, today)
+            ),
+            "Bulk completion transaction must return an outcome"
+        );
+    }
+
+    private BulkCompleteOutcome bulkCompleteAttempt(
+        Long habitId,
+        LocalDate today
+    ) {
+        Habit habit = habitMapper.findById(habitId);
+
+        if (habit == null) {
+            return BulkCompleteOutcome.NOT_FOUND;
         }
 
-        if (!completed.isEmpty()) {
-            applicationEventPublisher.publishEvent(
-                new DashboardChangedEvent()
-            );
+        if (habit.isArchived()) {
+            return BulkCompleteOutcome.FAILED;
         }
 
-        return new BulkCompleteResponse(completed, skipped, failed, notFound);
+        if (!habit.isScheduledFor(today)) {
+            return BulkCompleteOutcome.FAILED;
+        }
+
+        if (habit.wasCompletedOn(today)) {
+            return BulkCompleteOutcome.SKIPPED;
+        }
+
+        boolean reallyCompleted =
+            completeExistingHabit(habit, habitId, today);
+
+        if (!reallyCompleted) {
+            return BulkCompleteOutcome.SKIPPED;
+        }
+
+        applicationEventPublisher.publishEvent(
+            new DashboardChangedEvent()
+        );
+
+        return BulkCompleteOutcome.COMPLETED;
     }
 
     @Transactional
@@ -588,5 +649,13 @@ public class HabitService {
         }
 
         return count;
+    }
+
+    private enum BulkCompleteOutcome {
+        COMPLETED,
+        SKIPPED,
+        FAILED,
+        NOT_FOUND,
+        CONFLICTED
     }
 }

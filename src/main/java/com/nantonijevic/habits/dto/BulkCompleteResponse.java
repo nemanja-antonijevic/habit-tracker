@@ -6,6 +6,7 @@ public record BulkCompleteResponse(
         List<Long> completed,
         List<Long> skipped,
         List<Long> failed,
-        List<Long> notFound
+        List<Long> notFound,
+        List<Long> conflicted
 ) {
 }
