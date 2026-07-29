@@ -34,12 +34,12 @@ docker compose down -v      # also drop the volume for a clean database
 
 ```bash
 ./mvnw test          # fast suite — unit + H2 + Embedded Kafka, no Docker needed
-./mvnw verify        # full suite — also runs Redis Testcontainers tests, requires Docker
+./mvnw verify        # full suite — also runs Redis + MySQL Testcontainers tests, requires Docker
 ```
 
 The fast suite runs on **H2 in-memory** in MySQL-compatible mode (`MODE=MySQL`) and does not need Docker. The Spring context starts in ~3s, Flyway migrates H2, and each run gets a clean database.
 
-Docker-dependent tests (Redis via Testcontainers) are named `*IT` and run under the Maven Failsafe plugin in the `verify` lifecycle. Without Docker, `./mvnw verify` **fails loudly** instead of silently skipping them — a green `verify` always means the integration tests actually ran. Note that `./mvnw integration-test` is not a substitute for `verify`: Failsafe records failures during `integration-test` but only fails the build in the `verify` goal.
+Docker-dependent tests (Redis and MySQL via Testcontainers) are named `*IT` and run under the Maven Failsafe plugin in the `verify` lifecycle. Without Docker, `./mvnw verify` **fails loudly** instead of silently skipping them — a green `verify` always means the integration tests actually ran. Note that `./mvnw integration-test` is not a substitute for `verify`: Failsafe records failures during `integration-test` but only fails the build in the `verify` goal.
 
 ## API
 
@@ -70,7 +70,8 @@ src/test/resources/
 ## Database
 
 - **Prod (local run):** MySQL 8.0 via docker-compose, data persisted in the named volume `habits_data`.
-- **Test:** H2 in-memory with `MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE`. Flyway runs the same migrations.
+- **Test (fast suite):** H2 in-memory with `MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE`. Flyway runs the same migrations.
+- **Test (`verify` only):** `HabitCompletionConcurrencyMySqlIT` runs against a real `mysql:8.0.36` container. H2 in MySQL mode cannot prove InnoDB behaviour — `REPEATABLE READ` snapshot semantics (why the completion retry needs a *new* transaction) and the `V12` unique constraint on the production engine are only observable here. The image tag is pinned so the proof does not drift.
 
 ## Cache
 
