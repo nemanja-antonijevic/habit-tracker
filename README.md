@@ -6,8 +6,8 @@ Event-driven habit tracking app. Side project for the 100-day BE plan.
 
 - **F1 (d1-21):** Spring Boot 3, MySQL 8 (prod) / H2 in-memory (test), Flyway
 - **F2 (d22-50):** + Kafka producer/consumer, async stats, idempotency
-- **F3 (d51-78):** + Redis, concurrency challenges, JFR profiling
-- **F4 (d79-100):** + GitHub Actions CI, Prometheus
+- **F3 (d51-78):** + Redis, concurrency challenges, JFR profiling, GitHub Actions CI
+- **F4 (d79-100):** + Prometheus
 
 ## Prerequisites
 
@@ -40,6 +40,10 @@ docker compose down -v      # also drop the volume for a clean database
 The fast suite runs on **H2 in-memory** in MySQL-compatible mode (`MODE=MySQL`) and does not need Docker. The Spring context starts in ~3s, Flyway migrates H2, and each run gets a clean database.
 
 Docker-dependent tests (Redis and MySQL via Testcontainers) are named `*IT` and run under the Maven Failsafe plugin in the `verify` lifecycle. Without Docker, `./mvnw verify` **fails loudly** instead of silently skipping them — a green `verify` always means the integration tests actually ran. Note that `./mvnw integration-test` is not a substitute for `verify`: Failsafe records failures during `integration-test` but only fails the build in the `verify` goal.
+
+## CI
+
+`.github/workflows/ci.yml` runs `./mvnw verify` on every push and pull request to `main`. Because `verify` fails loudly without Docker, a green CI run is proof that the Redis and MySQL Testcontainers tests actually executed — the gate cannot pass by skipping them. A `docker info` preflight step fails fast with a readable error if the runner has no daemon, instead of surfacing it as a Testcontainers bootstrap failure minutes later.
 
 ## API
 
