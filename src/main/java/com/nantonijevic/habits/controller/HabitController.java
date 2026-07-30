@@ -30,6 +30,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
+import java.time.Clock;
 import java.time.LocalDate;
 
 @RestController
@@ -38,13 +39,16 @@ public class HabitController {
 
     private final HabitService habitService;
 
-    public HabitController(HabitService habitService) {
+    private final Clock clock;
+
+    public HabitController(HabitService habitService, Clock clock) {
         this.habitService = habitService;
+        this.clock = clock;
     }
 
     @PostMapping
     public ResponseEntity<HabitResponse> create(@Valid @RequestBody CreateHabitRequest request) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
         Habit saved = habitService.create(request.name(), request.scheduledDays());
         return ResponseEntity.created(URI.create("/habits/" + saved.getId()))
                 .body(HabitResponse.from(saved, today));
@@ -52,7 +56,7 @@ public class HabitController {
 
     @PostMapping("/bulk-complete")
     public BulkCompleteResponse bulkComplete(@Valid @RequestBody BulkCompleteRequest request) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
 
         return habitService.bulkComplete(request.habitIds(), today);
     }
@@ -61,14 +65,14 @@ public class HabitController {
     public Page<HabitResponse> list(@RequestParam(defaultValue = "false") boolean includeArchived,
                                     @RequestParam(required = false) String name,
                                     Pageable pageable) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
         return habitService.list(includeArchived, name, pageable)
                 .map(habit -> HabitResponse.from(habit, today));
     }
 
     @GetMapping("/{id}")
     public HabitResponse getById(@PathVariable Long id) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
         Habit habit = habitService.getById(id);
         return HabitResponse.from(habit, today);
     }
@@ -81,41 +85,41 @@ public class HabitController {
 
     @PutMapping("/{id}")
     public HabitResponse update(@PathVariable Long id, @Valid @RequestBody UpdateHabitRequest request) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
         Habit habit = habitService.update(id, request.version(), request.name(), request.scheduledDays());
         return HabitResponse.from(habit, today);
     }
 
     @PostMapping("/{id}/complete")
     public HabitResponse complete(@PathVariable Long id) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
         Habit habit = habitService.complete(id, today);
         return HabitResponse.from(habit, today);
     }
 
     @PostMapping("/{id}/archive")
     public HabitResponse archive(@PathVariable Long id) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
         Habit habit = habitService.archive(id);
         return HabitResponse.from(habit, today);
     }
 
     @PostMapping("/{id}/unarchive")
     public HabitResponse unarchive(@PathVariable Long id) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
         Habit habit = habitService.unarchive(id);
         return HabitResponse.from(habit, today);
     }
 
     @GetMapping("/{id}/stats")
     public HabitStatsResponse getStats(@PathVariable Long id) {
-        HabitStatsView view = habitService.getStatsProjection(id, LocalDate.now());
+        HabitStatsView view = habitService.getStatsProjection(id, LocalDate.now(clock));
         return HabitStatsResponse.from(view);
     }
 
     @PostMapping("/{id}/uncomplete")
     public HabitResponse uncomplete(@PathVariable Long id) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
         Habit habit = habitService.uncomplete(id, today);
         return HabitResponse.from(habit, today);
     }
@@ -144,14 +148,14 @@ public class HabitController {
 
     @GetMapping("/due-today")
     public Page<HabitResponse> dueToday(Pageable pageable) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
         return habitService.dueToday(today, pageable)
                 .map(habit -> HabitResponse.from(habit, today));
     }
 
     @GetMapping("/due-today/count")
     public DueTodayCountResponse dueTodayCount() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
 
         long count = habitService.countDueToday(today);
 
@@ -160,6 +164,6 @@ public class HabitController {
 
     @GetMapping("/stats")
     public HabitDashboardResponse getDashboardStats() {
-        return habitService.getDashboardStats(LocalDate.now());
+        return habitService.getDashboardStats(LocalDate.now(clock));
     }
 }
