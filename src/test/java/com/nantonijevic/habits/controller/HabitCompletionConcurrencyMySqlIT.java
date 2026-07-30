@@ -21,8 +21,12 @@ import org.mockito.ArgumentCaptor;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.mock.mockito.SpyBean;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -34,7 +38,10 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -57,6 +64,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
     properties =
         "spring.kafka.listener.auto-startup=false"
 )
+@Import(
+    HabitCompletionConcurrencyMySqlIT
+        .FixedClockConfiguration.class
+)
 @AutoConfigureMockMvc
 class HabitCompletionConcurrencyMySqlIT
     extends AbstractIntegrationTest {
@@ -66,6 +77,16 @@ class HabitCompletionConcurrencyMySqlIT
     private static final long WRITE_GATE_TIMEOUT_SECONDS = 10;
 
     private static final long REQUEST_TIMEOUT_SECONDS = 20;
+
+    private static final Instant TEST_INSTANT =
+        Instant.parse(
+            "2026-07-30T00:30:00Z"
+        );
+
+    private static final ZoneId TEST_ZONE =
+        ZoneId.of(
+            "Etc/GMT+12"
+        );
 
     @Container
     static final MySQLContainer<?> MYSQL =
@@ -113,6 +134,9 @@ class HabitCompletionConcurrencyMySqlIT
 
     @Autowired
     private HabitMapper habitMapper;
+
+    @Autowired
+    private Clock clock;
 
     @SpyBean
     private HabitWriteRepository habitWriteRepository;
@@ -188,7 +212,8 @@ class HabitCompletionConcurrencyMySqlIT
     void concurrentSameDayCompletionsConvergeThroughMySqlConflictRetry()
         throws Exception {
 
-        LocalDate today = LocalDate.now();
+        LocalDate today =
+            LocalDate.now(clock);
 
         Habit habit =
             createHabitScheduledFor(today);
@@ -427,6 +452,21 @@ class HabitCompletionConcurrencyMySqlIT
                     + REQUEST_TIMEOUT_SECONDS
                     + " seconds; possible InnoDB lock contention",
                 exception
+            );
+        }
+    }
+
+    @TestConfiguration(
+        proxyBeanMethods = false
+    )
+    static class FixedClockConfiguration {
+
+        @Bean
+        @Primary
+        Clock testClock() {
+            return Clock.fixed(
+                TEST_INSTANT,
+                TEST_ZONE
             );
         }
     }
