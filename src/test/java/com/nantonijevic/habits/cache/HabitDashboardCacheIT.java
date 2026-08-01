@@ -13,6 +13,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.cache.CacheManager;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.redis.cache.CacheStatistics;
+import org.springframework.data.redis.cache.RedisCache;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -29,6 +31,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import static com.nantonijevic.habits.config.RedisCacheConfig.DASHBOARD_STATS_CACHE;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -87,7 +90,7 @@ class HabitDashboardCacheIT {
     @BeforeEach
     void clearDashboardCache() {
         cacheManager.getCache(
-            RedisCacheConfig.DASHBOARD_STATS_CACHE
+            DASHBOARD_STATS_CACHE
         ).clear();
     }
 
@@ -206,8 +209,28 @@ class HabitDashboardCacheIT {
             .isFalse();
     }
 
+    @Test
+    void dashboardCacheRecordsHitMissAndPutStatistics() {
+        RedisCache cache = (RedisCache) cacheManager.getCache(DASHBOARD_STATS_CACHE);
+        assertThat(cache).isNotNull();
+
+        cache.clearStatistics();
+        when(habitMapper.findActive()).thenReturn(List.of());
+
+        LocalDate today = LocalDate.of(2026, 8, 1);
+
+        habitService.getDashboardStats(today);
+        habitService.getDashboardStats(today);
+
+        CacheStatistics statistics = cache.getStatistics();
+
+        assertThat(statistics.getMisses()).isEqualTo(1);
+        assertThat(statistics.getHits()).isEqualTo(1);
+        assertThat(statistics.getPuts()).isEqualTo(1);
+    }
+
     private String dashboardKey(LocalDate today) {
-        return RedisCacheConfig.DASHBOARD_STATS_CACHE
+        return DASHBOARD_STATS_CACHE
             + "::"
             + dashboardCacheGeneration.current()
             + "::"

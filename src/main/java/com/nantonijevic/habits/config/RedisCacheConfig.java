@@ -52,6 +52,7 @@ public class RedisCacheConfig implements CachingConfigurer {
                 .disableCachingNullValues();
 
         return RedisCacheManager.builder(connectionFactory)
+            .enableStatistics()
             .withCacheConfiguration(
                 DASHBOARD_STATS_CACHE,
                 dashboardConfiguration
