@@ -20,16 +20,23 @@ public interface HabitCompletionStatRepository extends JpaRepository<HabitComple
       """)
     HabitStatsView findStatsByHabitId(@Param("habitId") Long habitId);
 
-    @Query("""
-    SELECT s
-    FROM HabitCompletionStat s
-    WHERE s.habitId IN :habitIds
-      AND s.completedOn = (
-          SELECT MAX(s2.completedOn)
-          FROM HabitCompletionStat s2
-          WHERE s2.habitId = s.habitId
-      )
-    """)
+    @Query(
+        value = """
+        SELECT s.*
+        FROM habit_completion_stats s
+        JOIN (
+            SELECT
+                habit_id,
+                MAX(completed_on) AS completed_on
+            FROM habit_completion_stats
+            WHERE habit_id IN (:habitIds)
+            GROUP BY habit_id
+        ) latest
+            ON latest.habit_id = s.habit_id
+            AND latest.completed_on = s.completed_on
+        """,
+        nativeQuery = true
+    )
     List<HabitCompletionStat> findLatestByHabitIds(
         @Param("habitIds") Collection<Long> habitIds
     );

@@ -1,5 +1,6 @@
 package com.nantonijevic.habits.repository;
 
+import com.nantonijevic.habits.domain.HabitCompletionStat;
 import com.nantonijevic.habits.dto.HabitStatsView;
 import com.nantonijevic.habits.event.HabitCompletedEvent;
 import com.nantonijevic.habits.event.HabitCompletedEventConsumer;
@@ -15,10 +16,12 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.test.context.EmbeddedKafka;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 
@@ -101,6 +104,57 @@ class HabitCompletionStatRepositoryIntegrationTest {
             assertThat(stats.longestStreak()).isNull();
             assertThat(stats.lastCompletedOn()).isNull();
         });
+    }
+
+    @Test
+    void findsLatestStatForEachRequestedHabitAndOmitsMissingHabits() {
+        LocalDate firstDay = LocalDate.of(2026, 1, 10);
+        LocalDate latestDay = LocalDate.of(2026, 1, 11);
+
+        // 303L is requested without stats; 404L has stats but is not requested.
+        statRepository.saveAllAndFlush(List.of(
+            new HabitCompletionStat(
+                101L,
+                firstDay,
+                1,
+                1
+            ),
+            new HabitCompletionStat(
+                101L,
+                latestDay,
+                2,
+                2
+            ),
+            new HabitCompletionStat(
+                202L,
+                latestDay,
+                7,
+                12
+            ),
+            new HabitCompletionStat(
+                404L,
+                latestDay,
+                9,
+                20
+            )
+        ));
+
+        List<HabitCompletionStat> latestStats =
+            statRepository.findLatestByHabitIds(
+                List.of(101L, 202L, 303L)
+            );
+
+        assertThat(latestStats)
+            .extracting(
+                HabitCompletionStat::getHabitId,
+                HabitCompletionStat::getCompletedOn,
+                HabitCompletionStat::getCurrentStreak,
+                HabitCompletionStat::getCompletionCount
+            )
+            .containsExactlyInAnyOrder(
+                tuple(101L, latestDay, 2, 2),
+                tuple(202L, latestDay, 7, 12)
+            );
     }
 
     private void expectEvents(int count) {

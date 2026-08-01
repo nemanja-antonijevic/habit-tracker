@@ -1002,4 +1002,23 @@ class HabitServiceTest {
             applicationEventPublisher
         );
     }
+
+    @Test
+    void dashboardDoesNotQueryStatsWhenThereAreNoActiveHabits() {
+        LocalDate today = LocalDate.of(2026, 8, 1);
+
+        when(habitMapper.findActive())
+            .thenReturn(List.of());
+
+        var dashboard = habitService.getDashboardStats(today);
+
+        assertThat(dashboard.dueToday()).isZero();
+        assertThat(dashboard.completedToday()).isZero();
+        assertThat(dashboard.activeStreaks()).isZero();
+        assertThat(dashboard.longestActiveStreak()).isZero();
+        assertThat(dashboard.totalHabits()).isZero();
+
+        verify(habitMapper).findActive();
+        verifyNoInteractions(completionStatRepository);
+    }
 }
