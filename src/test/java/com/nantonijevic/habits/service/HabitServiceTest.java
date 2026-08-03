@@ -28,6 +28,7 @@ import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -63,6 +64,9 @@ class HabitServiceTest {
 
     @Mock
     private TransactionTemplate transactionTemplate;
+
+    @Mock
+    private Clock clock;
 
     @InjectMocks
     private HabitService habitService;
@@ -103,6 +107,11 @@ class HabitServiceTest {
 
     @Test
     void createUsesMyBatisWritePath() {
+        Instant createdAt =
+            Instant.parse("2026-01-15T12:00:00Z");
+
+        when(clock.instant()).thenReturn(createdAt);
+
         EnumSet<DayOfWeek> scheduledDays = EnumSet.of(
             DayOfWeek.MONDAY,
             DayOfWeek.WEDNESDAY,
@@ -116,6 +125,7 @@ class HabitServiceTest {
 
         assertThat(created.getName()).isEqualTo("Exercise");
         assertThat(created.getScheduledDays()).isEqualTo(scheduledDays);
+        assertThat(created.getCreatedAt()).isEqualTo(createdAt);
 
         verify(habitWriteRepository).save(same(created));
     }
@@ -1001,6 +1011,51 @@ class HabitServiceTest {
             completionRepository,
             applicationEventPublisher
         );
+    }
+
+    @Test
+    void completionRateIncludesBusinessDateOnWhichNewHabitWasCompleted() {
+        Long habitId = 42L;
+        // Must be earlier than the ambient clock so the old implementation
+        // incorrectly clamps the entire completion-rate window away.
+        LocalDate businessDate = LocalDate.of(2020, 1, 1);
+
+        Instant businessInstant = businessDate
+            .atTime(12, 0)
+            .atZone(ZoneId.systemDefault())
+            .toInstant();
+
+        when(clock.instant()).thenReturn(businessInstant);
+
+        when(habitWriteRepository.save(any(Habit.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Habit habit = habitService.create(
+            "Read",
+            EnumSet.allOf(DayOfWeek.class)
+        );
+
+        when(habitMapper.findById(habitId))
+            .thenReturn(habit);
+
+        when(completionStatRepository.findCompletedDatesInPeriod(
+            habitId,
+            businessDate,
+            businessDate
+        )).thenReturn(List.of(businessDate));
+
+        habitService.complete(habitId, businessDate);
+
+        var response = habitService.getCompletionRate(
+            habitId,
+            businessDate,
+            businessDate
+        );
+
+        assertThat(response.scheduled()).isEqualTo(1);
+        assertThat(response.completed()).isEqualTo(1);
+        assertThat(response.rate())
+            .isEqualByComparingTo("1.0000");
     }
 
     @Test
