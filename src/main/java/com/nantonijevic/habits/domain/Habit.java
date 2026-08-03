@@ -6,6 +6,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Objects;
 
 public class Habit {
 
@@ -33,8 +34,15 @@ public class Habit {
     }
 
     public Habit(String name) {
+        this(name, Instant.now());
+    }
+
+    public Habit(String name, Instant createdAt) {
         this.name = name;
-        this.createdAt = Instant.now();
+        this.createdAt = Objects.requireNonNull(
+            createdAt,
+            "createdAt must not be null"
+        );
     }
 
     public Long getVersion() {

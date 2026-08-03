@@ -34,6 +34,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -59,6 +60,7 @@ public class HabitService {
     private final ApplicationEventPublisher applicationEventPublisher;
     private final HabitCompletionStatRepository completionStatRepository;
     private final TransactionTemplate transactionTemplate;
+    private final Clock clock;
 
     public HabitService(HabitSearchRepository habitSearchRepository,
                         HabitWriteRepository habitWriteRepository,
@@ -66,7 +68,8 @@ public class HabitService {
                         HabitCompletionRepository completionRepository,
                         ApplicationEventPublisher applicationEventPublisher,
                         HabitCompletionStatRepository completionStatRepository,
-                        TransactionTemplate transactionTemplate) {
+                        TransactionTemplate transactionTemplate,
+                        Clock clock) {
         this.habitSearchRepository = habitSearchRepository;
         this.habitWriteRepository = habitWriteRepository;
         this.habitMapper = habitMapper;
@@ -74,6 +77,7 @@ public class HabitService {
         this.applicationEventPublisher = applicationEventPublisher;
         this.completionStatRepository = completionStatRepository;
         this.transactionTemplate = transactionTemplate;
+        this.clock = clock;
     }
 
     public Habit complete(Long habitId, LocalDate today) {
@@ -278,7 +282,7 @@ public class HabitService {
 
     @Transactional
     public Habit create(String name, Set<DayOfWeek> scheduledDays) {
-        Habit habit = new Habit(name);
+        Habit habit = new Habit(name, clock.instant());
 
         EnumSet<DayOfWeek> effectiveScheduledDays = scheduledDays == null
                 ? EnumSet.allOf(DayOfWeek.class)
