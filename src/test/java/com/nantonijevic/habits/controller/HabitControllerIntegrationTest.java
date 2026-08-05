@@ -41,6 +41,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
+    private static final ZoneId TEST_ZONE =
+        ZoneId.systemDefault();
+
     @Autowired
     @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
     private MockMvc mockMvc;
@@ -306,8 +309,14 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     void listHabits_returnsZeroCurrentStreak_whenLastCompletionIsOlderThanYesterday() throws Exception {
         var habit = new Habit("Read");
 
-        habit.complete(LocalDate.now().minusDays(3));
-        habit.complete(LocalDate.now().minusDays(2));
+        habit.complete(
+            LocalDate.now(TEST_ZONE).minusDays(3),
+            TEST_ZONE
+        );
+        habit.complete(
+            LocalDate.now(TEST_ZONE).minusDays(2),
+            TEST_ZONE
+        );
 
         repository.save(habit);
 
@@ -354,8 +363,14 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     void getHabit_returnsZeroCurrentStreak_whenLastCompletionIsOlderThanYesterday() throws Exception {
         var habit = new Habit("Read");
 
-        habit.complete(LocalDate.now().minusDays(3));
-        habit.complete(LocalDate.now().minusDays(2));
+        habit.complete(
+            LocalDate.now(TEST_ZONE).minusDays(3),
+            TEST_ZONE
+        );
+        habit.complete(
+            LocalDate.now(TEST_ZONE).minusDays(2),
+            TEST_ZONE
+        );
 
         var saved = repository.save(habit);
 
@@ -371,8 +386,14 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     void getHabit_returnsCurrentStreak_whenLastCompletionWasYesterday() throws Exception {
         var habit = new Habit("Read");
 
-        habit.complete(LocalDate.now().minusDays(2));
-        habit.complete(LocalDate.now().minusDays(1));
+        habit.complete(
+            LocalDate.now(TEST_ZONE).minusDays(2),
+            TEST_ZONE
+        );
+        habit.complete(
+            LocalDate.now(TEST_ZONE).minusDays(1),
+            TEST_ZONE
+        );
 
         var saved = repository.save(habit);
 
@@ -586,7 +607,10 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     @Test
     void completeHabit_continuesStreak_whenCompletedYesterday() throws Exception {
         var habit = repository.save(new Habit("Read"));
-        habit.complete(LocalDate.now().minusDays(1));
+        habit.complete(
+            LocalDate.now(TEST_ZONE).minusDays(1),
+            TEST_ZONE
+        );
         repository.save(habit);
 
         mockMvc.perform(post("/habits/" + habit.getId() + "/complete"))
@@ -597,7 +621,10 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     @Test
     void completeHabit_resetsStreakToOne_whenLastCompletedMoreThanOneDayAgo() throws Exception {
         var habit = repository.save(new Habit("Read"));
-        habit.complete(LocalDate.now().minusDays(17));
+        habit.complete(
+            LocalDate.now(TEST_ZONE).minusDays(17),
+            TEST_ZONE
+        );
         repository.save(habit);
         mockMvc.perform(post("/habits/" + habit.getId() + "/complete"))
                 .andExpect(status().isOk())
@@ -932,7 +959,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
         var alreadyCompletedToday = new Habit("Already completed today");
         alreadyCompletedToday.setScheduledDays(EnumSet.of(todayDay));
-        alreadyCompletedToday.complete(today);
+        alreadyCompletedToday.complete(today, TEST_ZONE);
         repository.save(alreadyCompletedToday);
 
         var archivedDue = new Habit("Archive due");
@@ -969,7 +996,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
         var alreadyCompletedToday = new Habit("Already completed today");
         alreadyCompletedToday.setScheduledDays(EnumSet.of(todayDay));
-        alreadyCompletedToday.complete(today);
+        alreadyCompletedToday.complete(today, TEST_ZONE);
         repository.save(alreadyCompletedToday);
 
         var archivedDue = new Habit("Archived due");
@@ -1018,7 +1045,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
         var skipped = new Habit("Skipped");
         skipped.setScheduledDays(EnumSet.of(todayDay));
-        skipped.complete(today);
+        skipped.complete(today, TEST_ZONE);
         repository.save(skipped);
 
         var failed = new Habit("Failed");

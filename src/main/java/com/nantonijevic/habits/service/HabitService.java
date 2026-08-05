@@ -141,7 +141,10 @@ public class HabitService {
     }
 
     private boolean completeExistingHabit(Habit habit, Long habitId, LocalDate today) {
-        boolean reallyCompleted = habit.complete(today);
+        boolean reallyCompleted = habit.complete(
+            today,
+            clock.getZone()
+        );
 
         if (reallyCompleted) {
             habitWriteRepository.save(habit);
@@ -262,7 +265,7 @@ public class HabitService {
             return BulkCompleteOutcome.FAILED;
         }
 
-        if (habit.wasCompletedOn(today)) {
+        if (habit.wasCompletedOn(today, clock.getZone())) {
             return BulkCompleteOutcome.SKIPPED;
         }
 
@@ -310,7 +313,11 @@ public class HabitService {
             .map(HabitCompletion::getCompletedOn)
             .toList();
 
-        habit.decrementCompletionCount(today, remainingCompletionDates);
+        habit.decrementCompletionCount(
+            today,
+            remainingCompletionDates,
+            clock.getZone()
+        );
 
         applicationEventPublisher.publishEvent(
             new HabitUncompletedEvent(habitId, today)
@@ -557,7 +564,7 @@ public class HabitService {
 
     private boolean isDueToday(Habit habit, LocalDate today) {
         return habit.isScheduledFor(today)
-                && !habit.wasCompletedOn(today);
+                && !habit.wasCompletedOn(today, clock.getZone());
     }
 
     @Transactional(readOnly = true)
@@ -594,7 +601,7 @@ public class HabitService {
             if (habit.isScheduledFor(today)) {
                 dueToday++;
 
-                if (habit.wasCompletedOn(today)) {
+                if (habit.wasCompletedOn(today, clock.getZone())) {
                     completedToday++;
                 }
             }

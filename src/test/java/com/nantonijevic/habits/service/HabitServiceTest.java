@@ -44,6 +44,9 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class HabitServiceTest {
 
+    private static final ZoneId TEST_ZONE =
+        ZoneId.of("UTC");
+
     @Mock
     private HabitSearchRepository habitSearchRepository;
 
@@ -87,6 +90,13 @@ class HabitServiceTest {
                     mock(TransactionStatus.class)
                 );
             });
+    }
+
+    @BeforeEach
+    void useUtcZoneByDefault() {
+        lenient()
+            .when(clock.getZone())
+            .thenReturn(TEST_ZONE);
     }
 
     @BeforeEach
@@ -237,7 +247,7 @@ class HabitServiceTest {
         LocalDate today = LocalDate.of(2024, 1, 5);
 
         Habit existingHabit = new Habit("Read");
-        existingHabit.complete(today);
+        existingHabit.complete(today, TEST_ZONE);
         existingHabit.synchronizePersistenceVersion(2L);
 
         when(habitMapper.findById(habitId)).thenReturn(existingHabit);
@@ -280,6 +290,39 @@ class HabitServiceTest {
     }
 
     @Test
+    void completeStoresLastCompletionInBusinessClockZone() {
+        Long habitId = 42L;
+        LocalDate today = LocalDate.of(2026, 8, 3);
+        ZoneId businessZone =
+            ZoneId.of("Pacific/Kiritimati");
+
+        Habit existingHabit = new Habit("Read");
+        existingHabit.synchronizePersistenceVersion(2L);
+
+        when(clock.getZone()).thenReturn(businessZone);
+        when(habitMapper.findById(habitId)).thenReturn(existingHabit);
+        when(habitWriteRepository.save(same(existingHabit)))
+            .thenReturn(existingHabit);
+
+        Habit completed = habitService.complete(habitId, today);
+
+        assertThat(completed.getLastCompletedAt())
+            .isEqualTo(
+                Instant.parse("2026-08-02T10:00:00Z")
+            );
+        assertThat(
+            completed.wasCompletedOn(today, businessZone)
+        ).isTrue();
+        assertThat(
+            completed.effectiveCurrentStreak(
+                today,
+                businessZone
+            )
+        ).isEqualTo(1);
+        verify(clock).getZone();
+    }
+
+    @Test
     void bulkCompletePublishesDashboardChangePerCompletedHabit() {
         LocalDate today = LocalDate.of(2024, 1, 5);
 
@@ -307,7 +350,7 @@ class HabitServiceTest {
         LocalDate today = LocalDate.of(2024, 1, 5);
 
         Habit alreadyCompleted = new Habit("Read");
-        alreadyCompleted.complete(today);
+        alreadyCompleted.complete(today, TEST_ZONE);
         alreadyCompleted.synchronizePersistenceVersion(2L);
 
         when(habitMapper.findById(habitId)).thenReturn(alreadyCompleted);
@@ -521,7 +564,7 @@ class HabitServiceTest {
         LocalDate today = LocalDate.of(2024, 1, 5);
 
         Habit existingHabit = new Habit("Read");
-        existingHabit.complete(today);
+        existingHabit.complete(today, TEST_ZONE);
         existingHabit.synchronizePersistenceVersion(2L);
 
         when(habitMapper.findById(habitId)).thenReturn(existingHabit);
@@ -851,7 +894,7 @@ class HabitServiceTest {
         staleHabit.synchronizePersistenceVersion(0L);
 
         Habit freshlyCompletedHabit = new Habit("Read");
-        freshlyCompletedHabit.complete(today);
+        freshlyCompletedHabit.complete(today, TEST_ZONE);
         freshlyCompletedHabit.synchronizePersistenceVersion(1L);
 
         when(habitMapper.findById(habitId))

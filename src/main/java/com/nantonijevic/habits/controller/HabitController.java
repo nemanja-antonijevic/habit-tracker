@@ -51,7 +51,11 @@ public class HabitController {
         LocalDate today = LocalDate.now(clock);
         Habit saved = habitService.create(request.name(), request.scheduledDays());
         return ResponseEntity.created(URI.create("/habits/" + saved.getId()))
-                .body(HabitResponse.from(saved, today));
+                .body(HabitResponse.from(
+                    saved,
+                    today,
+                    clock.getZone()
+                ));
     }
 
     @PostMapping("/bulk-complete")
@@ -67,14 +71,22 @@ public class HabitController {
                                     Pageable pageable) {
         LocalDate today = LocalDate.now(clock);
         return habitService.list(includeArchived, name, pageable)
-                .map(habit -> HabitResponse.from(habit, today));
+                .map(habit -> HabitResponse.from(
+                    habit,
+                    today,
+                    clock.getZone()
+                ));
     }
 
     @GetMapping("/{id}")
     public HabitResponse getById(@PathVariable Long id) {
         LocalDate today = LocalDate.now(clock);
         Habit habit = habitService.getById(id);
-        return HabitResponse.from(habit, today);
+        return HabitResponse.from(
+            habit,
+            today,
+            clock.getZone()
+        );
     }
 
     @DeleteMapping("/{id}")
@@ -87,28 +99,44 @@ public class HabitController {
     public HabitResponse update(@PathVariable Long id, @Valid @RequestBody UpdateHabitRequest request) {
         LocalDate today = LocalDate.now(clock);
         Habit habit = habitService.update(id, request.version(), request.name(), request.scheduledDays());
-        return HabitResponse.from(habit, today);
+        return HabitResponse.from(
+            habit,
+            today,
+            clock.getZone()
+        );
     }
 
     @PostMapping("/{id}/complete")
     public HabitResponse complete(@PathVariable Long id) {
         LocalDate today = LocalDate.now(clock);
         Habit habit = habitService.complete(id, today);
-        return HabitResponse.from(habit, today);
+        return HabitResponse.from(
+            habit,
+            today,
+            clock.getZone()
+        );
     }
 
     @PostMapping("/{id}/archive")
     public HabitResponse archive(@PathVariable Long id) {
         LocalDate today = LocalDate.now(clock);
         Habit habit = habitService.archive(id);
-        return HabitResponse.from(habit, today);
+        return HabitResponse.from(
+            habit,
+            today,
+            clock.getZone()
+        );
     }
 
     @PostMapping("/{id}/unarchive")
     public HabitResponse unarchive(@PathVariable Long id) {
         LocalDate today = LocalDate.now(clock);
         Habit habit = habitService.unarchive(id);
-        return HabitResponse.from(habit, today);
+        return HabitResponse.from(
+            habit,
+            today,
+            clock.getZone()
+        );
     }
 
     @GetMapping("/{id}/stats")
@@ -121,7 +149,11 @@ public class HabitController {
     public HabitResponse uncomplete(@PathVariable Long id) {
         LocalDate today = LocalDate.now(clock);
         Habit habit = habitService.uncomplete(id, today);
-        return HabitResponse.from(habit, today);
+        return HabitResponse.from(
+            habit,
+            today,
+            clock.getZone()
+        );
     }
 
     @GetMapping("/{id}/history")
@@ -150,7 +182,11 @@ public class HabitController {
     public Page<HabitResponse> dueToday(Pageable pageable) {
         LocalDate today = LocalDate.now(clock);
         return habitService.dueToday(today, pageable)
-                .map(habit -> HabitResponse.from(habit, today));
+                .map(habit -> HabitResponse.from(
+                    habit,
+                    today,
+                    clock.getZone()
+                ));
     }
 
     @GetMapping("/due-today/count")

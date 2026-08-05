@@ -21,6 +21,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.EnumSet;
 import java.util.concurrent.CountDownLatch;
 
@@ -142,12 +143,22 @@ public class HabitStatsIntegrationTest {
     void uncomplete_decrementsOnlyByOne() throws Exception {
         expectEvents(3);
 
-        LocalDate today = LocalDate.now();
+        ZoneId zone = ZoneId.systemDefault();
+        LocalDate today = LocalDate.now(zone);
 
         var habit = new Habit("Read 30 min");
-        habit.complete(today.minusDays(2));
-        habit.complete(today.minusDays(1));
-        habit.complete(today);
+        habit.complete(
+            today.minusDays(2),
+            zone
+        );
+        habit.complete(
+            today.minusDays(1),
+            zone
+        );
+        habit.complete(
+            today,
+            zone
+        );
 
         var saved = habitWriteRepository.save(habit);
 

@@ -116,8 +116,12 @@ public class Habit {
     // reconstructs from history. A full derived-streak refactor (dropping the stored columns) is
     // out of scope. The Kafka read-side projection is untouched: it heals itself when the latest
     // HabitCompletionStat snapshot is deleted on the uncompleted event.
-    public void decrementCompletionCount(LocalDate today, List<LocalDate> remainingCompletionDates) {
-        ZoneId zone = ZoneId.systemDefault();
+    public void decrementCompletionCount(
+        LocalDate today,
+        List<LocalDate> remainingCompletionDates,
+        ZoneId zone
+    ) {
+        Objects.requireNonNull(zone, "zone must not be null");
 
         if (this.archived) {
             throw new InvalidHabitStateException("Cannot uncomplete: archived");
@@ -172,17 +176,26 @@ public class Habit {
         this.longestStreak = longest;
     }
 
-    public boolean complete(LocalDate today) {
+    public boolean complete(LocalDate today, ZoneId zone) {
+        Objects.requireNonNull(zone, "zone must not be null");
+
         if (!isScheduledFor(today)) {
-            throw new InvalidHabitStateException("Habit is not scheduled for today.");
+            throw new InvalidHabitStateException(
+                "Habit is not scheduled for today."
+            );
         }
 
-        ZoneId zone = ZoneId.systemDefault();
-
-        if (this.archived) throw new InvalidHabitStateException("Cannot complete: archived");
+        if (this.archived) {
+            throw new InvalidHabitStateException(
+                "Cannot complete: archived"
+            );
+        }
 
         if (lastCompletedAt != null) {
-            LocalDate lastDate = LocalDate.ofInstant(lastCompletedAt, zone);
+            LocalDate lastDate = LocalDate.ofInstant(
+                lastCompletedAt,
+                zone
+            );
 
             if (lastDate.isEqual(today)) {
                 return false;
@@ -197,23 +210,37 @@ public class Habit {
             currentStreak = 1;
         }
 
-        if (currentStreak > longestStreak) longestStreak = currentStreak;
+        if (currentStreak > longestStreak) {
+            longestStreak = currentStreak;
+        }
 
-        lastCompletedAt = today.atStartOfDay(zone).toInstant();
+        lastCompletedAt = today
+            .atStartOfDay(zone)
+            .toInstant();
+
         completionCount++;
         return true;
     }
 
-    public int effectiveCurrentStreak(LocalDate today) {
+    public int effectiveCurrentStreak(
+        LocalDate today,
+        ZoneId zone
+    ) {
+        Objects.requireNonNull(zone, "zone must not be null");
+
         if (lastCompletedAt == null) {
             return 0;
         }
 
-        LocalDate lastCompletedDate = lastCompletedAt
-                .atZone(ZoneId.systemDefault())
+        LocalDate lastCompletedDate =
+            lastCompletedAt
+                .atZone(zone)
                 .toLocalDate();
 
-        if (lastCompletedDate.isEqual(today) || lastCompletedDate.isEqual(previousScheduledDateBefore(today))) {
+        if (lastCompletedDate.isEqual(today)
+            || lastCompletedDate.isEqual(
+            previousScheduledDateBefore(today)
+        )) {
             return currentStreak;
         }
 
@@ -258,12 +285,20 @@ public class Habit {
         }
     }
 
-    public boolean wasCompletedOn(LocalDate date) {
+    public boolean wasCompletedOn(
+        LocalDate date,
+        ZoneId zone
+    ) {
+        Objects.requireNonNull(zone, "zone must not be null");
+
         if (lastCompletedAt == null) {
             return false;
         }
 
-        return LocalDate.ofInstant(lastCompletedAt, ZoneId.systemDefault())
-                .isEqual(date);
+        return LocalDate.ofInstant(
+                lastCompletedAt,
+                zone
+            )
+            .isEqual(date);
     }
 }

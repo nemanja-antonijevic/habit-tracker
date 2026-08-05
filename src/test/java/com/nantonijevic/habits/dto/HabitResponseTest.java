@@ -5,31 +5,40 @@ import org.junit.jupiter.api.Test;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.EnumSet;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class HabitResponseTest {
 
+    private static final ZoneId TEST_ZONE =
+        ZoneId.of("UTC");
+
     @Test
     void fromUsesProvidedTodayForCurrentStreak() {
         Habit habit = new Habit("Read");
 
         habit.setScheduledDays(EnumSet.of(
-                DayOfWeek.MONDAY,
-                DayOfWeek.TUESDAY,
-                DayOfWeek.WEDNESDAY,
-                DayOfWeek.THURSDAY,
-                DayOfWeek.FRIDAY
+            DayOfWeek.MONDAY,
+            DayOfWeek.TUESDAY,
+            DayOfWeek.WEDNESDAY,
+            DayOfWeek.THURSDAY,
+            DayOfWeek.FRIDAY
         ));
 
-        habit.complete(LocalDate.of(2026, 7, 3));
-
-        HabitResponse response = HabitResponse.from(
-                habit,
-                LocalDate.of(2026, 7, 6)
+        habit.complete(
+            LocalDate.of(2026, 7, 3),
+            TEST_ZONE
         );
 
-        assertThat(response.currentStreak()).isEqualTo(1);
+        HabitResponse response = HabitResponse.from(
+            habit,
+            LocalDate.of(2026, 7, 6),
+            TEST_ZONE
+        );
+
+        assertThat(response.currentStreak())
+            .isEqualTo(1);
     }
 }
