@@ -8,6 +8,7 @@ import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.domain.HabitCompletion;
 import com.nantonijevic.habits.domain.HabitNotFoundException;
 import com.nantonijevic.habits.domain.HabitVersionConflictException;
+import com.nantonijevic.habits.dto.HabitCompletionRateResponse;
 import com.nantonijevic.habits.event.DashboardChangedEvent;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
@@ -319,7 +320,7 @@ class HabitServiceTest {
                 businessZone
             )
         ).isEqualTo(1);
-        verify(clock).getZone();
+        verify(clock, atLeastOnce()).getZone();
     }
 
     @Test
@@ -677,6 +678,41 @@ class HabitServiceTest {
         assertThat(response.completed()).isZero();
         assertThat(response.rate()).isNull();
 
+        verifyNoInteractions(completionStatRepository);
+    }
+
+    @Test
+    void completionRateUsesBusinessClockZoneWhenClampingCreationDate() {
+        Long habitId = 42L;
+
+        ZoneId businessZone =
+            ZoneId.of("Pacific/Kiritimati");
+
+        Instant createdAt =
+            Instant.parse("2026-08-01T21:30:00Z");
+
+        LocalDate from = LocalDate.of(2026, 8, 1);
+        LocalDate to = LocalDate.of(2026, 8, 1);
+
+        Habit habit = new Habit("Read", createdAt);
+
+        when(clock.getZone())
+            .thenReturn(businessZone);
+        when(habitMapper.findById(habitId))
+            .thenReturn(habit);
+
+        HabitCompletionRateResponse response =
+            habitService.getCompletionRate(
+                habitId,
+                from,
+                to
+            );
+
+        assertThat(response.scheduled()).isZero();
+        assertThat(response.completed()).isZero();
+        assertThat(response.rate()).isNull();
+
+        verify(clock, atLeastOnce()).getZone();
         verifyNoInteractions(completionStatRepository);
     }
 

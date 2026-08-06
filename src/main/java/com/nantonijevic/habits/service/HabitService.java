@@ -37,7 +37,6 @@ import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -379,7 +378,7 @@ public class HabitService {
 
         LocalDate createdDate = LocalDate.ofInstant(
             habit.getCreatedAt(),
-            ZoneId.systemDefault()
+            clock.getZone()
         );
 
         LocalDate effectiveFrom = from.isAfter(createdDate)
