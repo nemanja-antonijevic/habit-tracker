@@ -7,7 +7,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
-import java.time.Instant;
 import java.time.LocalDate;
 
 @Entity
@@ -30,9 +29,6 @@ public class HabitCompletionStat {
     @Column(name = "completion_count", nullable = false)
     private int completionCount;
 
-    @Column(name = "recorded_at", nullable = false)
-    private Instant recordedAt;
-
     protected HabitCompletionStat() {
     }
 
@@ -41,7 +37,6 @@ public class HabitCompletionStat {
         this.completedOn = completedOn;
         this.currentStreak = currentStreak;
         this.completionCount = completionCount;
-        this.recordedAt = Instant.now();
     }
 
     public Long getId() {
@@ -62,9 +57,5 @@ public class HabitCompletionStat {
 
     public int getCompletionCount() {
         return completionCount;
-    }
-
-    public Instant getRecordedAt() {
-        return recordedAt;
     }
 }

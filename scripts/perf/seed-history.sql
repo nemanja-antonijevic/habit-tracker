@@ -59,15 +59,13 @@ INSERT INTO habit_completion_stats (
     habit_id,
     completed_on,
     current_streak,
-    completion_count,
-    recorded_at
+    completion_count
 )
 SELECT
     ranked.habit_id,
     ranked.completed_on,
     1 + MOD(ranked.sequence_number - 1, 12),
-    ranked.sequence_number,
-    TIMESTAMP(ranked.completed_on, '12:00:00')
+    ranked.sequence_number
 FROM (
     SELECT
     c.habit_id,
