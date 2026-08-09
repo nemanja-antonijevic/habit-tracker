@@ -73,7 +73,10 @@ class HabitServiceTest {
     private Clock clock;
 
     @InjectMocks
-    private HabitService habitService;
+    private HabitCommandService habitCommandService;
+
+    @InjectMocks
+    private HabitQueryService habitQueryService;
 
     private Logger habitServiceLogger;
 
@@ -103,7 +106,7 @@ class HabitServiceTest {
     @BeforeEach
     void attachHabitServiceLogAppender() {
         habitServiceLogger =
-            (Logger) LoggerFactory.getLogger(HabitService.class);
+            (Logger) LoggerFactory.getLogger(HabitCommandService.class);
 
         logAppender = new ListAppender<>();
         logAppender.start();
@@ -132,7 +135,7 @@ class HabitServiceTest {
         when(habitWriteRepository.save(any(Habit.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
 
-        Habit created = habitService.create("Exercise", scheduledDays);
+        Habit created = habitCommandService.create("Exercise", scheduledDays);
 
         assertThat(created.getName()).isEqualTo("Exercise");
         assertThat(created.getScheduledDays()).isEqualTo(scheduledDays);
@@ -157,7 +160,7 @@ class HabitServiceTest {
         when(habitWriteRepository.save(same(existingHabit)))
             .thenReturn(existingHabit);
 
-        Habit updated = habitService.update(
+        Habit updated = habitCommandService.update(
             habitId,
             version,
             "New name",
@@ -182,7 +185,7 @@ class HabitServiceTest {
         when(habitMapper.findById(habitId)).thenReturn(existingHabit);
 
         assertThatThrownBy(() ->
-            habitService.update(
+            habitCommandService.update(
                 habitId,
                 3L,
                 "Changed name",
@@ -211,7 +214,7 @@ class HabitServiceTest {
         when(habitWriteRepository.save(same(existingHabit)))
             .thenReturn(existingHabit);
 
-        Habit archived = habitService.archive(habitId);
+        Habit archived = habitCommandService.archive(habitId);
 
         assertThat(archived.isArchived()).isTrue();
 
@@ -232,7 +235,7 @@ class HabitServiceTest {
         when(habitWriteRepository.save(same(existingHabit)))
             .thenReturn(existingHabit);
 
-        Habit unarchived = habitService.unarchive(habitId);
+        Habit unarchived = habitCommandService.unarchive(habitId);
 
         assertThat(unarchived.isArchived()).isFalse();
 
@@ -253,7 +256,7 @@ class HabitServiceTest {
 
         when(habitMapper.findById(habitId)).thenReturn(existingHabit);
 
-        Habit result = habitService.complete(habitId, today);
+        Habit result = habitCommandService.complete(habitId, today);
 
         assertThat(result).isSameAs(existingHabit);
         assertThat(result.getCompletionCount()).isEqualTo(1);
@@ -278,7 +281,7 @@ class HabitServiceTest {
         when(habitWriteRepository.save(same(existingHabit)))
             .thenReturn(existingHabit);
 
-        Habit completed = habitService.complete(habitId, today);
+        Habit completed = habitCommandService.complete(habitId, today);
 
         assertThat(completed.getCompletionCount()).isEqualTo(1);
         assertThat(completed.getCurrentStreak()).isEqualTo(1);
@@ -305,7 +308,7 @@ class HabitServiceTest {
         when(habitWriteRepository.save(same(existingHabit)))
             .thenReturn(existingHabit);
 
-        Habit completed = habitService.complete(habitId, today);
+        Habit completed = habitCommandService.complete(habitId, today);
 
         assertThat(completed.getLastCompletedAt())
             .isEqualTo(
@@ -336,7 +339,7 @@ class HabitServiceTest {
         when(habitMapper.findById(41L)).thenReturn(firstHabit);
         when(habitMapper.findById(42L)).thenReturn(secondHabit);
 
-        habitService.bulkComplete(List.of(41L, 42L), today);
+        habitCommandService.bulkComplete(List.of(41L, 42L), today);
 
         verify(habitWriteRepository).save(same(firstHabit));
         verify(habitWriteRepository).save(same(secondHabit));
@@ -356,7 +359,7 @@ class HabitServiceTest {
 
         when(habitMapper.findById(habitId)).thenReturn(alreadyCompleted);
 
-        habitService.bulkComplete(List.of(habitId), today);
+        habitCommandService.bulkComplete(List.of(habitId), today);
 
         verify(habitWriteRepository, never())
             .save(any(Habit.class));
@@ -391,7 +394,7 @@ class HabitServiceTest {
             .thenReturn(retrySnapshot);
 
         var response =
-            habitService.bulkComplete(List.of(habitId), today);
+            habitCommandService.bulkComplete(List.of(habitId), today);
 
         assertThat(response.completed())
             .containsExactly(habitId);
@@ -461,7 +464,7 @@ class HabitServiceTest {
         when(habitWriteRepository.save(same(completedHabit)))
             .thenReturn(completedHabit);
 
-        var response = habitService.bulkComplete(
+        var response = habitCommandService.bulkComplete(
             List.of(conflictedHabitId, completedHabitId),
             today
         );
@@ -515,7 +518,7 @@ class HabitServiceTest {
             );
 
         assertThatThrownBy(
-            () -> habitService.bulkComplete(
+            () -> habitCommandService.bulkComplete(
                 List.of(completedHabitId, brokenHabitId),
                 today
             )
@@ -541,7 +544,7 @@ class HabitServiceTest {
             .execute(any());
 
         assertThatThrownBy(
-            () -> habitService.bulkComplete(
+            () -> habitCommandService.bulkComplete(
                 List.of(habitId),
                 today
             )
@@ -574,7 +577,7 @@ class HabitServiceTest {
         when(habitWriteRepository.save(same(existingHabit)))
             .thenReturn(existingHabit);
 
-        Habit uncompleted = habitService.uncomplete(habitId, today);
+        Habit uncompleted = habitCommandService.uncomplete(habitId, today);
 
         assertThat(uncompleted.getCompletionCount()).isZero();
         assertThat(uncompleted.getLastCompletedAt()).isNull();
@@ -596,7 +599,7 @@ class HabitServiceTest {
         when(habitMapper.existsById(habitId)).thenReturn(true);
         when(habitMapper.deleteById(habitId)).thenReturn(1);
 
-        habitService.delete(habitId);
+        habitCommandService.delete(habitId);
 
         verify(habitMapper).existsById(habitId);
         verify(habitMapper).deleteById(habitId);
@@ -610,7 +613,7 @@ class HabitServiceTest {
 
         when(habitMapper.existsById(habitId)).thenReturn(false);
 
-        assertThatThrownBy(() -> habitService.delete(habitId))
+        assertThatThrownBy(() -> habitCommandService.delete(habitId))
             .isInstanceOf(HabitNotFoundException.class)
             .hasMessage("Habit not found: " + habitId);
 
@@ -646,7 +649,7 @@ class HabitServiceTest {
             to
         )).thenReturn(List.of(from));
 
-        var response = habitService.getCompletionRate(
+        var response = habitQueryService.getCompletionRate(
             habitId,
             from,
             to
@@ -668,7 +671,7 @@ class HabitServiceTest {
 
         when(habitMapper.findById(habitId)).thenReturn(habit);
 
-        var response = habitService.getCompletionRate(
+        var response = habitQueryService.getCompletionRate(
             habitId,
             from,
             to
@@ -702,7 +705,7 @@ class HabitServiceTest {
             .thenReturn(habit);
 
         HabitCompletionRateResponse response =
-            habitService.getCompletionRate(
+            habitQueryService.getCompletionRate(
                 habitId,
                 from,
                 to
@@ -754,7 +757,7 @@ class HabitServiceTest {
             createdDate.plusDays(1)
         ));
 
-        var response = habitService.getCompletionRate(
+        var response = habitQueryService.getCompletionRate(
             habitId,
             from,
             to
@@ -783,7 +786,7 @@ class HabitServiceTest {
             .thenReturn(null);
 
         assertThatThrownBy(() ->
-            habitService.getCompletionRate(
+            habitQueryService.getCompletionRate(
                 habitId,
                 from,
                 to
@@ -832,7 +835,7 @@ class HabitServiceTest {
             offDay
         ));
 
-        var response = habitService.getCompletionRate(
+        var response = habitQueryService.getCompletionRate(
             habitId,
             scheduledDate,
             offDay
@@ -873,7 +876,7 @@ class HabitServiceTest {
             to
         )).thenReturn(List.of());
 
-        var response = habitService.getCompletionRate(
+        var response = habitQueryService.getCompletionRate(
             habitId,
             from,
             to
@@ -909,7 +912,7 @@ class HabitServiceTest {
             date
         )).thenReturn(List.of());
 
-        var response = habitService.getCompletionRate(
+        var response = habitQueryService.getCompletionRate(
             habitId,
             date,
             date
@@ -944,7 +947,7 @@ class HabitServiceTest {
                 new HabitVersionConflictException(habitId)
             );
 
-        Habit result = habitService.complete(habitId, today);
+        Habit result = habitCommandService.complete(habitId, today);
 
         assertThat(result).isSameAs(freshlyCompletedHabit);
         assertThat(result.getCompletionCount()).isEqualTo(1);
@@ -1020,7 +1023,7 @@ class HabitServiceTest {
             );
 
         assertThatThrownBy(
-            () -> habitService.complete(habitId, today)
+            () -> habitCommandService.complete(habitId, today)
         )
             .isInstanceOf(HabitVersionConflictException.class)
             .hasMessage("Habit version conflict: " + habitId);
@@ -1077,7 +1080,7 @@ class HabitServiceTest {
             .execute(any());
 
         assertThatThrownBy(
-            () -> habitService.complete(habitId, today)
+            () -> habitCommandService.complete(habitId, today)
         )
             .isInstanceOf(NullPointerException.class)
             .hasMessage(
@@ -1109,7 +1112,7 @@ class HabitServiceTest {
         when(habitWriteRepository.save(any(Habit.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
 
-        Habit habit = habitService.create(
+        Habit habit = habitCommandService.create(
             "Read",
             EnumSet.allOf(DayOfWeek.class)
         );
@@ -1123,9 +1126,9 @@ class HabitServiceTest {
             businessDate
         )).thenReturn(List.of(businessDate));
 
-        habitService.complete(habitId, businessDate);
+        habitCommandService.complete(habitId, businessDate);
 
-        var response = habitService.getCompletionRate(
+        var response = habitQueryService.getCompletionRate(
             habitId,
             businessDate,
             businessDate
@@ -1144,7 +1147,7 @@ class HabitServiceTest {
         when(habitMapper.findActive())
             .thenReturn(List.of());
 
-        var dashboard = habitService.getDashboardStats(today);
+        var dashboard = habitQueryService.getDashboardStats(today);
 
         assertThat(dashboard.dueToday()).isZero();
         assertThat(dashboard.completedToday()).isZero();

@@ -430,7 +430,7 @@ POST /habits/bulk-complete
 
 Mark many habits as done today in one call. "Today" is resolved server-side from the system clock — there is no date in the request.
 
-**Why this exists alongside [endpoint 6](#6-mark-as-done).** The two are not redundant — they are two different *contracts* over the same operation, the same way Spring Data exposes both `save` and `saveAll`. Endpoint 6 is resource-scoped and fail-fast: it targets one habit and reports the outcome through the HTTP status (`404` for a missing habit, `400` for archived / off-day), which is the right ergonomics for the common single-habit case. Bulk-complete is best-effort: expected per-item outcomes always return `200` with each id's verdict in the body, and every id runs in its own transaction, so one bad id never rolls back the others — the right shape for a "close out the day" action over several habits. The shared domain logic is not duplicated: both paths funnel through the same `completeExistingHabit` method in `HabitService`, so only the contract (error model, response shape, target cardinality) differs.
+**Why this exists alongside [endpoint 6](#6-mark-as-done).** The two are not redundant — they are two different *contracts* over the same operation, the same way Spring Data exposes both `save` and `saveAll`. Endpoint 6 is resource-scoped and fail-fast: it targets one habit and reports the outcome through the HTTP status (`404` for a missing habit, `400` for archived / off-day), which is the right ergonomics for the common single-habit case. Bulk-complete is best-effort: expected per-item outcomes always return `200` with each id's verdict in the body, and every id runs in its own transaction, so one bad id never rolls back the others — the right shape for a "close out the day" action over several habits. The shared domain logic is not duplicated: both paths funnel through the same `completeExistingHabit` method in `HabitCommandService`, so only the contract (error model, response shape, target cardinality) differs.
 
 Request body (`BulkCompleteRequest`):
 
@@ -482,7 +482,7 @@ A duplicate id within the same request (e.g. `[1, 1]`) completes on the first oc
 GET /habits/due-today/count
 ```
 
-Returns just the **count** of habits due today, without the habit payloads. "Due today" is defined exactly as for [endpoint 12](#12-habits-due-today) — the same predicate is shared in `HabitService` so the two can never disagree. "Today" is resolved server-side from the system clock; there is no date query parameter and no pagination.
+Returns just the **count** of habits due today, without the habit payloads. "Due today" is defined exactly as for [endpoint 12](#12-habits-due-today) — the same predicate is shared in `HabitQueryService` so the two can never disagree. "Today" is resolved server-side from the system clock; there is no date query parameter and no pagination.
 
 A habit is counted only when **all three** hold:
 - it is active (archived habits are excluded);

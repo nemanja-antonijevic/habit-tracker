@@ -56,7 +56,7 @@ Docker-dependent tests (Redis and MySQL via Testcontainers) are named `*IT` and 
 src/main/java/com/nantonijevic/habits/
   HabitTrackerApplication.java   # Spring Boot entry point
   controller/                    # REST endpoints (HabitController)
-  service/                       # HabitService (orchestration)
+  service/                       # HabitCommandService (writes) + HabitQueryService (reads)
   domain/                        # @Entity classes + domain exceptions
   dto/                           # request/response records
   repository/                    # Spring Data JPA

@@ -8,7 +8,7 @@ import com.nantonijevic.habits.event.HabitCompletedEvent;
 import com.nantonijevic.habits.event.HabitCompletedEventConsumer;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
 import com.nantonijevic.habits.repository.HabitWriteRepository;
-import com.nantonijevic.habits.service.HabitService;
+import com.nantonijevic.habits.service.HabitQueryService;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -76,7 +76,7 @@ class DashboardCacheRaceIT {
     }
 
     @Autowired
-    private HabitService habitService;
+    private HabitQueryService habitQueryService;
 
     @Autowired
     private HabitWriteRepository habitWriteRepository;
@@ -177,7 +177,7 @@ class DashboardCacheRaceIT {
             Future<HabitDashboardResponse> reader =
                 executor.submit(
                     () ->
-                        habitService.getDashboardStats(
+                        habitQueryService.getDashboardStats(
                             today
                         )
                 );
@@ -291,7 +291,7 @@ class DashboardCacheRaceIT {
                 .isGreaterThan(readerGeneration);
 
             HabitDashboardResponse dashboardAfterInvalidation =
-                habitService.getDashboardStats(today);
+                habitQueryService.getDashboardStats(today);
 
             assertThat(
                 dashboardAfterInvalidation

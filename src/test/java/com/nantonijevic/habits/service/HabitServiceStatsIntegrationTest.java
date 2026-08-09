@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class HabitServiceStatsIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
-    private HabitService habitService;
+    private HabitQueryService habitQueryService;
 
     @Autowired
     private HabitWriteRepository habitWriteRepository;
@@ -53,7 +53,7 @@ class HabitServiceStatsIntegrationTest extends AbstractIntegrationTest {
             )
         );
 
-        HabitStatsView result = habitService.getStatsProjection(
+        HabitStatsView result = habitQueryService.getStatsProjection(
             saved.getId(),
             today
         );

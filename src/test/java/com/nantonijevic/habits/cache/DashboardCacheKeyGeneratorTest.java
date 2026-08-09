@@ -1,6 +1,6 @@
 package com.nantonijevic.habits.cache;
 
-import com.nantonijevic.habits.service.HabitService;
+import com.nantonijevic.habits.service.HabitQueryService;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.RedisConnectionFailureException;
 
@@ -24,7 +24,7 @@ class DashboardCacheKeyGeneratorTest {
     void generatesVersionedDashboardCacheKey() throws Exception {
         LocalDate today = LocalDate.of(2026, 7, 24);
 
-        Method method = HabitService.class.getMethod(
+        Method method = HabitQueryService.class.getMethod(
             "getDashboardStats",
             LocalDate.class
         );
@@ -48,7 +48,7 @@ class DashboardCacheKeyGeneratorTest {
 
         LocalDate today = LocalDate.of(2026, 7, 24);
 
-        Method method = HabitService.class.getMethod(
+        Method method = HabitQueryService.class.getMethod(
             "getDashboardStats",
             LocalDate.class
         );
@@ -88,7 +88,7 @@ class DashboardCacheKeyGeneratorTest {
 
         LocalDate today = LocalDate.of(2026, 7, 24);
 
-        Method method = HabitService.class.getMethod(
+        Method method = HabitQueryService.class.getMethod(
             "getDashboardStats",
             LocalDate.class
         );

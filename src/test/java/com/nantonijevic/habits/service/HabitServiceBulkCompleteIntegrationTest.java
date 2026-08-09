@@ -34,7 +34,7 @@ class HabitServiceBulkCompleteIntegrationTest
     extends AbstractIntegrationTest {
 
     @Autowired
-    private HabitService habitService;
+    private HabitCommandService habitCommandService;
 
     @Autowired
     private HabitMapper habitMapper;
@@ -68,12 +68,12 @@ class HabitServiceBulkCompleteIntegrationTest
     void bulkCompletePersistsMutatedHabitThroughMyBatis() {
         LocalDate today = LocalDate.of(2024, 1, 5);
 
-        Habit habit = habitService.create(
+        Habit habit = habitCommandService.create(
             "Read",
             Set.of(today.getDayOfWeek())
         );
 
-        BulkCompleteResponse response = habitService.bulkComplete(
+        BulkCompleteResponse response = habitCommandService.bulkComplete(
             List.of(habit.getId()),
             today
         );
@@ -95,13 +95,13 @@ class HabitServiceBulkCompleteIntegrationTest
     void bulkCompleteCommitsFirstDuplicateAndSkipsSecond() {
         LocalDate today = LocalDate.of(2024, 1, 5);
 
-        Habit habit = habitService.create(
+        Habit habit = habitCommandService.create(
             "Read",
             Set.of(today.getDayOfWeek())
         );
 
         BulkCompleteResponse response =
-            habitService.bulkComplete(
+            habitCommandService.bulkComplete(
                 List.of(
                     habit.getId(),
                     habit.getId()
@@ -140,12 +140,12 @@ class HabitServiceBulkCompleteIntegrationTest
     void exhaustedConflictDoesNotRollBackAnotherCompletedItem() {
         LocalDate today = LocalDate.of(2024, 1, 5);
 
-        Habit conflictedHabit = habitService.create(
+        Habit conflictedHabit = habitCommandService.create(
             "Read",
             Set.of(today.getDayOfWeek())
         );
 
-        Habit completedHabit = habitService.create(
+        Habit completedHabit = habitCommandService.create(
             "Exercise",
             Set.of(today.getDayOfWeek())
         );
@@ -166,7 +166,7 @@ class HabitServiceBulkCompleteIntegrationTest
             ));
 
         BulkCompleteResponse response =
-            habitService.bulkComplete(
+            habitCommandService.bulkComplete(
                 List.of(
                     conflictedHabit.getId(),
                     completedHabit.getId()

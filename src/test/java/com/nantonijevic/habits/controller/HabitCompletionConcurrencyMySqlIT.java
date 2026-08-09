@@ -12,7 +12,7 @@ import com.nantonijevic.habits.event.HabitEvent;
 import com.nantonijevic.habits.repository.HabitMapper;
 import com.nantonijevic.habits.repository.HabitWriteRepository;
 import com.nantonijevic.habits.repository.HabitWriteRepositoryImpl;
-import com.nantonijevic.habits.service.HabitService;
+import com.nantonijevic.habits.service.HabitCommandService;
 import com.nantonijevic.habits.support.HabitTestFixtureRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -155,7 +155,7 @@ class HabitCompletionConcurrencyMySqlIT
     void attachHabitServiceLogAppender() {
         habitServiceLogger =
             (Logger) LoggerFactory.getLogger(
-                HabitService.class
+                HabitCommandService.class
             );
 
         logAppender = new ListAppender<>();

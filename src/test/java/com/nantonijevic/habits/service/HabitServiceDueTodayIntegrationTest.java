@@ -20,7 +20,7 @@ class HabitServiceDueTodayIntegrationTest
     extends AbstractIntegrationTest {
 
     @Autowired
-    private HabitService habitService;
+    private HabitQueryService habitQueryService;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -69,17 +69,17 @@ class HabitServiceDueTodayIntegrationTest
             LocalDateTime.of(2024, 1, 5, 9, 0)
         );
 
-        Page<Habit> firstPage = habitService.dueToday(
+        Page<Habit> firstPage = habitQueryService.dueToday(
             today,
             PageRequest.of(0, 1)
         );
 
-        Page<Habit> secondPage = habitService.dueToday(
+        Page<Habit> secondPage = habitQueryService.dueToday(
             today,
             PageRequest.of(1, 1)
         );
 
-        long count = habitService.countDueToday(today);
+        long count = habitQueryService.countDueToday(today);
 
         assertThat(firstPage.getContent())
             .extracting(Habit::getName)

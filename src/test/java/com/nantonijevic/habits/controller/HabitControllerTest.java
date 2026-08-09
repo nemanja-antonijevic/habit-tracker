@@ -1,7 +1,8 @@
 package com.nantonijevic.habits.controller;
 
 import com.nantonijevic.habits.domain.Habit;
-import com.nantonijevic.habits.service.HabitService;
+import com.nantonijevic.habits.service.HabitCommandService;
+import com.nantonijevic.habits.service.HabitQueryService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -21,7 +22,10 @@ import static org.mockito.Mockito.when;
 class HabitControllerTest {
 
     @Mock
-    private HabitService habitService;
+    private HabitCommandService habitCommandService;
+
+    @Mock
+    private HabitQueryService habitQueryService;
 
     @Test
     void completeUsesInjectedClockForBusinessDate() {
@@ -42,7 +46,7 @@ class HabitControllerTest {
             new Habit("Read");
 
         when(
-            habitService.complete(
+            habitCommandService.complete(
                 eq(42L),
                 any(LocalDate.class)
             )
@@ -51,13 +55,14 @@ class HabitControllerTest {
 
         HabitController controller =
             new HabitController(
-                habitService,
+                habitCommandService,
+                habitQueryService,
                 clock
             );
 
         controller.complete(42L);
 
-        verify(habitService)
+        verify(habitCommandService)
             .complete(
                 42L,
                 expectedBusinessDate

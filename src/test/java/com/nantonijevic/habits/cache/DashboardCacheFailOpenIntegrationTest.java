@@ -4,7 +4,8 @@ import com.nantonijevic.habits.config.RedisCacheConfig;
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.dto.HabitDashboardResponse;
 import com.nantonijevic.habits.repository.HabitMapper;
-import com.nantonijevic.habits.service.HabitService;
+import com.nantonijevic.habits.service.HabitCommandService;
+import com.nantonijevic.habits.service.HabitQueryService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,7 +36,10 @@ import static org.mockito.ArgumentMatchers.any;
 class DashboardCacheFailOpenIntegrationTest {
 
     @Autowired
-    private HabitService habitService;
+    private HabitCommandService habitCommandService;
+
+    @Autowired
+    private HabitQueryService habitQueryService;
 
     @Autowired
     private HabitMapper habitMapper;
@@ -71,7 +75,7 @@ class DashboardCacheFailOpenIntegrationTest {
 
     @Test
     void createCommitsWhenDashboardCacheEvictionFails() {
-        Habit created = habitService.create(
+        Habit created = habitCommandService.create(
             "Read",
             EnumSet.allOf(DayOfWeek.class)
         );
@@ -107,7 +111,7 @@ class DashboardCacheFailOpenIntegrationTest {
             );
 
         HabitDashboardResponse response =
-            habitService.getDashboardStats(today);
+            habitQueryService.getDashboardStats(today);
 
         assertThat(response).isNotNull();
         assertThat(response.totalHabits()).isZero();
@@ -147,7 +151,7 @@ class DashboardCacheFailOpenIntegrationTest {
             );
 
         HabitDashboardResponse response =
-            habitService.getDashboardStats(today);
+            habitQueryService.getDashboardStats(today);
 
         assertThat(response).isNotNull();
         assertThat(response.totalHabits()).isZero();
@@ -170,7 +174,7 @@ class DashboardCacheFailOpenIntegrationTest {
         );
 
         HabitDashboardResponse response =
-            habitService.getDashboardStats(today);
+            habitQueryService.getDashboardStats(today);
 
         assertThat(response).isNotNull();
         assertThat(response.totalHabits()).isZero();

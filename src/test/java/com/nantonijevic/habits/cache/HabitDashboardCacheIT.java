@@ -1,11 +1,11 @@
 package com.nantonijevic.habits.cache;
 
-import com.nantonijevic.habits.config.RedisCacheConfig;
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.event.DashboardChangedEvent;
 import com.nantonijevic.habits.repository.HabitMapper;
 import com.nantonijevic.habits.repository.HabitWriteRepository;
-import com.nantonijevic.habits.service.HabitService;
+import com.nantonijevic.habits.service.HabitCommandService;
+import com.nantonijevic.habits.service.HabitQueryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -64,7 +64,10 @@ class HabitDashboardCacheIT {
     }
 
     @Autowired
-    private HabitService habitService;
+    private HabitCommandService habitCommandService;
+
+    @Autowired
+    private HabitQueryService habitQueryService;
 
     @MockBean
     private HabitMapper habitMapper;
@@ -101,8 +104,8 @@ class HabitDashboardCacheIT {
         when(habitMapper.findActive())
             .thenReturn(List.of());
 
-        habitService.getDashboardStats(today);
-        habitService.getDashboardStats(today);
+        habitQueryService.getDashboardStats(today);
+        habitQueryService.getDashboardStats(today);
 
         verify(habitMapper, times(1)).findActive();
     }
@@ -115,8 +118,8 @@ class HabitDashboardCacheIT {
         when(habitMapper.findActive())
             .thenReturn(List.of());
 
-        habitService.getDashboardStats(firstDate);
-        habitService.getDashboardStats(secondDate);
+        habitQueryService.getDashboardStats(firstDate);
+        habitQueryService.getDashboardStats(secondDate);
 
         verify(habitMapper, times(2)).findActive();
     }
@@ -128,7 +131,7 @@ class HabitDashboardCacheIT {
         when(habitMapper.findActive())
             .thenReturn(List.of());
 
-        habitService.getDashboardStats(today);
+        habitQueryService.getDashboardStats(today);
 
         String key = dashboardKey(today);
 
@@ -158,7 +161,7 @@ class HabitDashboardCacheIT {
         when(habitMapper.findActive())
             .thenReturn(List.of());
 
-        habitService.getDashboardStats(today);
+        habitQueryService.getDashboardStats(today);
 
         String key = dashboardKey(today);
 
@@ -189,7 +192,7 @@ class HabitDashboardCacheIT {
         when(habitMapper.findActive())
             .thenReturn(List.of());
 
-        habitService.getDashboardStats(today);
+        habitQueryService.getDashboardStats(today);
 
         String key = dashboardKey(today);
 
@@ -199,7 +202,7 @@ class HabitDashboardCacheIT {
             any(Habit.class)
         )).thenAnswer(invocation -> invocation.getArgument(0));
 
-        habitService.create(
+        habitCommandService.create(
             "Read",
             EnumSet.allOf(DayOfWeek.class)
         );
@@ -219,8 +222,8 @@ class HabitDashboardCacheIT {
 
         LocalDate today = LocalDate.of(2026, 8, 1);
 
-        habitService.getDashboardStats(today);
-        habitService.getDashboardStats(today);
+        habitQueryService.getDashboardStats(today);
+        habitQueryService.getDashboardStats(today);
 
         CacheStatistics statistics = cache.getStatistics();
 
