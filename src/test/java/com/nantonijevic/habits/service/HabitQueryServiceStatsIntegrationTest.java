@@ -17,7 +17,7 @@ import java.util.EnumSet;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Transactional
-class HabitServiceStatsIntegrationTest extends AbstractIntegrationTest {
+class HabitQueryServiceStatsIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private HabitQueryService habitQueryService;

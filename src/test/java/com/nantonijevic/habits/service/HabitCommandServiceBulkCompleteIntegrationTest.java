@@ -30,7 +30,7 @@ import static org.mockito.Mockito.doThrow;
     properties =
         "spring.kafka.listener.auto-startup=false"
 )
-class HabitServiceBulkCompleteIntegrationTest
+class HabitCommandServiceBulkCompleteIntegrationTest
     extends AbstractIntegrationTest {
 
     @Autowired

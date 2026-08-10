@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Transactional
-class HabitServiceDueTodayIntegrationTest
+class HabitQueryServiceDueTodayIntegrationTest
     extends AbstractIntegrationTest {
 
     @Autowired
