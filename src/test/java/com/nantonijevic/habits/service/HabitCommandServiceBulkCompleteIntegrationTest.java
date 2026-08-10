@@ -9,6 +9,7 @@ import com.nantonijevic.habits.event.HabitEvent;
 import com.nantonijevic.habits.repository.HabitMapper;
 import com.nantonijevic.habits.repository.HabitWriteRepository;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -17,6 +18,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.TestPropertySource;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
@@ -25,6 +28,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.when;
 
 @TestPropertySource(
     properties =
@@ -32,6 +36,13 @@ import static org.mockito.Mockito.doThrow;
 )
 class HabitCommandServiceBulkCompleteIntegrationTest
     extends AbstractIntegrationTest {
+
+    // UTC+14 makes the business-day boundary differ from common host zones.
+    private static final ZoneId TEST_ZONE =
+        ZoneId.of("Pacific/Kiritimati");
+
+    private static final Instant TEST_INSTANT =
+        Instant.parse("2024-01-04T10:00:00Z");
 
     @Autowired
     private HabitCommandService habitCommandService;
@@ -48,8 +59,17 @@ class HabitCommandServiceBulkCompleteIntegrationTest
     @MockBean
     private DashboardCacheGeneration dashboardCacheGeneration;
 
+    @MockBean
+    private Clock clock;
+
     @SpyBean
     private HabitWriteRepository habitWriteRepository;
+
+    @BeforeEach
+    void useFixedBusinessClock() {
+        when(clock.getZone()).thenReturn(TEST_ZONE);
+        when(clock.instant()).thenReturn(TEST_INSTANT);
+    }
 
     @AfterEach
     void cleanDatabase() {
@@ -84,10 +104,8 @@ class HabitCommandServiceBulkCompleteIntegrationTest
         assertThat(persisted.getCompletionCount()).isEqualTo(1);
         assertThat(persisted.getCurrentStreak()).isEqualTo(1);
         assertThat(persisted.getLastCompletedAt()).isNotNull();
-        assertThat(LocalDate.ofInstant(
-            persisted.getLastCompletedAt(),
-            ZoneId.systemDefault()
-        )).isEqualTo(today);
+        assertThat(persisted.getLastCompletedAt())
+            .isEqualTo(Instant.parse("2024-01-04T10:00:00Z"));
         assertThat(persisted.getVersion()).isEqualTo(1L);
     }
 

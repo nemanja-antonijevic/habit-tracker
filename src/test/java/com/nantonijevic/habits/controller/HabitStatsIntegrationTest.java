@@ -19,7 +19,9 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.Clock;
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.EnumSet;
@@ -29,6 +31,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -63,6 +66,9 @@ public class HabitStatsIntegrationTest {
 
     @SpyBean
     private HabitCompletedEventConsumer consumer;
+
+    @SpyBean
+    private Clock clock;
 
     private CountDownLatch messagesProcessedLatch;
 
@@ -129,8 +135,14 @@ public class HabitStatsIntegrationTest {
     void uncomplete_decrementsOnlyByOne() throws Exception {
         expectEvents(3);
 
-        ZoneId zone = ZoneId.systemDefault();
-        LocalDate today = LocalDate.now(zone);
+        // UTC+14 makes the business-day boundary differ from common host zones.
+        ZoneId zone = ZoneId.of("Pacific/Kiritimati");
+        Instant testInstant = Instant.parse("2024-01-04T10:00:00Z");
+
+        doReturn(zone).when(clock).getZone();
+        doReturn(testInstant).when(clock).instant();
+
+        LocalDate today = LocalDate.now(clock);
 
         var habit = new Habit("Read 30 min");
 

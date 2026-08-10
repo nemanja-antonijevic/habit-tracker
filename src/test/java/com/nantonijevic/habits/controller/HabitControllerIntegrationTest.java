@@ -20,6 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.EnumSet;
@@ -41,7 +42,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
-    private static final ZoneId TEST_ZONE =
+    // Deliberately ambient: these tests assert relative day transitions
+    // (now minus N days) in whatever zone TimeConfig resolves to, so fixture
+    // and production read the same zone by design. Pinning it would swap one
+    // ambient source for a hardcoded one without adding proof.
+    private static final ZoneId APPLICATION_ZONE =
         ZoneId.systemDefault();
 
     @Autowired
@@ -310,12 +315,12 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         var habit = new Habit("Read");
 
         habit.complete(
-            LocalDate.now(TEST_ZONE).minusDays(3),
-            TEST_ZONE
+            LocalDate.now(APPLICATION_ZONE).minusDays(3),
+            APPLICATION_ZONE
         );
         habit.complete(
-            LocalDate.now(TEST_ZONE).minusDays(2),
-            TEST_ZONE
+            LocalDate.now(APPLICATION_ZONE).minusDays(2),
+            APPLICATION_ZONE
         );
 
         repository.save(habit);
@@ -364,12 +369,12 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         var habit = new Habit("Read");
 
         habit.complete(
-            LocalDate.now(TEST_ZONE).minusDays(3),
-            TEST_ZONE
+            LocalDate.now(APPLICATION_ZONE).minusDays(3),
+            APPLICATION_ZONE
         );
         habit.complete(
-            LocalDate.now(TEST_ZONE).minusDays(2),
-            TEST_ZONE
+            LocalDate.now(APPLICATION_ZONE).minusDays(2),
+            APPLICATION_ZONE
         );
 
         var saved = repository.save(habit);
@@ -387,12 +392,12 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         var habit = new Habit("Read");
 
         habit.complete(
-            LocalDate.now(TEST_ZONE).minusDays(2),
-            TEST_ZONE
+            LocalDate.now(APPLICATION_ZONE).minusDays(2),
+            APPLICATION_ZONE
         );
         habit.complete(
-            LocalDate.now(TEST_ZONE).minusDays(1),
-            TEST_ZONE
+            LocalDate.now(APPLICATION_ZONE).minusDays(1),
+            APPLICATION_ZONE
         );
 
         var saved = repository.save(habit);
@@ -608,8 +613,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     void completeHabit_continuesStreak_whenCompletedYesterday() throws Exception {
         var habit = repository.save(new Habit("Read"));
         habit.complete(
-            LocalDate.now(TEST_ZONE).minusDays(1),
-            TEST_ZONE
+            LocalDate.now(APPLICATION_ZONE).minusDays(1),
+            APPLICATION_ZONE
         );
         repository.save(habit);
 
@@ -622,8 +627,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     void completeHabit_resetsStreakToOne_whenLastCompletedMoreThanOneDayAgo() throws Exception {
         var habit = repository.save(new Habit("Read"));
         habit.complete(
-            LocalDate.now(TEST_ZONE).minusDays(17),
-            TEST_ZONE
+            LocalDate.now(APPLICATION_ZONE).minusDays(17),
+            APPLICATION_ZONE
         );
         repository.save(habit);
         mockMvc.perform(post("/habits/" + habit.getId() + "/complete"))
@@ -959,7 +964,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
         var alreadyCompletedToday = new Habit("Already completed today");
         alreadyCompletedToday.setScheduledDays(EnumSet.of(todayDay));
-        alreadyCompletedToday.complete(today, TEST_ZONE);
+        alreadyCompletedToday.complete(today, APPLICATION_ZONE);
         repository.save(alreadyCompletedToday);
 
         var archivedDue = new Habit("Archive due");
@@ -996,7 +1001,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
         var alreadyCompletedToday = new Habit("Already completed today");
         alreadyCompletedToday.setScheduledDays(EnumSet.of(todayDay));
-        alreadyCompletedToday.complete(today, TEST_ZONE);
+        alreadyCompletedToday.complete(today, APPLICATION_ZONE);
         repository.save(alreadyCompletedToday);
 
         var archivedDue = new Habit("Archived due");
@@ -1045,7 +1050,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
         var skipped = new Habit("Skipped");
         skipped.setScheduledDays(EnumSet.of(todayDay));
-        skipped.complete(today, TEST_ZONE);
+        skipped.complete(today, APPLICATION_ZONE);
         repository.save(skipped);
 
         var failed = new Habit("Failed");
@@ -1138,14 +1143,17 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void completionRate_returnsScheduledCompletedAndRoundedRate() throws Exception {
-        Habit habit = new Habit("Read");
-        LocalDate createdDate = LocalDate.ofInstant(
-            habit.getCreatedAt(),
-            ZoneId.systemDefault()
+    void completionRate_returnsScheduledCompletedAndRoundedRate()
+        throws Exception {
+
+        // Creation precedes the measured window in every tested zone;
+        // this test covers rate calculation, not zone conversion.
+        Habit habit = new Habit(
+            "Read",
+            Instant.parse("2024-01-01T00:00:00Z")
         );
 
-        LocalDate from = createdDate.plusDays(1);
+        LocalDate from = LocalDate.of(2024, 1, 3);
         LocalDate to = from.plusDays(2);
 
         habit.setScheduledDays(EnumSet.of(
