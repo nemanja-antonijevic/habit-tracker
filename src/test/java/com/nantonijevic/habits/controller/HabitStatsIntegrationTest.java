@@ -14,10 +14,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.SpyBean;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 
 import java.time.Clock;
 import java.time.DayOfWeek;
@@ -31,12 +35,12 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doReturn;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+@Import(HabitStatsIntegrationTest.FixedClockConfiguration.class)
 @EmbeddedKafka(topics = "habit-completed", partitions = 1)
 @SpringBootTest(properties = {
         "spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}",
@@ -44,6 +48,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 @AutoConfigureMockMvc
 public class HabitStatsIntegrationTest {
+
+    private static final ZoneId TEST_ZONE =
+        ZoneId.of("Pacific/Kiritimati");
+
+    // Tuesday in UTC+14; the previous M/W/F scheduled day is Monday.
+    private static final Instant TEST_INSTANT =
+        Instant.parse("2026-08-10T10:00:00Z");
 
     @Autowired
     @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
@@ -64,11 +75,11 @@ public class HabitStatsIntegrationTest {
     @Autowired
     private KafkaTemplate<String, HabitEvent> kafkaTemplate;
 
-    @SpyBean
-    private HabitCompletedEventConsumer consumer;
+    @Autowired
+    private Clock clock;
 
     @SpyBean
-    private Clock clock;
+    private HabitCompletedEventConsumer consumer;
 
     private CountDownLatch messagesProcessedLatch;
 
@@ -100,7 +111,7 @@ public class HabitStatsIntegrationTest {
     void getStats_returnsCorrectCountAndTimestamp_afterComplete() throws Exception {
         expectEvents(1);
 
-        Habit saved = habitWriteRepository.save(new Habit("Read 30 min"));
+        Habit saved = habitWriteRepository.save(new Habit("Read 30 min", clock.instant()));
 
         mockMvc.perform(post("/habits/" + saved.getId() + "/complete"))
                 .andExpect(status().isOk());
@@ -117,8 +128,8 @@ public class HabitStatsIntegrationTest {
     void getStats_returnsCurrentStreak_afterConsecutiveCompletions() throws Exception {
         expectEvents(3);
 
-        var habit = habitWriteRepository.save(new Habit("Read"));
-        LocalDate today = LocalDate.now();
+        var habit = habitWriteRepository.save(new Habit("Read", clock.instant()));
+        LocalDate today = LocalDate.now(clock);
 
         publishCompletedEvent(habit.getId(), today.minusDays(2), 1, 1);
         publishCompletedEvent(habit.getId(), today.minusDays(1), 2, 2);
@@ -135,29 +146,22 @@ public class HabitStatsIntegrationTest {
     void uncomplete_decrementsOnlyByOne() throws Exception {
         expectEvents(3);
 
-        // UTC+14 makes the business-day boundary differ from common host zones.
-        ZoneId zone = ZoneId.of("Pacific/Kiritimati");
-        Instant testInstant = Instant.parse("2024-01-04T10:00:00Z");
-
-        doReturn(zone).when(clock).getZone();
-        doReturn(testInstant).when(clock).instant();
-
         LocalDate today = LocalDate.now(clock);
 
-        var habit = new Habit("Read 30 min");
+        var habit = new Habit("Read 30 min", clock.instant());
 
         // Seed the write model through the entity and the read model through events; this test verifies both.
         habit.complete(
             today.minusDays(2),
-            zone
+            clock.getZone()
         );
         habit.complete(
             today.minusDays(1),
-            zone
+            clock.getZone()
         );
         habit.complete(
             today,
-            zone
+            clock.getZone()
         );
 
         var saved = habitWriteRepository.save(habit);
@@ -185,7 +189,7 @@ public class HabitStatsIntegrationTest {
     void firstCompleteSetsLongestStreakToOne() throws Exception {
         expectEvents(1);
 
-        var habit = new Habit("Read 30 min");
+        var habit = new Habit("Read 30 min", clock.instant());
         habitWriteRepository.save(habit);
 
         mockMvc.perform(post("/habits/" + habit.getId() + "/complete"))
@@ -203,8 +207,8 @@ public class HabitStatsIntegrationTest {
     void streakResetDoesNotLowerLongestStreak() throws Exception {
         expectEvents(4);
 
-        var habit = habitWriteRepository.save(new Habit("Read 30 min"));
-        LocalDate today = LocalDate.now();
+        var habit = habitWriteRepository.save(new Habit("Read 30 min", clock.instant()));
+        LocalDate today = LocalDate.now(clock);
 
         publishCompletedEvent(habit.getId(), today.minusDays(4), 1, 1);
         publishCompletedEvent(habit.getId(), today.minusDays(3), 2, 2);
@@ -223,7 +227,7 @@ public class HabitStatsIntegrationTest {
     void getStats_keepsCurrentStreakAliveAcrossOffDays() throws Exception {
         expectEvents(1);
 
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
 
         var scheduledDays = EnumSet.of(
                 DayOfWeek.MONDAY,
@@ -236,7 +240,7 @@ public class HabitStatsIntegrationTest {
             previousScheduledDay = previousScheduledDay.minusDays(1);
         }
 
-        var habit = new Habit("Workout");
+        var habit = new Habit("Workout", clock.instant());
         habit.setScheduledDays(scheduledDays);
         var saved = habitWriteRepository.save(habit);
 
@@ -272,23 +276,23 @@ public class HabitStatsIntegrationTest {
 
     @Test
     void getDashboardStats_aggregatesOnlyActiveHabits() throws Exception {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
         DayOfWeek todayDay = today.getDayOfWeek();
         DayOfWeek tomorrowDay = today.plusDays(1).getDayOfWeek();
 
-        var completedDueHabit = new Habit("Completed today");
+        var completedDueHabit = new Habit("Completed today", clock.instant());
         completedDueHabit.setScheduledDays(EnumSet.of(todayDay));
         habitWriteRepository.save(completedDueHabit);
 
-        var incompleteDueHabit = new Habit("Still due today");
+        var incompleteDueHabit = new Habit("Still due today", clock.instant());
         incompleteDueHabit.setScheduledDays(EnumSet.of(todayDay));
         habitWriteRepository.save(incompleteDueHabit);
 
-        var notDueTodayHabit = new Habit("Not due today");
+        var notDueTodayHabit = new Habit("Not due today", clock.instant());
         notDueTodayHabit.setScheduledDays(EnumSet.of(tomorrowDay));
         habitWriteRepository.save(notDueTodayHabit);
 
-        var archivedHabit = new Habit("Archived habit");
+        var archivedHabit = new Habit("Archived habit", clock.instant());
         archivedHabit.setScheduledDays(EnumSet.of(todayDay));
         habitWriteRepository.save(archivedHabit);
 
@@ -327,10 +331,10 @@ public class HabitStatsIntegrationTest {
 
     @Test
     void getDashboardStats_returnsZeroLongestStreakWhenNoActiveStreaksExist() throws Exception {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
 
-        var firstHabit = habitWriteRepository.save(new Habit("Read"));
-        var secondHabit = habitWriteRepository.save(new Habit("Workout"));
+        var firstHabit = habitWriteRepository.save(new Habit("Read", clock.instant()));
+        var secondHabit = habitWriteRepository.save(new Habit("Workout", clock.instant()));
 
         expectEvents(2);
 
@@ -350,14 +354,14 @@ public class HabitStatsIntegrationTest {
 
     @Test
     void getDashboardStats_returnsLongestAmongMultipleActiveStreaks() throws Exception {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
 
         var threeDayStreakHabit = habitWriteRepository.save(
-            new Habit("Three day streak")
+            new Habit("Three day streak", clock.instant())
         );
 
         var sevenDayStreakHabit = habitWriteRepository.save(
-            new Habit("Seven day streak")
+            new Habit("Seven day streak", clock.instant())
         );
 
         expectEvents(2);
@@ -383,5 +387,15 @@ public class HabitStatsIntegrationTest {
             .andExpect(jsonPath("$.activeStreaks").value(2))
             .andExpect(jsonPath("$.longestActiveStreak").value(7))
             .andExpect(jsonPath("$.totalHabits").value(2));
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class FixedClockConfiguration {
+
+        @Bean
+        @Primary
+        Clock testClock() {
+            return Clock.fixed(TEST_INSTANT, TEST_ZONE);
+        }
     }
 }
