@@ -117,10 +117,6 @@ class HabitCompletionConcurrencyMySqlIT
             "spring.datasource.driver-class-name",
             MYSQL::getDriverClassName
         );
-        registry.add(
-            "spring.jpa.properties.hibernate.dialect",
-            () -> "org.hibernate.dialect.MySQLDialect"
-        );
     }
 
     @Autowired
