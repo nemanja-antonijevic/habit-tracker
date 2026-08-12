@@ -14,6 +14,8 @@ import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.test.context.EmbeddedKafka;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -56,13 +58,18 @@ class HabitCompletionStatRepositoryIntegrationTest {
         jdbcTemplate.update("DELETE FROM habits");
 
         doAnswer(invocation -> {
-            try {
-                return invocation.callRealMethod();
-            } finally {
-                if (messagesProcessedLatch != null) {
-                    messagesProcessedLatch.countDown();
+            Object result = invocation.callRealMethod();
+
+            TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCompletion(int status) {
+                        messagesProcessedLatch.countDown();
+                    }
                 }
-            }
+            );
+
+            return result;
         }).when(consumer).on(any(HabitEvent.class));
     }
 

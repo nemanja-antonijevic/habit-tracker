@@ -22,6 +22,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Clock;
 import java.time.DayOfWeek;
@@ -90,13 +92,18 @@ public class HabitStatsIntegrationTest {
         jdbcTemplate.update("DELETE FROM habits");
 
         doAnswer(invocation -> {
-            try {
-                return invocation.callRealMethod();
-            } finally {
-                if (messagesProcessedLatch != null) {
-                    messagesProcessedLatch.countDown();
+            Object result = invocation.callRealMethod();
+
+            TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCompletion(int status) {
+                        messagesProcessedLatch.countDown();
+                    }
                 }
-            }
+            );
+
+            return result;
         }).when(consumer).on(any(HabitEvent.class));
     }
 
