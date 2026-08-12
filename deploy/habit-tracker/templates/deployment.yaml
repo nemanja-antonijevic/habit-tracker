@@ -66,6 +66,10 @@ spec:
               value: {{ .Values.app.datasource.password | quote }}
             - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
               value: "{{ include "habit-tracker.fullname" . }}-kafka:{{ .Values.kafka.service.port }}"
+            - name: SPRING_DATA_REDIS_HOST
+              value: "{{ include "habit-tracker.fullname" . }}-redis"
+            - name: SPRING_DATA_REDIS_PORT
+              value: {{ .Values.redis.service.port | quote }}
             - name: SPRING_PROFILES_ACTIVE
               value: {{ .Values.app.profile | quote }}
 

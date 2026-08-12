@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "habit-tracker.fullname" . }}-redis
+  labels:
+    {{- include "habit-tracker.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  type: ClusterIP
+  ports:
+    - name: redis
+      port: {{ .Values.redis.service.port }}
+      targetPort: redis
+      protocol: TCP
+  selector:
+    {{- include "habit-tracker.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "habit-tracker.fullname" . }}-redis
+  labels:
+    {{- include "habit-tracker.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "habit-tracker.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: redis
+  template:
+    metadata:
+      labels:
+        {{- include "habit-tracker.labels" . | nindent 8 }}
+        app.kubernetes.io/component: redis
+    spec:
+      containers:
+        - name: redis
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+          args:
+            - "--port"
+            - {{ .Values.redis.service.port | quote }}
+            - "--maxmemory-policy"
+            - {{ .Values.redis.config.maxmemoryPolicy | quote }}
+          ports:
+            - name: redis
+              containerPort: {{ .Values.redis.service.port }}
+              protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -p
+                - {{ .Values.redis.service.port | quote }}
+                - ping
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -p
+                - {{ .Values.redis.service.port | quote }}
+                - ping
+            periodSeconds: 10
+            failureThreshold: 3

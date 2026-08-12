@@ -58,6 +58,16 @@ kafka:
   persistence:
     size: 1Gi
 
+redis:
+  image:
+    repository: redis
+    tag: "7"
+    pullPolicy: IfNotPresent
+  service:
+    port: 6379
+  config:
+    maxmemoryPolicy: noeviction
+
 ingress:
   enabled: false
   className: ""
