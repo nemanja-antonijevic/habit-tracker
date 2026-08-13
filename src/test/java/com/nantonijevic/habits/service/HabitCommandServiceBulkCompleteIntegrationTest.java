@@ -9,11 +9,14 @@ import com.nantonijevic.habits.event.HabitEvent;
 import com.nantonijevic.habits.repository.HabitMapper;
 import com.nantonijevic.habits.repository.HabitWriteRepository;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.mock.mockito.SpyBean;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.TestPropertySource;
@@ -28,12 +31,12 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.when;
 
 @TestPropertySource(
     properties =
         "spring.kafka.listener.auto-startup=false"
 )
+@Import(HabitCommandServiceBulkCompleteIntegrationTest.FixedClockConfiguration.class)
 class HabitCommandServiceBulkCompleteIntegrationTest
     extends AbstractIntegrationTest {
 
@@ -53,23 +56,17 @@ class HabitCommandServiceBulkCompleteIntegrationTest
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private Clock clock;
+
     @MockBean
     private KafkaTemplate<String, HabitEvent> kafkaTemplate;
 
     @MockBean
     private DashboardCacheGeneration dashboardCacheGeneration;
 
-    @MockBean
-    private Clock clock;
-
     @SpyBean
     private HabitWriteRepository habitWriteRepository;
-
-    @BeforeEach
-    void useFixedBusinessClock() {
-        when(clock.getZone()).thenReturn(TEST_ZONE);
-        when(clock.instant()).thenReturn(TEST_INSTANT);
-    }
 
     @AfterEach
     void cleanDatabase() {
@@ -87,6 +84,11 @@ class HabitCommandServiceBulkCompleteIntegrationTest
     @Test
     void bulkCompletePersistsMutatedHabitThroughMyBatis() {
         LocalDate today = LocalDate.of(2024, 1, 5);
+
+        // Literals, not the fixture constants: a mutation to TEST_INSTANT or
+        // TEST_ZONE must not move the expected value along with it.
+        assertThat(clock.instant()).isEqualTo(Instant.parse("2024-01-04T10:00:00Z"));
+        assertThat(clock.getZone()).isEqualTo(ZoneId.of("Pacific/Kiritimati"));
 
         Habit habit = habitCommandService.create(
             "Read",
@@ -240,5 +242,15 @@ class HabitCommandServiceBulkCompleteIntegrationTest
         assertThat(persistedCompleted.getVersion())
             .isEqualTo(1L);
         assertThat(completedCompletionRows).isEqualTo(1);
+    }
+
+    @TestConfiguration
+    static class FixedClockConfiguration {
+
+        @Bean
+        @Primary
+        Clock fixedClock() {
+            return Clock.fixed(TEST_INSTANT, TEST_ZONE);
+        }
     }
 }
