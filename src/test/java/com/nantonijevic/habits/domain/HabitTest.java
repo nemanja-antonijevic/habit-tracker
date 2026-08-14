@@ -3,6 +3,7 @@ package com.nantonijevic.habits.domain;
 import org.junit.jupiter.api.Test;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.EnumSet;
@@ -16,9 +17,12 @@ public class HabitTest {
     private static final ZoneId TEST_ZONE =
         ZoneId.of("UTC");
 
+    private static final Instant FIXED =
+        Instant.parse("2026-01-15T12:00:00Z");
+
     @Test
     void reComplete_sameDay_afterUncomplete_restoresStreak() {
-        Habit habit = new Habit("Read 30 min");
+        Habit habit = new Habit("Read 30 min", FIXED);
         LocalDate today = LocalDate.now(TEST_ZONE);
 
         habit.complete(
@@ -54,7 +58,7 @@ public class HabitTest {
 
     @Test
     void previousScheduledDateBeforeSkipsOffDays() {
-        Habit habit = new Habit("Workout");
+        Habit habit = new Habit("Workout", FIXED);
         habit.setScheduledDays(EnumSet.of(
                 DayOfWeek.MONDAY,
                 DayOfWeek.WEDNESDAY,
@@ -69,7 +73,7 @@ public class HabitTest {
 
     @Test
     void completeThrowsWhenTodayIsNotScheduled() {
-        Habit habit = new Habit("Workout");
+        Habit habit = new Habit("Workout", FIXED);
         habit.setScheduledDays(EnumSet.of(
                 DayOfWeek.MONDAY,
                 DayOfWeek.WEDNESDAY,
@@ -85,7 +89,7 @@ public class HabitTest {
 
     @Test
     void completeContinuesStreakAcrossOffDays() {
-        Habit habit = new Habit("Workout");
+        Habit habit = new Habit("Workout", FIXED);
         habit.setScheduledDays(EnumSet.of(
                 DayOfWeek.MONDAY,
                 DayOfWeek.WEDNESDAY,
@@ -104,7 +108,7 @@ public class HabitTest {
 
     @Test
     void uncompleteLastCompletionRecomputesLongestStreakWhenLatestCompletionCreatedNewRecord() {
-        Habit habit = new Habit("Read 30 min");
+        Habit habit = new Habit("Read 30 min", FIXED);
 
         LocalDate day1 = LocalDate.of(2026, 7, 1);
         LocalDate day2 = LocalDate.of(2026, 7, 2);
@@ -128,7 +132,7 @@ public class HabitTest {
 
     @Test
     void uncompleteLastCompletionSetsCurrentStreakToZeroWhenRemainingHistoryIsNotAlive() {
-        Habit habit = new Habit("Read 30 min");
+        Habit habit = new Habit("Read 30 min", FIXED);
 
         LocalDate day1 = LocalDate.of(2026, 7, 1);
         LocalDate day2 = LocalDate.of(2026, 7, 2);
@@ -154,7 +158,7 @@ public class HabitTest {
 
     @Test
     void effectiveCurrentStreakStaysAliveAcrossOffDays() {
-        Habit habit = new Habit("Workout");
+        Habit habit = new Habit("Workout", FIXED);
         habit.setScheduledDays(EnumSet.of(
                 DayOfWeek.MONDAY,
                 DayOfWeek.WEDNESDAY,
@@ -170,7 +174,7 @@ public class HabitTest {
 
     @Test
     void setScheduledDaysRejectsEmptySchedule() {
-        Habit habit = new Habit("Workout");
+        Habit habit = new Habit("Workout", FIXED);
 
         assertThatThrownBy(() -> habit.setScheduledDays(EnumSet.noneOf(DayOfWeek.class)))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -178,7 +182,7 @@ public class HabitTest {
 
     @Test
     void getScheduledDaysReturnsDefensiveCopy() {
-        Habit habit = new Habit("Workout");
+        Habit habit = new Habit("Workout", FIXED);
         EnumSet<DayOfWeek> scheduledDays = habit.getScheduledDays();
 
         scheduledDays.clear();

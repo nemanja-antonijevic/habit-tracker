@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,7 +29,10 @@ class HabitCompletionRepositoryIntegrationTest
     @Test
     void rejectsDuplicateCompletionForSameHabitAndDate() {
         Habit habit = habitFixtureRepository.save(
-            new Habit("Unique completion test")
+            new Habit(
+                "Unique completion test",
+                Instant.parse("2026-01-15T00:00:00Z")
+            )
         );
         LocalDate completedOn = LocalDate.of(2026, 7, 27);
 

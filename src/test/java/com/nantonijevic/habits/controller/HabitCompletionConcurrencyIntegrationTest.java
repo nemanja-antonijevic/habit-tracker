@@ -19,6 +19,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.EnumSet;
 import java.util.List;
@@ -41,6 +42,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 @AutoConfigureMockMvc
 class HabitCompletionConcurrencyIntegrationTest
     extends AbstractIntegrationTest {
+
+    private static final Instant FIXED =
+        Instant.parse("2026-01-15T00:00:00Z");
 
     private static final int CONCURRENT_CALLERS = 2;
 
@@ -234,7 +238,8 @@ class HabitCompletionConcurrencyIntegrationTest
     ) {
         Habit habit =
             new Habit(
-                "Concurrent completion"
+                "Concurrent completion",
+                FIXED
             );
 
         habit.setScheduledDays(

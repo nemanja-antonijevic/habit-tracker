@@ -37,6 +37,9 @@ class HabitQueryServiceTest {
     private static final ZoneId TEST_ZONE =
         ZoneId.of("UTC");
 
+    private static final Instant FIXED =
+        Instant.parse("2026-01-15T12:00:00Z");
+
     @Mock
     private HabitSearchRepository habitSearchRepository;
 
@@ -65,7 +68,7 @@ class HabitQueryServiceTest {
     @Test
     void completionRateRoundsOneThirdToFourDecimalPlaces() {
         Long habitId = 42L;
-        Habit habit = new Habit("Read");
+        Habit habit = new Habit("Read", FIXED);
 
         LocalDate createdDate =
             LocalDate.ofInstant(
@@ -121,7 +124,7 @@ class HabitQueryServiceTest {
     @Test
     void completionRateReturnsEmptyResponseWithoutQueryWhenHabitWasCreatedAfterWindow() {
         Long habitId = 42L;
-        Habit habit = new Habit("Read");
+        Habit habit = new Habit("Read", FIXED);
 
         LocalDate from =
             LocalDate.of(2000, 1, 1);
@@ -211,7 +214,7 @@ class HabitQueryServiceTest {
         Long habitId = 42L;
 
         Habit habit =
-            new Habit("Read");
+            new Habit("Read", FIXED);
 
         Instant createdAt =
             Instant.parse(
@@ -320,7 +323,7 @@ class HabitQueryServiceTest {
         Long habitId = 42L;
 
         Habit habit =
-            new Habit("Read");
+            new Habit("Read", FIXED);
 
         Instant createdAt =
             Instant.parse(
@@ -387,7 +390,7 @@ class HabitQueryServiceTest {
         Long habitId = 42L;
 
         Habit habit =
-            new Habit("Read");
+            new Habit("Read", FIXED);
 
         LocalDate createdDate =
             LocalDate.ofInstant(
@@ -444,7 +447,7 @@ class HabitQueryServiceTest {
         Long habitId = 42L;
 
         Habit habit =
-            new Habit("Read");
+            new Habit("Read", FIXED);
 
         LocalDate createdDate =
             LocalDate.ofInstant(

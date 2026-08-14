@@ -31,6 +31,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.EnumSet;
 import java.util.List;
@@ -122,7 +123,10 @@ class DashboardCacheRaceIT {
         LocalDate today =
             LocalDate.of(2026, 7, 21);
 
-        Habit habit = new Habit("Read");
+        Habit habit = new Habit(
+            "Read",
+            Instant.parse("2026-01-15T00:00:00Z")
+        );
 
         habit.setScheduledDays(
             EnumSet.allOf(DayOfWeek.class)

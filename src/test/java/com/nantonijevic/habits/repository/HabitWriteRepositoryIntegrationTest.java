@@ -9,6 +9,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.util.EnumSet;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -16,6 +17,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Transactional
 class HabitWriteRepositoryIntegrationTest extends AbstractIntegrationTest {
+
+    private static final Instant FIXED =
+        Instant.parse("2026-01-15T12:00:00Z");
 
     @Autowired
     private HabitWriteRepository habitRepository;
@@ -28,7 +32,7 @@ class HabitWriteRepositoryIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void insertsHabitAndSynchronizesGeneratedIdAndVersion() {
-        Habit habit = new Habit("Workout");
+        Habit habit = new Habit("Workout", FIXED);
 
         habit.setScheduledDays(
             EnumSet.of(
@@ -77,7 +81,7 @@ class HabitWriteRepositoryIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void updatesHabitAndIncrementsVersionInDatabaseAndMemory() {
-        Habit habit = new Habit("Workout");
+        Habit habit = new Habit("Workout", FIXED);
         habitRepository.save(habit);
 
         assertThat(habit.getVersion()).isZero();
@@ -121,7 +125,7 @@ class HabitWriteRepositoryIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void rejectsUpdateWhenVersionIsStale() {
-        Habit habit = new Habit("Workout");
+        Habit habit = new Habit("Workout", FIXED);
         habitRepository.save(habit);
 
         habit.setName("Current name");

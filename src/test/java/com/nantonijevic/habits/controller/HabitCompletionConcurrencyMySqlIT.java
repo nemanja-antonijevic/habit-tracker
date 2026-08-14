@@ -88,6 +88,9 @@ class HabitCompletionConcurrencyMySqlIT
             "Etc/GMT+12"
         );
 
+    private static final Instant FIXED =
+        Instant.parse("2026-01-15T00:00:00Z");
+
     @Container
     static final MySQLContainer<?> MYSQL =
         new MySQLContainer<>(
@@ -421,7 +424,8 @@ class HabitCompletionConcurrencyMySqlIT
     ) {
         Habit habit =
             new Habit(
-                "MySQL concurrent completion"
+                "MySQL concurrent completion",
+                FIXED
             );
 
         habit.setScheduledDays(

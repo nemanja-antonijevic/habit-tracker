@@ -33,10 +33,6 @@ public class Habit {
     protected Habit() {
     }
 
-    public Habit(String name) {
-        this(name, Instant.now());
-    }
-
     public Habit(String name, Instant createdAt) {
         this.name = name;
         this.createdAt = Objects.requireNonNull(

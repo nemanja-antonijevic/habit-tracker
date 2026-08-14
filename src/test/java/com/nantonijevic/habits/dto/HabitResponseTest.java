@@ -4,6 +4,7 @@ import com.nantonijevic.habits.domain.Habit;
 import org.junit.jupiter.api.Test;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.EnumSet;
@@ -17,7 +18,7 @@ class HabitResponseTest {
 
     @Test
     void fromUsesProvidedTodayForCurrentStreak() {
-        Habit habit = new Habit("Read");
+        Habit habit = new Habit("Read", Instant.EPOCH);
 
         habit.setScheduledDays(EnumSet.of(
             DayOfWeek.MONDAY,

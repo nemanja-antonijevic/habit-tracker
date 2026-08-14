@@ -44,6 +44,9 @@ class HabitCommandServiceTest {
     private static final ZoneId TEST_ZONE =
         ZoneId.of("UTC");
 
+    private static final Instant FIXED =
+        Instant.parse("2026-01-15T12:00:00Z");
+
     @Mock
     private HabitWriteRepository habitWriteRepository;
 
@@ -147,7 +150,7 @@ class HabitCommandServiceTest {
         Long version = 3L;
 
         Habit existingHabit =
-            new Habit("Old name");
+            new Habit("Old name", FIXED);
 
         existingHabit.synchronizePersistenceVersion(
             version
@@ -199,7 +202,7 @@ class HabitCommandServiceTest {
         Long habitId = 42L;
 
         Habit existingHabit =
-            new Habit("Original name");
+            new Habit("Original name", FIXED);
 
         existingHabit.synchronizePersistenceVersion(
             4L
@@ -247,7 +250,7 @@ class HabitCommandServiceTest {
         Long habitId = 42L;
 
         Habit existingHabit =
-            new Habit("Read");
+            new Habit("Read", FIXED);
 
         existingHabit.synchronizePersistenceVersion(
             2L
@@ -285,7 +288,7 @@ class HabitCommandServiceTest {
         Long habitId = 42L;
 
         Habit existingHabit =
-            new Habit("Read");
+            new Habit("Read", FIXED);
 
         existingHabit.archive();
 
@@ -328,7 +331,7 @@ class HabitCommandServiceTest {
             LocalDate.of(2024, 1, 5);
 
         Habit existingHabit =
-            new Habit("Read");
+            new Habit("Read", FIXED);
 
         existingHabit.complete(
             today,
@@ -381,7 +384,7 @@ class HabitCommandServiceTest {
             LocalDate.of(2024, 1, 5);
 
         Habit existingHabit =
-            new Habit("Read");
+            new Habit("Read", FIXED);
 
         existingHabit.synchronizePersistenceVersion(
             2L
@@ -434,7 +437,7 @@ class HabitCommandServiceTest {
             ZoneId.of("Pacific/Kiritimati");
 
         Habit existingHabit =
-            new Habit("Read");
+            new Habit("Read", FIXED);
 
         existingHabit.synchronizePersistenceVersion(
             2L
@@ -491,14 +494,14 @@ class HabitCommandServiceTest {
             LocalDate.of(2024, 1, 5);
 
         Habit firstHabit =
-            new Habit("Read");
+            new Habit("Read", FIXED);
 
         firstHabit.synchronizePersistenceVersion(
             1L
         );
 
         Habit secondHabit =
-            new Habit("Exercise");
+            new Habit("Exercise", FIXED);
 
         secondHabit.synchronizePersistenceVersion(
             2L
@@ -537,7 +540,7 @@ class HabitCommandServiceTest {
             LocalDate.of(2024, 1, 5);
 
         Habit alreadyCompleted =
-            new Habit("Read");
+            new Habit("Read", FIXED);
 
         alreadyCompleted.complete(
             today,
@@ -577,14 +580,14 @@ class HabitCommandServiceTest {
             LocalDate.of(2024, 1, 5);
 
         Habit firstSnapshot =
-            new Habit("Read");
+            new Habit("Read", FIXED);
 
         firstSnapshot.synchronizePersistenceVersion(
             0L
         );
 
         Habit retrySnapshot =
-            new Habit("Read");
+            new Habit("Read", FIXED);
 
         retrySnapshot.synchronizePersistenceVersion(
             1L
@@ -668,19 +671,19 @@ class HabitCommandServiceTest {
             LocalDate.of(2024, 1, 5);
 
         Habit firstConflictedSnapshot =
-            new Habit("Read");
+            new Habit("Read", FIXED);
 
         firstConflictedSnapshot
             .synchronizePersistenceVersion(0L);
 
         Habit retryConflictedSnapshot =
-            new Habit("Read");
+            new Habit("Read", FIXED);
 
         retryConflictedSnapshot
             .synchronizePersistenceVersion(1L);
 
         Habit completedHabit =
-            new Habit("Exercise");
+            new Habit("Exercise", FIXED);
 
         completedHabit.synchronizePersistenceVersion(
             0L
@@ -797,7 +800,7 @@ class HabitCommandServiceTest {
             LocalDate.of(2024, 1, 5);
 
         Habit completedHabit =
-            new Habit("Read");
+            new Habit("Read", FIXED);
 
         completedHabit.synchronizePersistenceVersion(
             0L
@@ -889,7 +892,7 @@ class HabitCommandServiceTest {
             LocalDate.of(2024, 1, 5);
 
         Habit existingHabit =
-            new Habit("Read");
+            new Habit("Read", FIXED);
 
         existingHabit.complete(
             today,
@@ -1021,14 +1024,14 @@ class HabitCommandServiceTest {
             LocalDate.of(2024, 1, 5);
 
         Habit staleHabit =
-            new Habit("Read");
+            new Habit("Read", FIXED);
 
         staleHabit.synchronizePersistenceVersion(
             0L
         );
 
         Habit freshlyCompletedHabit =
-            new Habit("Read");
+            new Habit("Read", FIXED);
 
         freshlyCompletedHabit.complete(
             today,
@@ -1139,13 +1142,13 @@ class HabitCommandServiceTest {
             LocalDate.of(2024, 1, 5);
 
         Habit firstSnapshot =
-            new Habit("Read");
+            new Habit("Read", FIXED);
 
         firstSnapshot
             .synchronizePersistenceVersion(0L);
 
         Habit secondSnapshot =
-            new Habit("Read");
+            new Habit("Read", FIXED);
 
         secondSnapshot
             .synchronizePersistenceVersion(1L);

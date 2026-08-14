@@ -43,7 +43,7 @@ class HabitControllerTest {
             LocalDate.now(clock);
 
         Habit habit =
-            new Habit("Read");
+            new Habit("Read", clock.instant());
 
         when(
             habitCommandService.complete(

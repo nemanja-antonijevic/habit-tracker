@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.EnumSet;
 
@@ -33,7 +34,10 @@ class HabitQueryServiceStatsIntegrationTest extends AbstractIntegrationTest {
         LocalDate today = LocalDate.of(2024, 1, 5);
         LocalDate lastCompleted = LocalDate.of(2024, 1, 3);
 
-        Habit habit = new Habit("Workout");
+        Habit habit = new Habit(
+            "Workout",
+            Instant.parse("2023-12-31T00:00:00Z")
+        );
         habit.setScheduledDays(
             EnumSet.of(
                 DayOfWeek.MONDAY,
