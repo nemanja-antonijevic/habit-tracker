@@ -1,3 +1,2 @@
 spring.jpa.show-sql: false
-logging.level.com.nantonijevic.habits: INFO
-logging.level.root: WARN
+spring.main.banner-mode: off
