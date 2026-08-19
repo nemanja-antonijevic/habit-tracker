@@ -2,6 +2,47 @@
 
 Local server at `http://localhost:8080`. Append `| jq` for formatted JSON.
 
+## Client tiers (`X-Api-Key`)
+
+Every response containing a habit is filtered by client tier. The tier comes from the optional
+`X-Api-Key` header, resolved through the `api_clients` table; a missing or unknown key fails closed
+to `PUBLIC`. `PUBLIC` omits `scheduledDays`, `archived` and `createdAt` entirely — the fields are
+absent from the JSON, not `null`. `TRUSTED` omits only `createdAt`. `INTERNAL` returns everything.
+See [docs/api-reference.md](docs/api-reference.md) for the full matrix.
+
+The header selects field visibility only — it is not authentication. Keys are stored in plaintext
+and no key is seeded by Flyway, so a fresh database resolves every client to `PUBLIC`. Provision one
+by hand to see the other tiers:
+
+```bash
+# Against the compose MySQL (user/password/database are all `habits`)
+docker compose exec -T mysql \
+  mysql -uhabits -phabits habits -e \
+  "INSERT INTO api_clients (api_key, tier, name, created_at)
+   VALUES ('local-internal-key', 'INTERNAL', 'Local dev', NOW(6));"
+```
+
+```bash
+# No header → PUBLIC: no scheduledDays, no archived, no createdAt
+curl -s http://localhost:8080/habits/1
+
+# INTERNAL → all fields present
+curl -s http://localhost:8080/habits/1 \
+  -H "X-Api-Key: local-internal-key"
+
+# Unknown key behaves exactly like no key (fail closed, still 200 — never 401)
+curl -s http://localhost:8080/habits/1 \
+  -H "X-Api-Key: not-a-real-key"
+
+# Filtering applies inside pages too; pagination metadata is unaffected by the tier
+curl -s "http://localhost:8080/habits?size=10" \
+  -H "X-Api-Key: local-internal-key"
+```
+
+The header works on every endpoint below that returns a habit: create, list, get by id, update,
+complete, uncomplete, archive, unarchive and due-today. It is omitted from the examples that follow,
+so those show `PUBLIC` output.
+
 ## Habits CRUD
 
 ```bash

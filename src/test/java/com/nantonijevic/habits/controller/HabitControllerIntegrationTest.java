@@ -1,6 +1,8 @@
 package com.nantonijevic.habits.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nantonijevic.habits.client.ClientTier;
+import com.nantonijevic.habits.client.ClientTierResolver;
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.domain.HabitCompletion;
 import com.nantonijevic.habits.domain.HabitCompletionStat;
@@ -9,8 +11,10 @@ import com.nantonijevic.habits.AbstractIntegrationTest;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
 import com.nantonijevic.habits.support.HabitTestFixtureRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
@@ -31,6 +35,8 @@ import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -67,6 +73,15 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private HabitCompletionStatRepository completionStatRepository;
+
+    @MockBean
+    private ClientTierResolver clientTierResolver;
+
+    @BeforeEach
+    void useInternalClientTier() {
+        when(clientTierResolver.resolve(any()))
+            .thenReturn(ClientTier.INTERNAL);
+    }
 
     @Test
     void createHabit_returns201_andPersistsHabit() throws Exception {

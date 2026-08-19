@@ -9,6 +9,22 @@ Full specification of every HTTP endpoint. This is the source of truth for the A
 
 All routes live under `/habits` (`HabitController`).
 
+## Client tiers and response filtering
+
+Habit responses are filtered according to the optional `X-Api-Key` request header. A recognized key is resolved through the `api_clients` table to one of three tiers. A missing or unknown key fails closed to `PUBLIC`.
+
+| Tier | `scheduledDays` | `archived` | `createdAt` |
+|------|-----------------|------------|-------------|
+| `INTERNAL` | included | included | included |
+| `TRUSTED` | included | included | omitted |
+| `PUBLIC` | omitted | omitted | omitted |
+
+`X-Api-Key` currently selects response-field visibility only; it is not an authentication or authorization mechanism. Keys are provisioned directly in `api_clients` and are currently stored in plaintext. No credential is seeded by Flyway: without an explicitly provisioned row, clients resolve to `PUBLIC`. Secure provisioning, key hashing, and rate limiting are deferred backlog work.
+
+The fields `id`, `name`, `completionCount`, and `currentStreak` are returned for every tier. Hidden fields are physically absent from the JSON response rather than serialized as `null`.
+
+Filtering applies to all endpoints that return `HabitResponse`, including paginated and list responses: endpoints 1, 2, 3, 4, 6, 7, 8, 9, and 12. Pagination metadata is unchanged by filtering.
+
 ## Endpoint overview
 
 | # | Method | Path | Purpose | CQRS side |
@@ -34,7 +50,7 @@ All routes live under `/habits` (`HabitController`).
 
 ### HabitResponse
 
-Standard habit representation. Returned by endpoints 1, 3, 4, 6, 7, 8, 9.
+Standard habit representation. Returned directly or inside a page/list by endpoints 1, 2, 3, 4, 6, 7, 8, 9, and 12. The fields present in JSON depend on the client tier described above.
 
 | Field | Type | Description |
 |-------|------|-------------|

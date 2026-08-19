@@ -1,5 +1,6 @@
 package com.nantonijevic.habits.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.nantonijevic.habits.domain.Habit;
 
 import java.time.DayOfWeek;
@@ -8,13 +9,14 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Set;
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public record HabitResponse(
         Long id,
         String name,
         Set<DayOfWeek> scheduledDays,
         int completionCount,
         int currentStreak,
-        boolean archived,
+        Boolean archived,
         Instant createdAt
 ) {
     public static HabitResponse from(

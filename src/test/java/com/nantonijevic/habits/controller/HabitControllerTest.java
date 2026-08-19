@@ -1,5 +1,7 @@
 package com.nantonijevic.habits.controller;
 
+import com.nantonijevic.habits.client.ClientTier;
+import com.nantonijevic.habits.client.HabitResponseTransformer;
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.service.HabitCommandService;
 import com.nantonijevic.habits.service.HabitQueryService;
@@ -26,6 +28,9 @@ class HabitControllerTest {
 
     @Mock
     private HabitQueryService habitQueryService;
+
+    @Mock
+    private HabitResponseTransformer habitResponseTransformer;
 
     @Test
     void completeUsesInjectedClockForBusinessDate() {
@@ -57,10 +62,14 @@ class HabitControllerTest {
             new HabitController(
                 habitCommandService,
                 habitQueryService,
-                clock
+                clock,
+                habitResponseTransformer
             );
 
-        controller.complete(42L);
+        controller.complete(
+            42L,
+            ClientTier.INTERNAL
+        );
 
         verify(habitCommandService)
             .complete(
