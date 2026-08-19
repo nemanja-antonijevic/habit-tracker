@@ -50,6 +50,53 @@ Docker-dependent tests (Redis and MySQL via Testcontainers) are named `*IT` and 
 - Full endpoint specification: [docs/api-reference.md](docs/api-reference.md)
 - Quick curl examples: [curls.md](curls.md)
 
+## Deploy (minikube)
+
+The Helm chart in `deploy/habit-tracker/` runs the whole stack in-cluster — app and Redis as Deployments, MySQL and Kafka as StatefulSets with their own PVCs, and an init container that waits for MySQL before the JVM starts.
+
+**The chart's default `image.tag` is `latest`, and no such image is ever built.** A plain `helm install` with default values renders `habit-tracker:latest` and the pod fails trying to pull it from Docker Hub. This is not a broken chart — the image is built locally into minikube's own Docker daemon under the tag `dev`, and both the tag and the pull policy are supplied at install time:
+
+```bash
+eval $(minikube docker-env)              # build into minikube's daemon, not the Mac one
+docker build -t habit-tracker:dev .
+helm install ht deploy/habit-tracker \
+  --set image.tag=dev \
+  --set image.pullPolicy=Never          # never reach for a registry; the image is already local
+```
+
+`image.tag=dev` with `pullPolicy=Never` is deliberate rather than incidental: a mutable `latest` combined with the default `IfNotPresent` silently keeps running whatever stale layer already sits in the node's image cache, so a rebuild appears to deploy without the new code ever starting.
+
+Object names are `<release>-habit-tracker[-component]`, so with release `ht` the app Service is `ht-habit-tracker`, not `ht`:
+
+```bash
+kubectl get pods                                    # ht-habit-tracker, -redis, -mysql-0, -kafka-0 all 1/1
+kubectl port-forward service/ht-habit-tracker 8080:8080
+curl -s localhost:8080/actuator/health
+```
+
+Tear down:
+```bash
+helm uninstall ht
+kubectl get pvc                                     # StatefulSet PVCs outlive uninstall by design
+kubectl delete pvc mysql-data-ht-habit-tracker-mysql-0 kafka-data-ht-habit-tracker-kafka-0
+```
+
+`volumeClaimTemplates` PVCs carry no chart labels, so there is no `-l app.kubernetes.io/instance=ht` selector to delete them by — list first, then delete by name. Leaving them behind is how a fresh `helm install` comes up with the previous run's data still in place.
+
+### GitOps (ArgoCD)
+
+`deploy/argocd/habit-tracker-application.yaml` is the same chart under ArgoCD, tracking `deploy/habit-tracker` on `main`. It passes those two image parameters through `helm.parameters`, which is the only reason the committed defaults never surface in that path:
+
+```bash
+kubectl apply -f deploy/argocd/habit-tracker-application.yaml
+```
+
+`syncPolicy.automated` has both `prune` and `selfHeal` on, so manual `kubectl` edits to a managed resource are reverted to the Git state rather than kept.
+
+Two details worth knowing before reading the chart:
+- **`Chart.yaml`'s `appVersion` is effectively dead as an image tag.** The template falls back to it (`image.tag | default .Chart.AppVersion`), but `values.yaml` always supplies a non-empty tag, so the fallback only fires if the tag is explicitly overridden to empty.
+- **Secrets are not modelled.** The MySQL password is passed as a literal in `values.yaml` and appears on the init container's command line. Acceptable for a local minikube run, not for a real cluster.
+
 ## Project layout
 
 ```
