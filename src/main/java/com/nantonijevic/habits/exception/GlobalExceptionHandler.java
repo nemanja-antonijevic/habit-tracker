@@ -1,5 +1,6 @@
 package com.nantonijevic.habits.exception;
 
+import com.nantonijevic.habits.client.InvalidApiKeyException;
 import com.nantonijevic.habits.domain.HabitNotFoundException;
 import com.nantonijevic.habits.domain.HabitVersionConflictException;
 import com.nantonijevic.habits.domain.InvalidHabitStateException;
@@ -55,5 +56,13 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ErrorResponse handleInvalidDateRange(InvalidDateRangeException ex) {
         return new ErrorResponse(ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidApiKeyException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public ErrorResponse handle(
+        InvalidApiKeyException exception
+    ) {
+        return new ErrorResponse(exception.getMessage());
     }
 }

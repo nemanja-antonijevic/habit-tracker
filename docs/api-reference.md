@@ -11,7 +11,7 @@ All routes live under `/habits` (`HabitController`).
 
 ## Client tiers and response filtering
 
-Habit responses are filtered according to the optional `X-Api-Key` request header. A recognized key is resolved through the `api_clients` table to one of three tiers. A missing or unknown key fails closed to `PUBLIC`.
+Habit responses are filtered according to the optional `X-Api-Key` request header. A recognized key is resolved through the `api_clients` table to one of three tiers. A missing header represents an anonymous client and uses `PUBLIC`; a supplied but unknown key is rejected with `401 Unauthorized`.
 
 | Tier | `scheduledDays` | `archived` | `createdAt` |
 |------|-----------------|------------|-------------|
@@ -19,7 +19,9 @@ Habit responses are filtered according to the optional `X-Api-Key` request heade
 | `TRUSTED` | included | included | omitted |
 | `PUBLIC` | omitted | omitted | omitted |
 
-`X-Api-Key` currently selects response-field visibility only; it is not an authentication or authorization mechanism. Keys are provisioned directly in `api_clients` and are currently stored in plaintext. No credential is seeded by Flyway: without an explicitly provisioned row, clients resolve to `PUBLIC`. Secure provisioning, key hashing, and rate limiting are deferred backlog work.
+`X-Api-Key` is a response-visibility credential, not a complete authentication or authorization system. Keys are provisioned directly in `api_clients` and are currently stored in plaintext. No credential is seeded by Flyway, so clients without a header use `PUBLIC`. Secure provisioning, key hashing, and rate limiting are deferred backlog work.
+
+Successful key-to-tier lookups are cached in Redis for 60 seconds. Missing and unknown keys are not cached. Consequently, a tier change or key revocation can take up to 60 seconds to propagate for an already cached key.
 
 The fields `id`, `name`, `completionCount`, and `currentStreak` are returned for every tier. Hidden fields are physically absent from the JSON response rather than serialized as `null`.
 

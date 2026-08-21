@@ -1,0 +1,206 @@
+package com.nantonijevic.habits.client;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.cache.CacheManager;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
+
+import java.time.Instant;
+import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+
+import static com.nantonijevic.habits.config.RedisCacheConfig.API_CLIENT_TIERS_CACHE;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+@Testcontainers
+@SpringBootTest(properties = {
+    "spring.kafka.listener.auto-startup=false",
+    "spring.cache.type=redis"
+})
+class ClientTierCacheIT {
+
+    private static final int REDIS_PORT = 6379;
+
+    private static final Instant CREATED_AT =
+        Instant.parse("2026-08-21T08:00:00Z");
+
+    @Container
+    static final GenericContainer<?> redis =
+        new GenericContainer<>(
+            DockerImageName.parse(
+                "redis:7.2.5-alpine"
+            )
+        ).withExposedPorts(REDIS_PORT);
+
+    @DynamicPropertySource
+    static void redisProperties(
+        DynamicPropertyRegistry registry
+    ) {
+        registry.add(
+            "spring.data.redis.host",
+            redis::getHost
+        );
+
+        registry.add(
+            "spring.data.redis.port",
+            () -> redis.getMappedPort(REDIS_PORT)
+        );
+    }
+
+    @Autowired
+    private ClientTierResolver resolver;
+
+    @Autowired
+    private ApiClientRepository repository;
+
+    @Autowired
+    private CacheManager cacheManager;
+
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
+    @BeforeEach
+    void clearStateBeforeTest() {
+        clearState();
+    }
+
+    @AfterEach
+    void clearStateAfterTest() {
+        clearState();
+    }
+
+    @Test
+    void knownTierSurvivesRedisRoundTripForSixtySeconds() {
+        repository.saveAndFlush(
+            client(
+                "internal-key",
+                ClientTier.INTERNAL
+            )
+        );
+
+        assertThat(resolve("internal-key"))
+            .isEqualTo(ClientTier.INTERNAL);
+
+        repository.deleteAll();
+
+        assertThat(resolve("internal-key"))
+            .as("second lookup must come from Redis")
+            .isEqualTo(ClientTier.INTERNAL);
+
+        String key = cacheKey("internal-key");
+
+        assertThat(redisTemplate.hasKey(key))
+            .isTrue();
+
+        assertThat(
+            redisTemplate.getExpire(
+                key,
+                TimeUnit.SECONDS
+            )
+        ).isBetween(1L, 60L);
+    }
+
+    @Test
+    void differentKeysKeepIndependentRedisEntries() {
+        repository.saveAndFlush(
+            client(
+                "internal-key",
+                ClientTier.INTERNAL
+            )
+        );
+
+        repository.saveAndFlush(
+            client(
+                "trusted-key",
+                ClientTier.TRUSTED
+            )
+        );
+
+        assertThat(resolve("internal-key"))
+            .isEqualTo(ClientTier.INTERNAL);
+
+        assertThat(resolve("trusted-key"))
+            .isEqualTo(ClientTier.TRUSTED);
+
+        assertThat(
+            redisTemplate.hasKey(
+                cacheKey("internal-key")
+            )
+        ).isTrue();
+
+        assertThat(
+            redisTemplate.hasKey(
+                cacheKey("trusted-key")
+            )
+        ).isTrue();
+    }
+
+    @Test
+    void unknownKeyIsNotStoredInRedis() {
+        assertThatThrownBy(
+            () -> resolve("provisioned-later")
+        ).isInstanceOf(InvalidApiKeyException.class);
+
+        assertThat(
+            redisTemplate.hasKey(
+                cacheKey("provisioned-later")
+            )
+        ).isFalse();
+
+        repository.saveAndFlush(
+            client(
+                "provisioned-later",
+                ClientTier.TRUSTED
+            )
+        );
+
+        assertThat(resolve("provisioned-later"))
+            .as(
+                "newly provisioned key must work "
+                    + "without waiting for a negative TTL"
+            )
+            .isEqualTo(ClientTier.TRUSTED);
+    }
+
+    private ClientTier resolve(String apiKey) {
+        return resolver.resolve(
+            Optional.of(apiKey)
+        );
+    }
+
+    private static ApiClient client(
+        String apiKey,
+        ClientTier tier
+    ) {
+        return new ApiClient(
+            apiKey,
+            tier,
+            "Cache test client",
+            CREATED_AT
+        );
+    }
+
+    private static String cacheKey(String apiKey) {
+        return API_CLIENT_TIERS_CACHE
+            + "::"
+            + apiKey;
+    }
+
+    private void clearState() {
+        cacheManager
+            .getCache(API_CLIENT_TIERS_CACHE)
+            .clear();
+
+        repository.deleteAll();
+    }
+}

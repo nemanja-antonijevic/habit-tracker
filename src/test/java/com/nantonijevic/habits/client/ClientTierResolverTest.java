@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -32,15 +33,17 @@ class ClientTierResolverTest {
     }
 
     @Test
-    void unknownApiKeyFallsBackToPublic() {
+    void unknownApiKeyIsRejectedAfterDatabaseLookup() {
         when(repository.findByApiKey("unknown-key"))
             .thenReturn(Optional.empty());
 
-        ClientTier tier = resolver.resolve(
-            Optional.of("unknown-key")
-        );
-
-        assertThat(tier).isEqualTo(ClientTier.PUBLIC);
+        assertThatThrownBy(
+            () -> resolver.resolve(
+                Optional.of("unknown-key")
+            )
+        )
+            .isInstanceOf(InvalidApiKeyException.class)
+            .hasMessage("Invalid API key");
 
         verify(repository)
             .findByApiKey("unknown-key");

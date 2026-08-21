@@ -266,6 +266,31 @@ class ClientTierFilteringIntegrationTest
             );
     }
 
+    @Test
+    void unknownApiKeyIsRejectedAsUnauthorized()
+        throws Exception {
+
+        Habit saved = habitRepository.save(
+            new Habit(
+                "Unknown API key",
+                CREATED_AT
+            )
+        );
+
+        mockMvc.perform(
+                get("/habits/{id}", saved.getId())
+                    .header(
+                        ClientTierArgumentResolver.API_KEY_HEADER,
+                        "unknown-key"
+                    )
+            )
+            .andExpect(status().isUnauthorized())
+            .andExpect(
+                jsonPath("$.error")
+                    .value("Invalid API key")
+            );
+    }
+
     private ResultActions performPublicRequest(
         PublicEndpoint endpoint
     ) throws Exception {

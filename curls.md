@@ -5,14 +5,17 @@ Local server at `http://localhost:8080`. Append `| jq` for formatted JSON.
 ## Client tiers (`X-Api-Key`)
 
 Every response containing a habit is filtered by client tier. The tier comes from the optional
-`X-Api-Key` header, resolved through the `api_clients` table; a missing or unknown key fails closed
-to `PUBLIC`. `PUBLIC` omits `scheduledDays`, `archived` and `createdAt` entirely — the fields are
-absent from the JSON, not `null`. `TRUSTED` omits only `createdAt`. `INTERNAL` returns everything.
+`X-Api-Key` header, resolved through the `api_clients` table. A missing header represents an
+anonymous `PUBLIC` client, while a supplied but unknown key is rejected with `401 Unauthorized`.
+
+`PUBLIC` omits `scheduledDays`, `archived` and `createdAt` entirely — the fields are absent from
+the JSON, not `null`. `TRUSTED` omits only `createdAt`. `INTERNAL` returns everything.
 See [docs/api-reference.md](docs/api-reference.md) for the full matrix.
 
-The header selects field visibility only — it is not authentication. Keys are stored in plaintext
-and no key is seeded by Flyway, so a fresh database resolves every client to `PUBLIC`. Provision one
-by hand to see the other tiers:
+The header is a response-visibility credential, not a complete authentication system. Keys are
+stored in plaintext and no key is seeded by Flyway, so a fresh database supports anonymous
+`PUBLIC` requests but rejects every supplied key until it is provisioned. Provision one by hand
+to see the other tiers:
 
 ```bash
 # Against the compose MySQL (user/password/database are all `habits`)
@@ -30,8 +33,8 @@ curl -s http://localhost:8080/habits/1
 curl -s http://localhost:8080/habits/1 \
   -H "X-Api-Key: local-internal-key"
 
-# Unknown key behaves exactly like no key (fail closed, still 200 — never 401)
-curl -s http://localhost:8080/habits/1 \
+# Unknown supplied key → 401 Unauthorized
+curl -s -i http://localhost:8080/habits/1 \
   -H "X-Api-Key: not-a-real-key"
 
 # Filtering applies inside pages too; pagination metadata is unaffected by the tier
@@ -42,6 +45,9 @@ curl -s "http://localhost:8080/habits?size=10" \
 The header works on every endpoint below that returns a habit: create, list, get by id, update,
 complete, uncomplete, archive, unarchive and due-today. It is omitted from the examples that follow,
 so those show `PUBLIC` output.
+
+Successful key-to-tier lookups are cached for 60 seconds. Missing and unknown keys are not cached.
+A changed or revoked known key can therefore retain its previous tier for up to 60 seconds.
 
 ## Habits CRUD
 

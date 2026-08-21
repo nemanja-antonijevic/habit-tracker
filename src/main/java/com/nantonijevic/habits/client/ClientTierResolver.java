@@ -1,5 +1,7 @@
 package com.nantonijevic.habits.client;
 
+import com.nantonijevic.habits.config.RedisCacheConfig;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -15,10 +17,20 @@ public class ClientTierResolver {
         this.repository = repository;
     }
 
+    @Cacheable(
+        cacheNames =
+            RedisCacheConfig.API_CLIENT_TIERS_CACHE,
+        key = "#apiKey.get()",
+        condition = "#apiKey.isPresent()"
+    )
     public ClientTier resolve(Optional<String> apiKey) {
-        return apiKey
-            .flatMap(repository::findByApiKey)
+        if (apiKey.isEmpty()) {
+            return ClientTier.PUBLIC;
+        }
+
+        return repository
+            .findByApiKey(apiKey.get())
             .map(ApiClient::getTier)
-            .orElse(ClientTier.PUBLIC);
+            .orElseThrow(InvalidApiKeyException::new);
     }
 }
