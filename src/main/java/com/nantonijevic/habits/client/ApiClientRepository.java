@@ -7,5 +7,7 @@ import java.util.Optional;
 public interface ApiClientRepository
     extends JpaRepository<ApiClient, Long> {
 
-    Optional<ApiClient> findByApiKey(String apiKey);
+    Optional<ApiClient> findByApiKeyHash(
+        String apiKeyHash
+    );
 }

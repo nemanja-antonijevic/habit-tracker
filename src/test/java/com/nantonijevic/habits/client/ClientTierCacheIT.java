@@ -6,7 +6,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cache.CacheManager;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
@@ -69,6 +71,12 @@ class ClientTierCacheIT {
     @Autowired
     private StringRedisTemplate redisTemplate;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private ApiKeyHasher hasher;
+
     @BeforeEach
     void clearStateBeforeTest() {
         clearState();
@@ -101,6 +109,15 @@ class ClientTierCacheIT {
 
         assertThat(redisTemplate.hasKey(key))
             .isTrue();
+
+        assertThat(key)
+            .doesNotContain("internal-key");
+
+        assertThat(
+            redisTemplate.hasKey(
+                plaintextCacheKey("internal-key")
+            )
+        ).isFalse();
 
         assertThat(
             redisTemplate.getExpire(
@@ -178,22 +195,22 @@ class ClientTierCacheIT {
         );
     }
 
-    private static ApiClient client(
-        String apiKey,
+    private ApiClient client(
+        String rawApiKey,
         ClientTier tier
     ) {
         return new ApiClient(
-            apiKey,
+            hasher.hash(rawApiKey),
             tier,
             "Cache test client",
             CREATED_AT
         );
     }
 
-    private static String cacheKey(String apiKey) {
+    private String cacheKey(String rawApiKey) {
         return API_CLIENT_TIERS_CACHE
             + "::"
-            + apiKey;
+            + hasher.hash(rawApiKey);
     }
 
     private void clearState() {
@@ -202,5 +219,67 @@ class ClientTierCacheIT {
             .clear();
 
         repository.deleteAll();
+    }
+
+    private static String plaintextCacheKey(
+        String rawApiKey
+    ) {
+        return API_CLIENT_TIERS_CACHE
+            + "::"
+            + rawApiKey;
+    }
+
+    @Test
+    void storesOnlySha256HashInDatabase() {
+        String rawApiKey = "database-secret-key";
+        String expectedHash = hasher.hash(rawApiKey);
+
+        ApiClient saved = repository.saveAndFlush(
+            client(
+                rawApiKey,
+                ClientTier.INTERNAL
+            )
+        );
+
+        assertThat(resolve(rawApiKey))
+            .isEqualTo(ClientTier.INTERNAL);
+
+        String storedHash = jdbcTemplate.queryForObject(
+            """
+            SELECT api_key_hash
+            FROM api_clients
+            WHERE id = ?
+            """,
+            String.class,
+            saved.getId()
+        );
+
+        assertThat(storedHash)
+            .isEqualTo(expectedHash)
+            .isNotEqualTo(rawApiKey);
+    }
+
+    @Test
+    void databaseRejectsValueThatIsNotSha256Length() {
+        assertThatThrownBy(
+            () -> jdbcTemplate.update(
+                """
+                INSERT INTO api_clients (
+                    api_key_hash,
+                    tier,
+                    name,
+                    created_at
+                )
+                VALUES (
+                    'abc',
+                    'PUBLIC',
+                    'Invalid short hash',
+                    CURRENT_TIMESTAMP
+                )
+                """
+            )
+        ).isInstanceOf(
+            DataIntegrityViolationException.class
+        );
     }
 }

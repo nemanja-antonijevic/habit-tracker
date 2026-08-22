@@ -51,6 +51,9 @@ class ClientTierFilteringIntegrationTest
     @Autowired
     private ApiClientRepository apiClientRepository;
 
+    @Autowired
+    private ApiKeyHasher apiKeyHasher;
+
     @Test
     void missingApiKeyUsesPublicTierOnGetById()
         throws Exception {
@@ -87,7 +90,7 @@ class ClientTierFilteringIntegrationTest
 
         apiClientRepository.saveAndFlush(
             new ApiClient(
-                "internal-key",
+                apiKeyHasher.hash("internal-key"),
                 ClientTier.INTERNAL,
                 "Internal client",
                 Instant.parse("2026-08-19T09:00:00Z")
@@ -186,7 +189,7 @@ class ClientTierFilteringIntegrationTest
 
         apiClientRepository.saveAndFlush(
             new ApiClient(
-                "trusted-key",
+                apiKeyHasher.hash("trusted-key"),
                 ClientTier.TRUSTED,
                 "Trusted client",
                 Instant.parse("2026-08-19T09:00:00Z")

@@ -19,7 +19,7 @@ Habit responses are filtered according to the optional `X-Api-Key` request heade
 | `TRUSTED` | included | included | omitted |
 | `PUBLIC` | omitted | omitted | omitted |
 
-`X-Api-Key` is a response-visibility credential, not a complete authentication or authorization system. Keys are provisioned directly in `api_clients` and are currently stored in plaintext. No credential is seeded by Flyway, so clients without a header use `PUBLIC`. Secure provisioning, key hashing, and rate limiting are deferred backlog work.
+`X-Api-Key` is a response-visibility credential, not a complete authentication or authorization system. Keys are provisioned directly in `api_clients`, but only their lowercase SHA-256 hashes are stored. SHA-256 is intentionally deterministic so the high-entropy API key can be resolved through a unique indexed lookup; unlike a user password, it is not verified by scanning salted password hashes. No credential is seeded by Flyway, so clients without a header use `PUBLIC`. Secure provisioning, rotation, and rate limiting are deferred backlog work.
 
 Successful key-to-tier lookups are cached in Redis for 60 seconds. Missing and unknown keys are not cached. Consequently, a tier change or key revocation can take up to 60 seconds to propagate for an already cached key.
 

@@ -6,11 +6,10 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.Instant;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -19,23 +18,30 @@ import static org.mockito.Mockito.when;
 class ClientTierResolverTest {
 
     @Mock
-    private ApiClientRepository repository;
+    private ApiKeyHasher hasher;
+
+    @Mock
+    private ClientTierLookup lookup;
 
     @InjectMocks
     private ClientTierResolver resolver;
 
     @Test
-    void missingApiKeyFallsBackToPublicWithoutDatabaseLookup() {
+    void missingApiKeyFallsBackToPublicWithoutLookup() {
         ClientTier tier = resolver.resolve(Optional.empty());
 
         assertThat(tier).isEqualTo(ClientTier.PUBLIC);
-        verifyNoInteractions(repository);
+
+        verifyNoInteractions(hasher, lookup);
     }
 
     @Test
-    void unknownApiKeyIsRejectedAfterDatabaseLookup() {
-        when(repository.findByApiKey("unknown-key"))
-            .thenReturn(Optional.empty());
+    void unknownApiKeyIsRejectedAfterHashedLookup() {
+        when(hasher.hash("unknown-key"))
+            .thenReturn("unknown-hash");
+
+        when(lookup.resolveByHash("unknown-hash"))
+            .thenThrow(new InvalidApiKeyException());
 
         assertThatThrownBy(
             () -> resolver.resolve(
@@ -45,21 +51,17 @@ class ClientTierResolverTest {
             .isInstanceOf(InvalidApiKeyException.class)
             .hasMessage("Invalid API key");
 
-        verify(repository)
-            .findByApiKey("unknown-key");
+        verify(hasher).hash("unknown-key");
+        verify(lookup).resolveByHash("unknown-hash");
     }
 
     @Test
-    void knownApiKeyUsesTierStoredInDatabase() {
-        ApiClient client = new ApiClient(
-            "trusted-key",
-            ClientTier.TRUSTED,
-            "Trusted client",
-            Instant.parse("2026-08-19T08:00:00Z")
-        );
+    void knownApiKeyUsesTierResolvedByHash() {
+        when(hasher.hash("trusted-key"))
+            .thenReturn("trusted-hash");
 
-        when(repository.findByApiKey("trusted-key"))
-            .thenReturn(Optional.of(client));
+        when(lookup.resolveByHash("trusted-hash"))
+            .thenReturn(ClientTier.TRUSTED);
 
         ClientTier tier = resolver.resolve(
             Optional.of("trusted-key")
@@ -67,7 +69,7 @@ class ClientTierResolverTest {
 
         assertThat(tier).isEqualTo(ClientTier.TRUSTED);
 
-        verify(repository)
-            .findByApiKey("trusted-key");
+        verify(hasher).hash("trusted-key");
+        verify(lookup).resolveByHash("trusted-hash");
     }
 }

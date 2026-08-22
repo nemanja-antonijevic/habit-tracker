@@ -16,6 +16,7 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
 import java.time.Instant;
 import java.util.Optional;
 
+import static com.nantonijevic.habits.config.RedisCacheConfig.API_CLIENT_TIERS_CACHE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
@@ -30,8 +31,8 @@ import static org.mockito.Mockito.when;
 )
 class ClientTierCacheTest {
 
-    private static final String CACHE_NAME =
-        "api-client-tiers";
+    private static final ApiKeyHasher HASHER =
+        new ApiKeyHasher();
 
     @Autowired
     private ClientTierResolver resolver;
@@ -47,118 +48,113 @@ class ClientTierCacheTest {
         reset(repository);
 
         cacheManager
-            .getCache(CACHE_NAME)
+            .getCache(API_CLIENT_TIERS_CACHE)
             .clear();
     }
 
     @Test
     void repeatedKnownKeyQueriesDatabaseOnce() {
-        when(repository.findByApiKey("internal-key"))
+        String apiKeyHash = hash("internal-key");
+
+        when(repository.findByApiKeyHash(apiKeyHash))
             .thenReturn(
                 Optional.of(
                     client(
-                        "internal-key",
+                        apiKeyHash,
                         ClientTier.INTERNAL
                     )
                 )
             );
 
-        assertThat(
-            resolver.resolve(
-                Optional.of("internal-key")
-            )
-        ).isEqualTo(ClientTier.INTERNAL);
+        assertThat(resolve("internal-key"))
+            .isEqualTo(ClientTier.INTERNAL);
 
-        assertThat(
-            resolver.resolve(
-                Optional.of("internal-key")
-            )
-        ).isEqualTo(ClientTier.INTERNAL);
+        assertThat(resolve("internal-key"))
+            .isEqualTo(ClientTier.INTERNAL);
 
         verify(repository, times(1))
-            .findByApiKey("internal-key");
+            .findByApiKeyHash(apiKeyHash);
     }
 
     @Test
     void differentKeysKeepDifferentCachedTiers() {
-        when(repository.findByApiKey("internal-key"))
+        String internalHash = hash("internal-key");
+        String trustedHash = hash("trusted-key");
+
+        when(repository.findByApiKeyHash(internalHash))
             .thenReturn(
                 Optional.of(
                     client(
-                        "internal-key",
+                        internalHash,
                         ClientTier.INTERNAL
                     )
                 )
             );
 
-        when(repository.findByApiKey("trusted-key"))
+        when(repository.findByApiKeyHash(trustedHash))
             .thenReturn(
                 Optional.of(
                     client(
-                        "trusted-key",
+                        trustedHash,
                         ClientTier.TRUSTED
                     )
                 )
             );
 
-        assertThat(
-            resolver.resolve(
-                Optional.of("internal-key")
-            )
-        ).isEqualTo(ClientTier.INTERNAL);
+        assertThat(resolve("internal-key"))
+            .isEqualTo(ClientTier.INTERNAL);
 
-        assertThat(
-            resolver.resolve(
-                Optional.of("trusted-key")
-            )
-        ).isEqualTo(ClientTier.TRUSTED);
+        assertThat(resolve("trusted-key"))
+            .isEqualTo(ClientTier.TRUSTED);
 
-        assertThat(
-            resolver.resolve(
-                Optional.of("internal-key")
-            )
-        ).isEqualTo(ClientTier.INTERNAL);
+        assertThat(resolve("internal-key"))
+            .isEqualTo(ClientTier.INTERNAL);
 
-        assertThat(
-            resolver.resolve(
-                Optional.of("trusted-key")
-            )
-        ).isEqualTo(ClientTier.TRUSTED);
+        assertThat(resolve("trusted-key"))
+            .isEqualTo(ClientTier.TRUSTED);
 
         verify(repository, times(1))
-            .findByApiKey("internal-key");
+            .findByApiKeyHash(internalHash);
 
         verify(repository, times(1))
-            .findByApiKey("trusted-key");
+            .findByApiKeyHash(trustedHash);
     }
 
     @Test
     void unknownKeyIsNotCached() {
-        when(repository.findByApiKey("unknown-key"))
+        String apiKeyHash = hash("unknown-key");
+
+        when(repository.findByApiKeyHash(apiKeyHash))
             .thenReturn(Optional.empty());
 
         assertThatThrownBy(
-            () -> resolver.resolve(
-                Optional.of("unknown-key")
-            )
+            () -> resolve("unknown-key")
         ).isInstanceOf(InvalidApiKeyException.class);
 
         assertThatThrownBy(
-            () -> resolver.resolve(
-                Optional.of("unknown-key")
-            )
+            () -> resolve("unknown-key")
         ).isInstanceOf(InvalidApiKeyException.class);
 
         verify(repository, times(2))
-            .findByApiKey("unknown-key");
+            .findByApiKeyHash(apiKeyHash);
+    }
+
+    private ClientTier resolve(String apiKey) {
+        return resolver.resolve(
+            Optional.of(apiKey)
+        );
+    }
+
+    private static String hash(String apiKey) {
+        return HASHER.hash(apiKey);
     }
 
     private static ApiClient client(
-        String apiKey,
+        String apiKeyHash,
         ClientTier tier
     ) {
         return new ApiClient(
-            apiKey,
+            apiKeyHash,
             tier,
             "Test client",
             Instant.parse(
@@ -169,7 +165,11 @@ class ClientTierCacheTest {
 
     @Configuration
     @EnableCaching
-    @Import(ClientTierResolver.class)
+    @Import({
+        ApiKeyHasher.class,
+        ClientTierLookup.class,
+        ClientTierResolver.class
+    })
     static class TestConfiguration {
 
         @Bean
@@ -180,7 +180,7 @@ class ClientTierCacheTest {
         @Bean
         CacheManager cacheManager() {
             return new ConcurrentMapCacheManager(
-                CACHE_NAME
+                API_CLIENT_TIERS_CACHE
             );
         }
     }

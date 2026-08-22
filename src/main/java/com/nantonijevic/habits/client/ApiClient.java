@@ -22,12 +22,13 @@ public class ApiClient {
     private Long id;
 
     @Column(
-        name = "api_key",
+        name = "api_key_hash",
         nullable = false,
         unique = true,
-        length = 128
+        length = 64,
+        columnDefinition = "char(64)"
     )
-    private String apiKey;
+    private String apiKeyHash;
 
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.VARCHAR)
@@ -48,12 +49,12 @@ public class ApiClient {
     }
 
     public ApiClient(
-        String apiKey,
+        String apiKeyHash,
         ClientTier tier,
         String name,
         Instant createdAt
     ) {
-        this.apiKey = apiKey;
+        this.apiKeyHash = apiKeyHash;
         this.tier = tier;
         this.name = name;
         this.createdAt = createdAt;
@@ -63,8 +64,8 @@ public class ApiClient {
         return id;
     }
 
-    public String getApiKey() {
-        return apiKey;
+    public String getApiKeyHash() {
+        return apiKeyHash;
     }
 
     public ClientTier getTier() {

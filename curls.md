@@ -12,17 +12,28 @@ anonymous `PUBLIC` client, while a supplied but unknown key is rejected with `40
 the JSON, not `null`. `TRUSTED` omits only `createdAt`. `INTERNAL` returns everything.
 See [docs/api-reference.md](docs/api-reference.md) for the full matrix.
 
-The header is a response-visibility credential, not a complete authentication system. Keys are
-stored in plaintext and no key is seeded by Flyway, so a fresh database supports anonymous
-`PUBLIC` requests but rejects every supplied key until it is provisioned. Provision one by hand
-to see the other tiers:
+The header is a response-visibility credential, not a complete authentication system. Only a
+lowercase SHA-256 hash of each key is stored in `api_clients`; the raw key is sent only in the
+request header. SHA-256 is deterministic so the high-entropy key can use a unique indexed lookup.
+No key is seeded by Flyway, so a fresh database supports anonymous `PUBLIC` requests but rejects
+every supplied key until its hash is provisioned. Provision one by hand to see the other tiers:
 
 ```bash
 # Against the compose MySQL (user/password/database are all `habits`)
 docker compose exec -T mysql \
   mysql -uhabits -phabits habits -e \
-  "INSERT INTO api_clients (api_key, tier, name, created_at)
-   VALUES ('local-internal-key', 'INTERNAL', 'Local dev', NOW(6));"
+  "INSERT INTO api_clients (
+    api_key_hash,
+    tier,
+    name,
+    created_at
+)
+VALUES (
+    SHA2('local-internal-key', 256),
+    'INTERNAL',
+    'Local dev',
+    NOW(6)
+);"
 ```
 
 ```bash
