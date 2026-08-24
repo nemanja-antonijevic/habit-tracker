@@ -2,6 +2,9 @@ package com.nantonijevic.habits.client;
 
 import com.nantonijevic.habits.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -12,6 +15,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.sql.SQLException;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
@@ -27,8 +31,11 @@ class ApiClientHashConstraintMySqlIT
     private static final int CHECK_CONSTRAINT_ERROR_CODE =
         3819;
 
-    private static final String CONSTRAINT_NAME =
+    private static final String LENGTH_CONSTRAINT_NAME =
         "chk_api_clients_api_key_hash_length";
+
+    private static final String FORMAT_CONSTRAINT_NAME =
+        "chk_api_clients_api_key_hash_format";
 
     @Container
     static final MySQLContainer<?> MYSQL =
@@ -66,6 +73,46 @@ class ApiClientHashConstraintMySqlIT
 
     @Test
     void rejectsApiKeyHashThatIsNotSha256Length() {
+        assertConstraintViolation(
+            "abc",
+            LENGTH_CONSTRAINT_NAME,
+            FORMAT_CONSTRAINT_NAME
+        );
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("invalidFormatHashes")
+    void rejectsValueThatIsNotCanonicalLowercaseHex(
+        String caseName,
+        String invalidHash
+    ) {
+        assertConstraintViolation(
+            invalidHash,
+            FORMAT_CONSTRAINT_NAME
+        );
+    }
+
+    private static Stream<Arguments> invalidFormatHashes() {
+        return Stream.of(
+            Arguments.of(
+                "64 non-hex characters",
+                "z".repeat(64)
+            ),
+            Arguments.of(
+                "leading space plus 63 hex characters",
+                " " + "c".repeat(63)
+            ),
+            Arguments.of(
+                "64 uppercase hex characters",
+                "A".repeat(64)
+            )
+        );
+    }
+
+    private void assertConstraintViolation(
+        String apiKeyHash,
+        String... expectedConstraintNames
+    ) {
         Throwable thrown = catchThrowable(
             () -> jdbcTemplate.update(
                 """
@@ -76,12 +123,13 @@ class ApiClientHashConstraintMySqlIT
                     created_at
                 )
                 VALUES (
-                    'abc',
+                    ?,
                     'PUBLIC',
-                    'Invalid short hash',
+                    'Invalid hash',
                     CURRENT_TIMESTAMP
                 )
-                """
+                """,
+                apiKeyHash
             )
         );
 
@@ -100,7 +148,9 @@ class ApiClientHashConstraintMySqlIT
 
                     assertThat(
                         sqlException.getMessage()
-                    ).contains(CONSTRAINT_NAME);
+                    ).containsAnyOf(
+                        expectedConstraintNames
+                    );
                 }
             );
     }
