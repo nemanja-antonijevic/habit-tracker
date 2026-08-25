@@ -1,6 +1,7 @@
 # ADR 0001: Canonical API key hash format
 
 - Status: Accepted
+- Date: 2026-08-24
 
 ## Context
 
