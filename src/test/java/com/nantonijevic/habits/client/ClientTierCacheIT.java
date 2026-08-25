@@ -18,6 +18,7 @@ import org.testcontainers.utility.DockerImageName;
 
 import java.time.Instant;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static com.nantonijevic.habits.config.RedisCacheConfig.API_CLIENT_TIERS_CACHE;
@@ -88,7 +89,7 @@ class ClientTierCacheIT {
     }
 
     @Test
-    void knownTierSurvivesRedisRoundTripForSixtySeconds() {
+    void cachedTierIsServedFromRedisAfterTheRowIsDeleted() {
         repository.saveAndFlush(
             client(
                 "internal-key",
@@ -104,20 +105,48 @@ class ClientTierCacheIT {
         assertThat(resolve("internal-key"))
             .as("second lookup must come from Redis")
             .isEqualTo(ClientTier.INTERNAL);
+    }
 
-        String key = cacheKey("internal-key");
+    @Test
+    void redisKeyIsTheHashAndThePlaintextKeyIsAbsent() {
+        String rawApiKey = "internal-key";
 
-        assertThat(redisTemplate.hasKey(key))
-            .isTrue();
+        repository.saveAndFlush(
+            client(
+                rawApiKey,
+                ClientTier.INTERNAL
+            )
+        );
+
+        assertThat(resolve(rawApiKey))
+            .isEqualTo(ClientTier.INTERNAL);
+
+        String key = onlyApiClientTierCacheKey();
 
         assertThat(key)
-            .doesNotContain("internal-key");
+            .doesNotContain(rawApiKey)
+            .isEqualTo(cacheKey(rawApiKey));
 
         assertThat(
             redisTemplate.hasKey(
-                plaintextCacheKey("internal-key")
+                plaintextCacheKey(rawApiKey)
             )
         ).isFalse();
+    }
+
+    @Test
+    void cachedTierExpiresWithinTheOneMinuteTtl() {
+        repository.saveAndFlush(
+            client(
+                "internal-key",
+                ClientTier.INTERNAL
+            )
+        );
+
+        assertThat(resolve("internal-key"))
+            .isEqualTo(ClientTier.INTERNAL);
+
+        String key = onlyApiClientTierCacheKey();
 
         assertThat(
             redisTemplate.getExpire(
@@ -149,17 +178,8 @@ class ClientTierCacheIT {
         assertThat(resolve("trusted-key"))
             .isEqualTo(ClientTier.TRUSTED);
 
-        assertThat(
-            redisTemplate.hasKey(
-                cacheKey("internal-key")
-            )
-        ).isTrue();
-
-        assertThat(
-            redisTemplate.hasKey(
-                cacheKey("trusted-key")
-            )
-        ).isTrue();
+        assertThat(apiClientTierCacheKeys())
+            .hasSize(2);
     }
 
     @Test
@@ -213,6 +233,15 @@ class ClientTierCacheIT {
             + hasher.hash(rawApiKey);
     }
 
+    private String onlyApiClientTierCacheKey() {
+        Set<String> keys = apiClientTierCacheKeys();
+
+        assertThat(keys)
+            .hasSize(1);
+
+        return keys.iterator().next();
+    }
+
     private void clearState() {
         cacheManager
             .getCache(API_CLIENT_TIERS_CACHE)
@@ -227,6 +256,12 @@ class ClientTierCacheIT {
         return API_CLIENT_TIERS_CACHE
             + "::"
             + rawApiKey;
+    }
+
+    private Set<String> apiClientTierCacheKeys() {
+        return redisTemplate.keys(
+            API_CLIENT_TIERS_CACHE + "::*"
+        );
     }
 
     @Test
