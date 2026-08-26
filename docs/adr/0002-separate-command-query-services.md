@@ -28,3 +28,7 @@ Command and query responsibilities, dependencies and tests are easier to underst
 After a successful command, write-side responses may already show the new state while stats, completion-rate or dashboard streak values still show the previous projection. This divergence lasts until Kafka processing succeeds and has no guaranteed upper bound.
 
 The application currently has no reconciliation job, dead-letter path or semantic comparison that detects a permanently stale projection.
+
+Duplicate `HabitCompletedEvent` deliveries that violate the projection's unique constraint are logged and intentionally do not publish `DashboardChangedEvent`. The projection did not change, so invalidating the dashboard cache would only discard a valid cached result.
+
+`HabitUncompletedEvent` handling does not need symmetric exception handling: `deleteByHabitIdAndCompletedOn` is a no-op when no row matches and does not throw. That branch therefore continues normally and publishes its dashboard invalidation event.

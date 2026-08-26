@@ -27,6 +27,22 @@ Using only `cache.clear()` would be simpler, but it would not protect against an
 
 Every source that contributes to the dashboard must publish an invalidation event when its committed state changes.
 
-Redis failures remain fail-open: the database change succeeds and stale cache data may remain until TTL expiry. Advancing the generation before clearing is deliberate—if `clear()` fails, entries from the previous generation are no longer reachable by new requests.
+Cache failure behavior is path-specific rather than uniformly fail-open:
 
-A missing configured dashboard cache currently causes `cacheManager.getCache()` to produce an `IllegalStateException` outside the handled `DataAccessException` path. Because this occurs after commit, it cannot roll back the business transaction, but this fail-open outcome is incidental rather than explicitly handled.
+| Path | Behavior | Reachable in production |
+| --- | --- | --- |
+| Intercepted GET or PUT throws `DataAccessException` | Fail-open: log a warning and continue without the cache operation | Yes |
+| Programmatic dashboard invalidation throws `DataAccessException` while advancing the generation or clearing the cache | Fail-open: log a warning and continue after the business transaction has committed | Yes |
+| Programmatic dashboard invalidation throws another `RuntimeException` | Fail-closed: rethrow from the listener after commit | Yes |
+| Intercepted GET or PUT throws another `RuntimeException` | Fail-closed: rethrow the exception | Yes |
+| `CacheErrorHandler` handles an evict or clear failure | Fail-closed: rethrow the exception | No |
+
+The last row is structurally unreachable in the current application. Spring calls `handleCacheEvictError` and `handleCacheClearError` only through the cache interceptor's `@CacheEvict` path, while `src/main` contains no `@CacheEvict` operation. The programmatic `cache.clear()` in `DashboardCacheInvalidator` calls the `Cache` interface directly and is handled by the invalidator's local `DataAccessException` catch; it does not pass through `CacheErrorHandler`.
+
+The local invalidation catch covers failures from both generation advancement and cache clearing. If advancement fails with a `DataAccessException`, the existing generation and cached data may remain reachable until TTL expiry. If clearing fails after advancement succeeds, entries from the previous generation may remain stored, but new requests no longer address them.
+
+The missing-cache guard in `DashboardCacheInvalidator` is also unreachable with the current cache managers. `NoOpCacheManager` and the configured `RedisCacheManager` create caches on demand, and the Redis dashboard cache is additionally registered through `withCacheConfiguration`.
+
+That guard would become reachable only if Redis cache creation on demand were disabled and the initial `dashboard-stats` cache configuration were removed. Under that altered configuration, the `AFTER_COMMIT` listener would throw `IllegalStateException` after the business row was already committed. The measured probe showed that the caller still returned normally while Spring logged the exception from transaction synchronization.
+
+`DashboardCacheInvalidatorTest.missingDashboardCacheStillFailsLoudly` documents this defensive guard by mocking `CacheManager.getCache()` to return `null`. It does not protect a state reachable with either cache manager currently used by the application.
