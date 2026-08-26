@@ -179,7 +179,10 @@ class ClientTierCacheIT {
             .isEqualTo(ClientTier.TRUSTED);
 
         assertThat(apiClientTierCacheKeys())
-            .hasSize(2);
+            .containsExactlyInAnyOrder(
+                cacheKey("internal-key"),
+                cacheKey("trusted-key")
+            );
     }
 
     @Test
