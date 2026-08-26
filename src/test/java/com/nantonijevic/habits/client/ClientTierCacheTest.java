@@ -178,6 +178,13 @@ class ClientTierCacheTest {
         }
 
         @Bean
+        ClientTierResolutionMetrics clientTierResolutionMetrics() {
+            return mock(
+                ClientTierResolutionMetrics.class
+            );
+        }
+
+        @Bean
         CacheManager cacheManager() {
             return new ConcurrentMapCacheManager(
                 API_CLIENT_TIERS_CACHE

@@ -9,17 +9,22 @@ public class ClientTierResolver {
 
     private final ApiKeyHasher hasher;
     private final ClientTierLookup lookup;
+    private final ClientTierResolutionMetrics metrics;
 
     public ClientTierResolver(
         ApiKeyHasher hasher,
-        ClientTierLookup lookup
+        ClientTierLookup lookup,
+        ClientTierResolutionMetrics metrics
     ) {
         this.hasher = hasher;
         this.lookup = lookup;
+        this.metrics = metrics;
     }
 
     public ClientTier resolve(Optional<String> apiKey) {
         if (apiKey.isEmpty()) {
+            metrics.recordPublic();
+
             return ClientTier.PUBLIC;
         }
 
@@ -27,6 +32,17 @@ public class ClientTierResolver {
             apiKey.get()
         );
 
-        return lookup.resolveByHash(apiKeyHash);
+        try {
+            ClientTier tier =
+                lookup.resolveByHash(apiKeyHash);
+
+            metrics.recordResolved();
+
+            return tier;
+        } catch (InvalidApiKeyException exception) {
+            metrics.recordRejected();
+
+            throw exception;
+        }
     }
 }

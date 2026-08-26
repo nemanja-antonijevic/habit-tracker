@@ -12,6 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -23,16 +24,25 @@ class ClientTierResolverTest {
     @Mock
     private ClientTierLookup lookup;
 
+    @Mock
+    private ClientTierResolutionMetrics metrics;
+
     @InjectMocks
     private ClientTierResolver resolver;
 
     @Test
     void missingApiKeyFallsBackToPublicWithoutLookup() {
-        ClientTier tier = resolver.resolve(Optional.empty());
+        ClientTier tier = resolver.resolve(
+            Optional.empty()
+        );
 
-        assertThat(tier).isEqualTo(ClientTier.PUBLIC);
+        assertThat(tier)
+            .isEqualTo(ClientTier.PUBLIC);
 
         verifyNoInteractions(hasher, lookup);
+
+        verify(metrics).recordPublic();
+        verifyNoMoreInteractions(metrics);
     }
 
     @Test
@@ -53,6 +63,9 @@ class ClientTierResolverTest {
 
         verify(hasher).hash("unknown-key");
         verify(lookup).resolveByHash("unknown-hash");
+
+        verify(metrics).recordRejected();
+        verifyNoMoreInteractions(metrics);
     }
 
     @Test
@@ -67,9 +80,39 @@ class ClientTierResolverTest {
             Optional.of("trusted-key")
         );
 
-        assertThat(tier).isEqualTo(ClientTier.TRUSTED);
+        assertThat(tier)
+            .isEqualTo(ClientTier.TRUSTED);
 
         verify(hasher).hash("trusted-key");
         verify(lookup).resolveByHash("trusted-hash");
+
+        verify(metrics).recordResolved();
+        verifyNoMoreInteractions(metrics);
+    }
+
+    @Test
+    void unexpectedLookupFailureIsNotRecordedAsRejected() {
+        when(hasher.hash("failing-key"))
+            .thenReturn("failing-hash");
+
+        when(lookup.resolveByHash("failing-hash"))
+            .thenThrow(
+                new IllegalStateException(
+                    "Database unavailable"
+                )
+            );
+
+        assertThatThrownBy(
+            () -> resolver.resolve(
+                Optional.of("failing-key")
+            )
+        )
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("Database unavailable");
+
+        verify(hasher).hash("failing-key");
+        verify(lookup).resolveByHash("failing-hash");
+
+        verifyNoInteractions(metrics);
     }
 }
