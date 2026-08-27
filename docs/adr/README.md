@@ -11,3 +11,4 @@ ADRs use sequential four-digit numbers. Accepted decisions remain in the reposit
 | [0001](0001-canonical-api-key-hash-format.md) | Canonical API key hash format | Accepted |
 | [0002](0002-separate-command-query-services.md) | Separate command and query services | Accepted |
 | [0003](0003-invalidate-dashboard-cache-from-both-sides.md) | Invalidate dashboard cache from both source models | Accepted |
+| [0004](0004-accept-stale-client-tier-bounded-by-ttl.md) | Accept stale client tiers bounded by TTL | Accepted |
