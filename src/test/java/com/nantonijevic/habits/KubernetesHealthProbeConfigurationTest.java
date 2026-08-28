@@ -15,7 +15,7 @@ class KubernetesHealthProbeConfigurationTest {
         "src/main/resources/application.yml";
 
     @Test
-    void mainConfigurationSupportsKubernetesHealthProbes()
+    void mainConfigurationKeepsKubernetesHealthContractExplicit()
         throws IOException {
 
         String probesEnabled = mainApplicationProperty(
@@ -24,10 +24,28 @@ class KubernetesHealthProbeConfigurationTest {
 
         assertThat(probesEnabled)
             .as(
-                "main application.yml must enable "
-                    + "Kubernetes health probes"
+                "main application.yml must explicitly enable "
+                    + "health probes"
             )
             .isEqualTo("true");
+
+        String exposedEndpoints = mainApplicationProperty(
+            "management.endpoints.web.exposure.include"
+        );
+
+        assertThat(exposedEndpoints)
+            .as(
+                "Actuator exposure must include health "
+                    + "for Kubernetes probe endpoints"
+            )
+            .isNotNull();
+
+        assertThat(
+            Arrays.stream(exposedEndpoints.split(","))
+                .map(String::trim)
+                .toList()
+        )
+            .contains("health");
 
         String readinessMembers = mainApplicationProperty(
             "management.endpoint.health.group.readiness.include"
