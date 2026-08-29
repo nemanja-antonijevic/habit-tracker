@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-27
+- Related: [ADR 0005](0005-scope-habits-to-api-client-owners.md) — proposed; supersedes this decision when implemented
 
 ## Context
 
