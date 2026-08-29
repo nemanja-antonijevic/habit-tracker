@@ -30,6 +30,8 @@ server:
 management:
   endpoint:
     health:
+      # Keep probes explicit so availability does not depend on Kubernetes
+      # environment detection and remains testable outside a cluster.
       probes:
         enabled: true
       group:

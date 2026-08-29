@@ -15,7 +15,7 @@ class KubernetesHealthProbeConfigurationTest {
         "src/main/resources/application.yml";
 
     @Test
-    void mainConfigurationKeepsKubernetesHealthContractExplicit()
+    void mainConfigurationExplicitlyEnablesKubernetesHealthProbes()
         throws IOException {
 
         String probesEnabled = mainApplicationProperty(
@@ -28,6 +28,11 @@ class KubernetesHealthProbeConfigurationTest {
                     + "health probes"
             )
             .isEqualTo("true");
+    }
+
+    @Test
+    void mainConfigurationExposesHealthForKubernetesProbes()
+        throws IOException {
 
         String exposedEndpoints = mainApplicationProperty(
             "management.endpoints.web.exposure.include"
@@ -46,6 +51,11 @@ class KubernetesHealthProbeConfigurationTest {
                 .toList()
         )
             .contains("health");
+    }
+
+    @Test
+    void readinessIncludesApplicationStateAndDatabase()
+        throws IOException {
 
         String readinessMembers = mainApplicationProperty(
             "management.endpoint.health.group.readiness.include"
