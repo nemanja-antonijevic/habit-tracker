@@ -50,6 +50,11 @@ Docker-dependent tests (Redis and MySQL via Testcontainers) are named `*IT` and 
 - Full endpoint specification: [docs/api-reference.md](docs/api-reference.md)
 - Quick curl examples: [curls.md](curls.md)
 
+## Design decisions
+
+- Architectural decisions: [docs/adr/](docs/adr/README.md)
+- Implementation notes for decisions still in progress: [docs/implementation/](docs/implementation/)
+
 ## Deploy (minikube)
 
 The Helm chart in `deploy/habit-tracker/` runs the whole stack in-cluster — app and Redis as Deployments, MySQL and Kafka as StatefulSets with their own PVCs, and an init container that waits for MySQL before the JVM starts.

@@ -3,6 +3,7 @@
 - Status: Proposed
 - Date: 2026-08-29
 - Supersedes: ADR 0004 when implemented
+- Implementation: [notes and step order](../implementation/0005-habit-ownership.md); V17 applied, application changes not started
 
 ## Context
 
