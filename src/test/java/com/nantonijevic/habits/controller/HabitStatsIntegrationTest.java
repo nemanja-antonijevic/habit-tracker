@@ -1,5 +1,7 @@
 package com.nantonijevic.habits.controller;
 
+import com.nantonijevic.habits.client.ApiClientRepository;
+import com.nantonijevic.habits.client.ClientTierArgumentResolver;
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.event.HabitCompletedEvent;
 import com.nantonijevic.habits.event.HabitCompletedEventConsumer;
@@ -7,6 +9,7 @@ import com.nantonijevic.habits.event.HabitEvent;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
 import com.nantonijevic.habits.repository.HabitWriteRepository;
+import com.nantonijevic.habits.support.InternalApiClientFixture;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,6 +25,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -42,7 +47,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@Import(HabitStatsIntegrationTest.FixedClockConfiguration.class)
+@Import({
+    HabitStatsIntegrationTest.FixedClockConfiguration.class,
+    InternalApiClientFixture.class
+})
 @EmbeddedKafka(topics = "habit-completed", partitions = 1)
 @SpringBootTest(properties = {
         "spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}",
@@ -80,6 +88,14 @@ public class HabitStatsIntegrationTest {
     @Autowired
     private Clock clock;
 
+    @Autowired
+    private InternalApiClientFixture apiClientFixture;
+
+    @Autowired
+    private ApiClientRepository apiClientRepository;
+
+    private String apiKey;
+
     @SpyBean
     private HabitCompletedEventConsumer consumer;
 
@@ -90,6 +106,7 @@ public class HabitStatsIntegrationTest {
         completionRepository.deleteAll();
         statRepository.deleteAll();
         jdbcTemplate.update("DELETE FROM habits");
+        apiKey = apiClientFixture.provisionInternalClient();
 
         doAnswer(invocation -> {
             Object result = invocation.callRealMethod();
@@ -112,6 +129,19 @@ public class HabitStatsIntegrationTest {
         completionRepository.deleteAll();
         statRepository.deleteAll();
         jdbcTemplate.update("DELETE FROM habits");
+        apiClientRepository.deleteAll();
+    }
+
+    private ResultActions perform(
+        MockHttpServletRequestBuilder request
+    ) throws Exception {
+
+        return mockMvc.perform(
+            request.header(
+                ClientTierArgumentResolver.API_KEY_HEADER,
+                apiKey
+            )
+        );
     }
 
     @Test
@@ -120,12 +150,12 @@ public class HabitStatsIntegrationTest {
 
         Habit saved = habitWriteRepository.save(new Habit("Read 30 min", clock.instant()));
 
-        mockMvc.perform(post("/habits/" + saved.getId() + "/complete"))
+        perform(post("/habits/" + saved.getId() + "/complete"))
                 .andExpect(status().isOk());
 
         awaitEvents();
 
-        mockMvc.perform(get("/habits/" + saved.getId() + "/stats"))
+        perform(get("/habits/" + saved.getId() + "/stats"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.completionCount").value(1))
                 .andExpect(jsonPath("$.lastCompletedOn").isNotEmpty());
@@ -144,7 +174,7 @@ public class HabitStatsIntegrationTest {
 
         awaitEvents();
 
-        mockMvc.perform(get("/habits/" + habit.getId() + "/stats"))
+        perform(get("/habits/" + habit.getId() + "/stats"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.currentStreak").value(3));
     }
@@ -181,13 +211,13 @@ public class HabitStatsIntegrationTest {
 
         expectEvents(1);
 
-        mockMvc.perform(post("/habits/" + saved.getId() + "/uncomplete"))
+        perform(post("/habits/" + saved.getId() + "/uncomplete"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.completionCount").value(2));
 
         awaitEvents();
 
-        mockMvc.perform(get("/habits/" + saved.getId() + "/stats"))
+        perform(get("/habits/" + saved.getId() + "/stats"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.completionCount").value(2));
     }
@@ -199,12 +229,12 @@ public class HabitStatsIntegrationTest {
         var habit = new Habit("Read 30 min", clock.instant());
         habitWriteRepository.save(habit);
 
-        mockMvc.perform(post("/habits/" + habit.getId() + "/complete"))
+        perform(post("/habits/" + habit.getId() + "/complete"))
                 .andExpect(status().isOk());
 
         awaitEvents();
 
-        mockMvc.perform(get("/habits/" + habit.getId() + "/stats"))
+        perform(get("/habits/" + habit.getId() + "/stats"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.currentStreak").value(1))
                 .andExpect(jsonPath("$.longestStreak").value(1));
@@ -224,7 +254,7 @@ public class HabitStatsIntegrationTest {
 
         awaitEvents();
 
-        mockMvc.perform(get("/habits/" + habit.getId() + "/stats"))
+        perform(get("/habits/" + habit.getId() + "/stats"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.currentStreak").value(1))
                 .andExpect(jsonPath("$.longestStreak").value(3));
@@ -255,7 +285,7 @@ public class HabitStatsIntegrationTest {
 
         awaitEvents();
 
-        mockMvc.perform(get("/habits/" + saved.getId() + "/stats"))
+        perform(get("/habits/" + saved.getId() + "/stats"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.currentStreak").value(1));
     }
@@ -305,18 +335,18 @@ public class HabitStatsIntegrationTest {
 
         expectEvents(2);
 
-        mockMvc.perform(post("/habits/" + completedDueHabit.getId() + "/complete"))
+        perform(post("/habits/" + completedDueHabit.getId() + "/complete"))
             .andExpect(status().isOk());
 
-        mockMvc.perform(post("/habits/" + archivedHabit.getId() + "/complete"))
+        perform(post("/habits/" + archivedHabit.getId() + "/complete"))
             .andExpect(status().isOk());
 
         awaitEvents();
 
-        mockMvc.perform(post("/habits/" + archivedHabit.getId() + "/archive"))
+        perform(post("/habits/" + archivedHabit.getId() + "/archive"))
             .andExpect(status().isOk());
 
-        mockMvc.perform(get("/habits/stats"))
+        perform(get("/habits/stats"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.dueToday").value(2))
             .andExpect(jsonPath("$.completedToday").value(1))
@@ -327,7 +357,7 @@ public class HabitStatsIntegrationTest {
 
     @Test
     void getDashboardStats_returnsZerosWhenThereAreNoActiveHabits() throws Exception {
-        mockMvc.perform(get("/habits/stats"))
+        perform(get("/habits/stats"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.dueToday").value(0))
             .andExpect(jsonPath("$.completedToday").value(0))
@@ -350,7 +380,7 @@ public class HabitStatsIntegrationTest {
 
         awaitEvents();
 
-        mockMvc.perform(get("/habits/stats"))
+        perform(get("/habits/stats"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.dueToday").value(2))
             .andExpect(jsonPath("$.completedToday").value(0))
@@ -389,7 +419,7 @@ public class HabitStatsIntegrationTest {
 
         awaitEvents();
 
-        mockMvc.perform(get("/habits/stats"))
+        perform(get("/habits/stats"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.activeStreaks").value(2))
             .andExpect(jsonPath("$.longestActiveStreak").value(7))

@@ -14,6 +14,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.io.IOException;
@@ -58,6 +59,9 @@ class PrometheusConfigurationIntegrationTest {
     private ApiClientRepository apiClientRepository;
 
     @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
     private ApiKeyHasher apiKeyHasher;
 
     private ApiClient savedClient;
@@ -65,8 +69,18 @@ class PrometheusConfigurationIntegrationTest {
     @AfterEach
     void deleteSavedClient() {
         if (savedClient != null) {
+            jdbcTemplate.update(
+                "DELETE FROM habit_completion_stats"
+            );
+            jdbcTemplate.update(
+                "DELETE FROM habit_completions"
+            );
+            jdbcTemplate.update(
+                "DELETE FROM habits"
+            );
             apiClientRepository.delete(savedClient);
             apiClientRepository.flush();
+            savedClient = null;
         }
     }
 

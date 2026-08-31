@@ -1,9 +1,12 @@
 package com.nantonijevic.habits.controller;
 
+import com.nantonijevic.habits.client.ClientTierArgumentResolver;
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.domain.HabitCompletionStat;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
 import com.nantonijevic.habits.repository.HabitWriteRepository;
+import com.nantonijevic.habits.support.InternalApiClientFixture;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -13,6 +16,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
@@ -30,7 +35,10 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 @SpringBootTest(properties = "spring.cache.type=none")
 @AutoConfigureMockMvc
 @Transactional
-@Import(HabitStreakConsistencyIntegrationTest.FixedClockConfiguration.class)
+@Import({
+    HabitStreakConsistencyIntegrationTest.FixedClockConfiguration.class,
+    InternalApiClientFixture.class
+})
 class HabitStreakConsistencyIntegrationTest {
 
     private static final ZoneId TEST_ZONE =
@@ -54,6 +62,28 @@ class HabitStreakConsistencyIntegrationTest {
     @Autowired
     private Clock clock;
 
+    @Autowired
+    private InternalApiClientFixture apiClientFixture;
+
+    private String apiKey;
+
+    @BeforeEach
+    void provisionInternalClient() {
+        apiKey = apiClientFixture.provisionInternalClient();
+    }
+
+    private ResultActions perform(
+        MockHttpServletRequestBuilder request
+    ) throws Exception {
+
+        return mockMvc.perform(
+            request.header(
+                ClientTierArgumentResolver.API_KEY_HEADER,
+                apiKey
+            )
+        );
+    }
+
     @Test
     void statsEndpointsUseSamePreviousScheduledDayRule() throws Exception {
         Habit habit = new Habit("Read", clock.instant());
@@ -75,7 +105,7 @@ class HabitStreakConsistencyIntegrationTest {
         );
 
         assertAll(
-            () -> mockMvc.perform(
+            () -> perform(
                     get(
                         "/habits/"
                             + saved.getId()
@@ -88,7 +118,7 @@ class HabitStreakConsistencyIntegrationTest {
                         .value(3)
                 ),
 
-            () -> mockMvc.perform(
+            () -> perform(
                     get("/habits/stats")
                 )
                 .andExpect(status().isOk())

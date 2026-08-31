@@ -250,6 +250,16 @@ class ClientTierCacheIT {
             .getCache(API_CLIENT_TIERS_CACHE)
             .clear();
 
+        jdbcTemplate.update(
+            "DELETE FROM habit_completion_stats"
+        );
+        jdbcTemplate.update(
+            "DELETE FROM habit_completions"
+        );
+        jdbcTemplate.update(
+            "DELETE FROM habits"
+        );
+
         repository.deleteAll();
     }
 

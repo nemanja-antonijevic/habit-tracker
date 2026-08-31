@@ -2,22 +2,29 @@ package com.nantonijevic.habits.controller;
 
 import com.nantonijevic.habits.AbstractIntegrationTest;
 import com.nantonijevic.habits.cache.DashboardCacheGeneration;
+import com.nantonijevic.habits.client.ApiClientRepository;
+import com.nantonijevic.habits.client.ClientTierArgumentResolver;
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.event.HabitCompletedEvent;
 import com.nantonijevic.habits.event.HabitEvent;
 import com.nantonijevic.habits.repository.HabitMapper;
 import com.nantonijevic.habits.support.HabitTestFixtureRepository;
+import com.nantonijevic.habits.support.InternalApiClientFixture;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -35,6 +42,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
+@Import(InternalApiClientFixture.class)
 @TestPropertySource(
     properties =
         "spring.kafka.listener.auto-startup=false"
@@ -54,6 +62,14 @@ class HabitCompletionConcurrencyIntegrationTest
     private MockMvc mockMvc;
 
     @Autowired
+    private InternalApiClientFixture apiClientFixture;
+
+    @Autowired
+    private ApiClientRepository apiClientRepository;
+
+    private String apiKey;
+
+    @Autowired
     private HabitTestFixtureRepository fixtureRepository;
 
     @Autowired
@@ -68,6 +84,11 @@ class HabitCompletionConcurrencyIntegrationTest
     @MockBean
     private DashboardCacheGeneration dashboardCacheGeneration;
 
+    @BeforeEach
+    void provisionInternalClient() {
+        apiKey = apiClientFixture.provisionInternalClient();
+    }
+
     @AfterEach
     void cleanDatabase() {
         jdbcTemplate.update(
@@ -80,6 +101,20 @@ class HabitCompletionConcurrencyIntegrationTest
 
         jdbcTemplate.update(
             "DELETE FROM habits"
+        );
+
+        apiClientRepository.deleteAll();
+    }
+
+    private ResultActions perform(
+        MockHttpServletRequestBuilder request
+    ) throws Exception {
+
+        return mockMvc.perform(
+            request.header(
+                ClientTierArgumentResolver.API_KEY_HEADER,
+                apiKey
+            )
         );
     }
 
@@ -116,7 +151,7 @@ class HabitCompletionConcurrencyIntegrationTest
                 );
             }
 
-            return mockMvc.perform(
+            return perform(
                     post(
                         "/habits/{id}/complete",
                         habit.getId()

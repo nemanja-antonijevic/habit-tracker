@@ -6,6 +6,8 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.nantonijevic.habits.AbstractIntegrationTest;
 import com.nantonijevic.habits.cache.DashboardCacheGeneration;
+import com.nantonijevic.habits.client.ApiClientRepository;
+import com.nantonijevic.habits.client.ClientTierArgumentResolver;
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.event.HabitCompletedEvent;
 import com.nantonijevic.habits.event.HabitEvent;
@@ -14,6 +16,7 @@ import com.nantonijevic.habits.repository.HabitWriteRepository;
 import com.nantonijevic.habits.repository.HabitWriteRepositoryImpl;
 import com.nantonijevic.habits.service.HabitCommandService;
 import com.nantonijevic.habits.support.HabitTestFixtureRepository;
+import com.nantonijevic.habits.support.InternalApiClientFixture;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,6 +37,8 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -64,10 +69,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
     properties =
         "spring.kafka.listener.auto-startup=false"
 )
-@Import(
+@Import({
     HabitCompletionConcurrencyMySqlIT
-        .FixedClockConfiguration.class
-)
+        .FixedClockConfiguration.class,
+    InternalApiClientFixture.class
+})
 @AutoConfigureMockMvc
 class HabitCompletionConcurrencyMySqlIT
     extends AbstractIntegrationTest {
@@ -129,6 +135,14 @@ class HabitCompletionConcurrencyMySqlIT
     private MockMvc mockMvc;
 
     @Autowired
+    private InternalApiClientFixture apiClientFixture;
+
+    @Autowired
+    private ApiClientRepository apiClientRepository;
+
+    private String apiKey;
+
+    @Autowired
     private HabitTestFixtureRepository fixtureRepository;
 
     @Autowired
@@ -151,7 +165,9 @@ class HabitCompletionConcurrencyMySqlIT
     private ListAppender<ILoggingEvent> logAppender;
 
     @BeforeEach
-    void attachHabitServiceLogAppender() {
+    void setUp() {
+        apiKey = apiClientFixture.provisionInternalClient();
+
         habitServiceLogger =
             (Logger) LoggerFactory.getLogger(
                 HabitCommandService.class
@@ -175,6 +191,19 @@ class HabitCompletionConcurrencyMySqlIT
         );
         jdbcTemplate.update(
             "DELETE FROM habits"
+        );
+        apiClientRepository.deleteAll();
+    }
+
+    private ResultActions perform(
+        MockHttpServletRequestBuilder request
+    ) throws Exception {
+
+        return mockMvc.perform(
+            request.header(
+                ClientTierArgumentResolver.API_KEY_HEADER,
+                apiKey
+            )
         );
     }
 
@@ -284,7 +313,7 @@ class HabitCompletionConcurrencyMySqlIT
                 );
             }
 
-            return mockMvc.perform(
+            return perform(
                     post(
                         "/habits/{id}/complete",
                         habit.getId()
