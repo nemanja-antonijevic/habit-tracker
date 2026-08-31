@@ -4,7 +4,7 @@ Companion to [ADR 0005](../adr/0005-scope-habits-to-api-client-owners.md). The A
 decision; this file records the ordering constraints and the traps found while reviewing it, so they
 are not rediscovered during implementation.
 
-Status: V17 applied. Steps 2 onwards are not started.
+Status: V17 applied, test suite authenticated. Steps 3 onwards are not started.
 
 ## Step order
 
@@ -25,27 +25,40 @@ deleting a client that owns a habit is rejected.
 subsequent foreign key fails, with error `1452`. The unsafe operation completes before referential
 integrity stops the migration, so the non-null form must not be used until backfill is verified.
 
-### 2. Migrate the existing test suite to an authenticated client
+### 2. Migrate the existing test suite to an authenticated client (done)
 
-**This must precede any ownership test.** Seven test classes exercise `/habits`; five send no API key
-at all:
+**This must precede any ownership test.** Seven test classes exercise `/habits`; five of them did not
+reach the controller as an authenticated client, but not all for the same reason:
 
-| Test class | Sends `X-Api-Key` |
-| --- | --- |
-| `HabitControllerIntegrationTest` | no |
-| `HabitStatsIntegrationTest` | no |
-| `HabitStreakConsistencyIntegrationTest` | no |
-| `HabitCompletionConcurrencyIntegrationTest` | no |
-| `HabitCompletionConcurrencyMySqlIT` | no |
-| `ClientTierFilteringIntegrationTest` | yes |
-| `PrometheusConfigurationIntegrationTest` | yes |
+| Test class | Before step 2 | Survives the interceptor |
+| --- | --- | --- |
+| `HabitControllerIntegrationTest` | `@MockBean ClientTierResolver` stubbed to `INTERNAL` | no |
+| `HabitStatsIntegrationTest` | no API key, anonymous `PUBLIC` | no |
+| `HabitStreakConsistencyIntegrationTest` | no API key, anonymous `PUBLIC` | no |
+| `HabitCompletionConcurrencyIntegrationTest` | no API key, anonymous `PUBLIC` | no |
+| `HabitCompletionConcurrencyMySqlIT` | no API key, anonymous `PUBLIC` | no |
+| `ClientTierFilteringIntegrationTest` | real provisioned client | yes |
+| `PrometheusConfigurationIntegrationTest` | real provisioned client | yes |
 
-Once the interceptor is in place, those five fail with `401` before reaching any business logic. The
-failures would be uninformative: they would report an authentication problem in tests written to
-assert streaks, statistics and optimistic locking. Provision a client and add the header first, while
-the suite is still green for the right reason.
+The mocked resolver is the trap worth recording. It made 28 tier-gated assertions in
+`HabitControllerIntegrationTest` pass without any client row existing, and it would **not** have saved
+that class from `401`, because the interceptor performs its own lookup rather than calling the
+resolver. The mechanism that appeared to protect the class does not reach the place where the decision
+is made.
+
+All five now provision a real `INTERNAL` client through `InternalApiClientFixture` and send the header
+via a per-class `perform(...)` helper. The header is deliberately not a MockMvc default, so tests that
+assert behaviour for an absent key still assert it.
 
 The header name is `X-Api-Key`, from `ClientTierArgumentResolver.API_KEY_HEADER`.
+
+Two measured baselines from this step are the reference points for step 3:
+
+- Forcing the fixture to `PUBLIC` breaks 20 of 78 controller tests, all on the filtered-away
+  `scheduledDays` and `archived` fields. Tier filtering is genuinely exercised.
+- A fixture that never persists the client breaks 49 with `401`, while **29 still pass** on a
+  nonexistent key — request-validation tests that never reach a tier decision. Step 3 must flip those
+  29 to `401`; if it does not, the interceptor is not covering the whole controller.
 
 ### 3. Interceptor before controller changes
 
@@ -98,21 +111,25 @@ must be owner-scoped regardless of which key is produced.
 cache isolation between owners will pass vacuously under the default configuration, because no cache
 entry is ever created. Such tests must set `spring.cache.type=redis` explicitly.
 
-### Integration-test teardown will break on the foreign key
+### Integration-test teardown breaks on the foreign key (fixed in step 2)
 
 `ON DELETE RESTRICT` means an `ApiClient` cannot be deleted while it owns habits. Two teardown paths
-delete clients directly and will fail with MySQL error `1451` once habits carry owners:
+deleted clients directly and would fail with MySQL error `1451` once habits carry owners:
 
 - `PrometheusConfigurationIntegrationTest.deleteSavedClient` — `apiClientRepository.delete(savedClient)`
 - `ClientTierCacheIT.clearState` — `repository.deleteAll()`
 
-Delete owned habits before deleting their client.
+Both now delete `habit_completion_stats` → `habit_completions` → `habits` → `api_clients`. The inner
+ordering is load-bearing too, not defensive padding: `fk_habit_completions_habit` from V8 blocks
+`DELETE FROM habits` while completions exist, which was measured separately from the owner constraint.
 
-The full suite passing on V17 is **not** evidence that this is fine. Measured against V17 as written:
+The full suite passing on V17 was **not** evidence that this was fine. Measured against V17 as written:
 while every `owner_id` is `NULL`, deleting a client succeeds, because no habit row references it — the
 foreign key is present but unstressed. As soon as one habit carries an owner, the same delete is
 blocked (H2 `23503`, MySQL `1451`). The failure therefore appears at the step that assigns owners, not
-at the step that adds the constraint, and today's green run cannot detect it.
+at the step that adds the constraint, and a green run before step 4 cannot detect it. The fix was
+verified by a probe that created a client, a habit carrying its `owner_id`, and then ran the teardown —
+green under the new order, `23503` under the old one.
 
 ## Deferred to V18
 
