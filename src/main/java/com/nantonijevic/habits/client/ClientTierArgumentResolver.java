@@ -3,24 +3,15 @@ package com.nantonijevic.habits.client;
 import org.springframework.core.MethodParameter;
 import org.springframework.web.bind.support.WebDataBinderFactory;
 import org.springframework.web.context.request.NativeWebRequest;
+import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.method.support.ModelAndViewContainer;
-
-import java.util.Optional;
 
 public class ClientTierArgumentResolver
     implements HandlerMethodArgumentResolver {
 
     public static final String API_KEY_HEADER =
         "X-Api-Key";
-
-    private final ClientTierResolver clientTierResolver;
-
-    public ClientTierArgumentResolver(
-        ClientTierResolver clientTierResolver
-    ) {
-        this.clientTierResolver = clientTierResolver;
-    }
 
     @Override
     public boolean supportsParameter(
@@ -40,10 +31,16 @@ public class ClientTierArgumentResolver
         NativeWebRequest webRequest,
         WebDataBinderFactory binderFactory
     ) {
-        return clientTierResolver.resolve(
-            Optional.ofNullable(
-                webRequest.getHeader(API_KEY_HEADER)
-            )
+        Object attribute = webRequest.getAttribute(
+            ClientAuthenticationInterceptor
+                .CLIENT_CONTEXT_ATTRIBUTE,
+            RequestAttributes.SCOPE_REQUEST
         );
+
+        if (!(attribute instanceof ClientContext context)) {
+            throw new InvalidApiKeyException();
+        }
+
+        return context.tier();
     }
 }

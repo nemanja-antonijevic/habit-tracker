@@ -45,6 +45,9 @@ public class ApiClient {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @Column(name = "active", nullable = false)
+    private boolean active;
+
     protected ApiClient() {
     }
 
@@ -54,10 +57,27 @@ public class ApiClient {
         String name,
         Instant createdAt
     ) {
+        this(
+            apiKeyHash,
+            tier,
+            name,
+            createdAt,
+            true
+        );
+    }
+
+    public ApiClient(
+        String apiKeyHash,
+        ClientTier tier,
+        String name,
+        Instant createdAt,
+        boolean active
+    ) {
         this.apiKeyHash = apiKeyHash;
         this.tier = tier;
         this.name = name;
         this.createdAt = createdAt;
+        this.active = active;
     }
 
     public Long getId() {
@@ -78,5 +98,9 @@ public class ApiClient {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public boolean isActive() {
+        return active;
     }
 }

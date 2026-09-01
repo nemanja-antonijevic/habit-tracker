@@ -27,6 +27,16 @@ public class InternalApiClientFixture {
     }
 
     public String provisionInternalClient() {
+        return provisionInternalClient(true);
+    }
+
+    public String provisionRevokedInternalClient() {
+        return provisionInternalClient(false);
+    }
+
+    private String provisionInternalClient(
+        boolean active
+    ) {
         String rawApiKey =
             "integration-internal-" + UUID.randomUUID();
 
@@ -35,7 +45,8 @@ public class InternalApiClientFixture {
                 apiKeyHasher.hash(rawApiKey),
                 ClientTier.INTERNAL,
                 "Integration test client",
-                CREATED_AT
+                CREATED_AT,
+                active
             )
         );
 

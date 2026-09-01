@@ -2,6 +2,7 @@ package com.nantonijevic.habits.client;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.util.List;
@@ -10,12 +11,27 @@ import java.util.List;
 public class ClientWebConfig
     implements WebMvcConfigurer {
 
-    private final ClientTierResolver clientTierResolver;
+    private final ClientAuthenticationInterceptor
+        authenticationInterceptor;
 
     public ClientWebConfig(
-        ClientTierResolver clientTierResolver
+        ClientAuthenticationInterceptor
+            authenticationInterceptor
     ) {
-        this.clientTierResolver = clientTierResolver;
+        this.authenticationInterceptor =
+            authenticationInterceptor;
+    }
+
+    @Override
+    public void addInterceptors(
+        InterceptorRegistry registry
+    ) {
+        registry
+            .addInterceptor(authenticationInterceptor)
+            .addPathPatterns(
+                "/habits",
+                "/habits/**"
+            );
     }
 
     @Override
@@ -23,9 +39,7 @@ public class ClientWebConfig
         List<HandlerMethodArgumentResolver> resolvers
     ) {
         resolvers.add(
-            new ClientTierArgumentResolver(
-                clientTierResolver
-            )
+            new ClientTierArgumentResolver()
         );
     }
 }

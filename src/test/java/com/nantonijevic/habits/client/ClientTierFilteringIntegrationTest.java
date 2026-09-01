@@ -3,6 +3,7 @@ package com.nantonijevic.habits.client;
 import com.nantonijevic.habits.AbstractIntegrationTest;
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.support.HabitTestFixtureRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -14,6 +15,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.UUID;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -54,8 +56,25 @@ class ClientTierFilteringIntegrationTest
     @Autowired
     private ApiKeyHasher apiKeyHasher;
 
+    private String publicApiKey;
+
+    @BeforeEach
+    void provisionPublicClient() {
+        publicApiKey =
+            "public-key-" + UUID.randomUUID();
+
+        apiClientRepository.saveAndFlush(
+            new ApiClient(
+                apiKeyHasher.hash(publicApiKey),
+                ClientTier.PUBLIC,
+                "Public client",
+                CREATED_AT
+            )
+        );
+    }
+
     @Test
-    void missingApiKeyUsesPublicTierOnGetById()
+    void provisionedPublicClientUsesPublicTierOnGetById()
         throws Exception {
 
         Habit saved = habitRepository.save(
@@ -64,6 +83,10 @@ class ClientTierFilteringIntegrationTest
 
         mockMvc.perform(
                 get("/habits/{id}", saved.getId())
+                    .header(
+                        ClientTierArgumentResolver.API_KEY_HEADER,
+                        publicApiKey
+                    )
             )
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.id").value(saved.getId()))
@@ -151,6 +174,10 @@ class ClientTierFilteringIntegrationTest
             get("/habits")
                 .param("name", "Tier list")
                 .param("size", "10")
+                .header(
+                    ClientTierArgumentResolver.API_KEY_HEADER,
+                    publicApiKey
+                )
         );
 
         publicResult
@@ -302,6 +329,10 @@ class ClientTierFilteringIntegrationTest
         if (endpoint == PublicEndpoint.CREATE) {
             return mockMvc.perform(
                 post("/habits")
+                    .header(
+                        ClientTierArgumentResolver.API_KEY_HEADER,
+                        publicApiKey
+                    )
                     .contentType(APPLICATION_JSON)
                     .content(
                         """
@@ -329,6 +360,9 @@ class ClientTierFilteringIntegrationTest
                     post(
                         "/habits/{id}/complete",
                         saved.getId()
+                    ).header(
+                        ClientTierArgumentResolver.API_KEY_HEADER,
+                        publicApiKey
                     )
                 )
                 .andExpect(status().isOk());
@@ -392,6 +426,11 @@ class ClientTierFilteringIntegrationTest
                 );
         };
 
-        return mockMvc.perform(request);
+        return mockMvc.perform(
+            request.header(
+                ClientTierArgumentResolver.API_KEY_HEADER,
+                publicApiKey
+            )
+        );
     }
 }
