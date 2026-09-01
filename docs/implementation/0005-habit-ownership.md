@@ -4,7 +4,8 @@ Companion to [ADR 0005](../adr/0005-scope-habits-to-api-client-owners.md). The A
 decision; this file records the ordering constraints and the traps found while reviewing it, so they
 are not rediscovered during implementation.
 
-Status: V17 applied, test suite authenticated. Steps 3 onwards are not started.
+Status: steps 1–3 complete (V17 applied, test suite authenticated, authentication boundary in place).
+Step 4 — owner scoping in SQL — is not started, so habits are still global to any authenticated client.
 
 ## Step order
 
@@ -60,17 +61,27 @@ Two measured baselines from this step are the reference points for step 3:
   nonexistent key — request-validation tests that never reach a tier decision. Step 3 must flip those
   29 to `401`; if it does not, the interceptor is not covering the whole controller.
 
-### 3. Interceptor before controller changes
+### 3. Interceptor before controller changes (done)
 
-`ClientTierArgumentResolver.supportsParameter` requires the `@ResolvedClientTier` annotation, so
+`ClientTierArgumentResolver.supportsParameter` required the `@ResolvedClientTier` annotation, so
 resolution is opt-in per parameter. `HabitController` has 16 endpoints and only 9 declare that
 parameter; the other 7 (bulk complete, delete, stats, history, completion rate, due-today count,
-dashboard stats) are unreachable by the resolver. Authentication that lives there cannot cover 44% of
-the controller, which is why ADR 0005 moves the boundary to a `HandlerInterceptor` over `/habits` and
+dashboard stats) were unreachable by the resolver. Authentication that lives there cannot cover 44% of
+the controller, which is why ADR 0005 moved the boundary to a `HandlerInterceptor` over `/habits` and
 `/habits/**`.
 
-After the interceptor exists, the argument resolver becomes a reader of the request attribute it
-sets, not the component deciding whether authentication runs.
+`ClientAuthenticationInterceptor` now owns the decision and stores an immutable
+`ClientContext(clientId, tier)` as a request attribute; `ClientTierArgumentResolver` only reads it and
+no longer holds a dependency that could resolve a key. Identity comes from `ClientIdentityLookup`,
+which carries no `@Cacheable` — the old `ClientTierResolver`, `ClientTierLookup` and the
+`api-client-tiers` cache were deleted with this step.
+
+The step-2 baseline closed as required: with an unpersisted fixture all **78 of 78** controller tests
+return `401`, against 49 fail / 29 pass before. **15 of those 29 previously returned `400`**, which is
+what proves authentication now runs ahead of `@Valid`; the rest were endpoints with no tier parameter,
+and all seven are covered explicitly. Removing the `active` guard (revoked client gets `200`) and
+adding `@Cacheable` to the identity lookup (two requests, one repository call) are both RED. Suite
+after the deletions: 227 / 0 / 0 / 0.
 
 ### 4. Owner scoping in SQL, not above it
 
@@ -117,11 +128,13 @@ entry is ever created. Such tests must set `spring.cache.type=redis` explicitly.
 deleted clients directly and would fail with MySQL error `1451` once habits carry owners:
 
 - `PrometheusConfigurationIntegrationTest.deleteSavedClient` — `apiClientRepository.delete(savedClient)`
-- `ClientTierCacheIT.clearState` — `repository.deleteAll()`
+- `ClientTierCacheIT.clearState` — `repository.deleteAll()` (this class was itself deleted in step 3
+  together with the cache path it covered, so only the Prometheus teardown remains)
 
-Both now delete `habit_completion_stats` → `habit_completions` → `habits` → `api_clients`. The inner
-ordering is load-bearing too, not defensive padding: `fk_habit_completions_habit` from V8 blocks
-`DELETE FROM habits` while completions exist, which was measured separately from the owner constraint.
+The surviving path deletes `habit_completion_stats` → `habit_completions` → `habits` → `api_clients`.
+The inner ordering is load-bearing too, not defensive padding: `fk_habit_completions_habit` from V8
+blocked `DELETE FROM habits` while completions existed, which was measured separately from the owner
+constraint.
 
 The full suite passing on V17 was **not** evidence that this was fine. Measured against V17 as written:
 while every `owner_id` is `NULL`, deleting a client succeeds, because no habit row references it — the

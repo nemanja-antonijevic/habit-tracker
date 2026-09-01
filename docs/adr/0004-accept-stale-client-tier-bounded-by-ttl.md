@@ -1,10 +1,16 @@
 # ADR 0004: Accept stale client tiers bounded by TTL, with no eviction on write
 
-- Status: Accepted
+- Status: Superseded by [ADR 0005](0005-scope-habits-to-api-client-owners.md) on 2026-09-01
 - Date: 2026-08-27
-- Related: [ADR 0005](0005-scope-habits-to-api-client-owners.md) — proposed; supersedes this decision when implemented
+- Related: [ADR 0005](0005-scope-habits-to-api-client-owners.md) — accepted and implemented through step 3
 
 ## Context
+
+> The body below describes the code as it stood on 2026-08-27 and is kept as the historical record.
+> The mechanism it accepts no longer exists: `ClientTierLookup`, `ClientTierResolver` and the
+> `api-client-tiers` cache were removed on 2026-09-01, when ADR 0005 moved identity resolution to an
+> uncached database lookup behind a `HandlerInterceptor`. There is no longer a staleness window to
+> accept, because there is no longer a cache on the authentication path.
 
 `ClientTierLookup.resolveByHash` is annotated `@Cacheable` on the `api-client-tiers` cache, keyed by the API key hash. `ApiClientRepository` writes are not paired with any eviction: `src/main` contains no `@CacheEvict` operation, and the only eviction in the application is the programmatic `cache.clear()` in `DashboardCacheInvalidator`, which targets the dashboard cache.
 

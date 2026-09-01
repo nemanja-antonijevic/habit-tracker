@@ -1,11 +1,14 @@
 # ADR 0005: Scope habits to authenticated API client owners
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-08-29
-- Supersedes: ADR 0004 when implemented
-- Implementation: [notes and step order](../implementation/0005-habit-ownership.md); V17 applied and the test suite authenticated, application changes not started
+- Supersedes: [ADR 0004](0004-accept-stale-client-tier-bounded-by-ttl.md), as of 2026-09-01
+- Implementation: [notes and step order](../implementation/0005-habit-ownership.md); steps 1–3 implemented (V17, authenticated test suite, authentication boundary), owner scoping pending
 
 ## Context
+
+> This section describes the code as measured on 2026-08-29, before implementation. What has since
+> changed is recorded under [Implementation status](#implementation-status-2026-09-01).
 
 All habits currently belong to one global data set. `HabitMapper.xml` has eight statements over `habits`: `findById`, `existsById`, `deleteById`, `findActive`, `insert`, `update`, `search` and `count`. The shared `searchWhere` fragment affects both `search` and `count`. None of these statements carries an owner predicate.
 
@@ -37,7 +40,7 @@ A provisioned client with tier `PUBLIC` has an identity and can own habits. An a
 
 Identity resolution is not served from the existing one-minute tier cache. It performs a database lookup on every request until an authentication cache with explicit write invalidation is designed. This adds database cost but prevents a revoked credential from retaining access to an owner's data for the tier TTL.
 
-When this ADR is implemented, ADR 0004 is superseded. The `api-client-tiers` namespace is retired from the authentication path. A future authentication cache must use a new, versioned cache name and serializer, so existing `ClientTier` entries are never deserialized as client contexts.
+ADR 0004 is superseded as of 2026-09-01. The `api-client-tiers` namespace is retired from the authentication path. A future authentication cache must use a new, versioned cache name and serializer, so existing `ClientTier` entries are never deserialized as client contexts.
 
 ### Schema and migration sequence
 
@@ -116,4 +119,30 @@ Per-habit completion queries gain ownership joins. Dashboard completion-stat que
 
 The dashboard cache keeps global invalidation initially. This may discard valid entries for unrelated owners but cannot return one owner's dashboard to another.
 
-ADR 0004 remains the accepted description of the current implementation until this proposal is implemented. At implementation time its stale-tier acceptance no longer applies, because identity becomes an authorisation input rather than response-shaping metadata.
+ADR 0004's stale-tier acceptance no longer applies as of 2026-09-01, because identity became an authorisation input rather than response-shaping metadata, and the cache it accepted staleness on no longer exists.
+
+## Implementation status (2026-09-01)
+
+Steps 1–3 are implemented. Step 4, owner scoping in the eight `HabitMapper.xml` statements and the shared `searchWhere` fragment, is not started, so habits are still globally readable to any authenticated client.
+
+### What was removed
+
+`ClientTierResolver` and `ClientTierLookup` are deleted, together with `ClientTierResolverTest`, `ClientTierCacheTest` and `ClientTierCacheIT`. `RedisCacheConfig` no longer declares the `api-client-tiers` cache name, its one-minute TTL, its `ClientTier`-typed serializer or its cache configuration. The dead path was deleted rather than left in place unused, so no annotation survives that no code reaches.
+
+Redis keys written under `api-client-tiers` before this change are not deleted by the application. They remain inert: nothing reads that namespace any more, and they expire on their own one-minute TTL. This is why a future authentication cache must take a new, versioned name — a stale `ClientTier` value must never be reachable as a `ClientContext`.
+
+### Authentication boundary as built
+
+`ClientAuthenticationInterceptor` is registered for `/habits` and `/habits/**`. It rejects a missing, unknown or inactive API key with `401`, and on success stores an immutable `ClientContext(clientId, tier)` as a request attribute. `ClientIdentityLookup` performs the database lookup and carries no `@Cacheable`. `ClientTierArgumentResolver` now only reads that attribute; it holds no dependency capable of resolving a key itself.
+
+### Verification
+
+The measured step-3 entry condition from the implementation notes is closed. With a fixture that returns an API key without persisting the client, **all 78 controller tests fail with `401`** — where before the interceptor 49 failed and 29 passed. The 29 included **15 that previously returned `400`**, which is the specific evidence that authentication now precedes `@Valid` body validation rather than running after it. All seven endpoints that declare no `@ResolvedClientTier` parameter are covered by explicit tests.
+
+Two further mutations are RED: removing the `active` guard from `ClientIdentityLookup` lets a revoked client receive `200` instead of `401`; adding `@Cacheable` to the identity lookup drops repository calls from two to one across two requests and fails the uncached-lookup test.
+
+Full suite after the removals: 227 tests, 0 failures, 0 errors, 0 skipped.
+
+### Metric change
+
+`habit.client.tier.resolutions` keeps its name for compatibility, but now publishes only `outcome="resolved"` and `outcome="rejected"`; its description reads "Number of API key authentication outcomes". The `outcome="public"` counter is removed rather than left registered at a permanent zero, since anonymous access is no longer a possible outcome on `/habits`.

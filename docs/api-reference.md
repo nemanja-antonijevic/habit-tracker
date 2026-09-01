@@ -9,19 +9,27 @@ Full specification of every HTTP endpoint. This is the source of truth for the A
 
 All routes live under `/habits` (`HabitController`).
 
+## Authentication
+
+`X-Api-Key` is **required on every `/habits` endpoint**. A `HandlerInterceptor` resolves the key before the controller runs and rejects the request with `401 Unauthorized` when the header is missing, when the key is unknown, or when the client row has `active = FALSE` (revoked). Authentication runs before request-body validation, so an invalid body sent with an unknown key returns `401`, not `400`.
+
+There is no anonymous access. A client with tier `PUBLIC` is a provisioned identity like any other; it receives fewer response fields, not weaker authentication.
+
+`X-Api-Key` authenticates the caller but does not yet authorize per-owner data access: habits are not scoped to their owner, so any authenticated client can read and modify every habit. Owner scoping is step 4 of [ADR 0005](adr/0005-scope-habits-to-api-client-owners.md) and is not implemented.
+
+Keys are provisioned directly in `api_clients`, but only their lowercase SHA-256 hashes are stored. SHA-256 is intentionally deterministic so the high-entropy API key can be resolved through a unique indexed lookup; unlike a user password, it is not verified by scanning salted password hashes. No credential is seeded by Flyway, so a fresh database rejects every request to `/habits` until a key is provisioned. Secure provisioning, rotation, and rate limiting are deferred backlog work.
+
+Identity resolution is not cached: every request performs one database lookup. Revocation therefore takes effect immediately. The former 60-second `api-client-tiers` cache was removed together with the tier-only resolver — see [ADR 0004](adr/0004-accept-stale-client-tier-bounded-by-ttl.md), now superseded.
+
 ## Client tiers and response filtering
 
-Habit responses are filtered according to the optional `X-Api-Key` request header. A recognized key is resolved through the `api_clients` table to one of three tiers. A missing header represents an anonymous client and uses `PUBLIC`; a supplied but unknown key is rejected with `401 Unauthorized`.
+Once authenticated, habit responses are filtered according to the client's tier, resolved through the `api_clients` table to one of three values.
 
 | Tier | `scheduledDays` | `archived` | `createdAt` |
 |------|-----------------|------------|-------------|
 | `INTERNAL` | included | included | included |
 | `TRUSTED` | included | included | omitted |
 | `PUBLIC` | omitted | omitted | omitted |
-
-`X-Api-Key` is a response-visibility credential, not a complete authentication or authorization system. Keys are provisioned directly in `api_clients`, but only their lowercase SHA-256 hashes are stored. SHA-256 is intentionally deterministic so the high-entropy API key can be resolved through a unique indexed lookup; unlike a user password, it is not verified by scanning salted password hashes. No credential is seeded by Flyway, so clients without a header use `PUBLIC`. Secure provisioning, rotation, and rate limiting are deferred backlog work.
-
-Successful key-to-tier lookups are cached in Redis for 60 seconds. Missing and unknown keys are not cached. Consequently, a tier change or key revocation can take up to 60 seconds to propagate for an already cached key.
 
 The fields `id`, `name`, `completionCount`, and `currentStreak` are returned for every tier. Hidden fields are physically absent from the JSON response rather than serialized as `null`.
 
@@ -111,6 +119,7 @@ Body of every error.
 | `201 Created` | Habit created (with a `Location` header) |
 | `204 No Content` | Success with no body (delete) |
 | `400 Bad Request` | Validation failed, malformed JSON, or an illegal state transition (`InvalidHabitStateException`) |
+| `401 Unauthorized` | `X-Api-Key` missing, unknown, or belonging to a revoked client (`InvalidApiKeyException`). Raised by the interceptor before validation, so it takes precedence over `400` |
 | `404 Not Found` | Habit does not exist (`HabitNotFoundException`) |
 | `409 Conflict` | Version mismatch on update; on `complete`, only when the single automatic retry loses the optimistic-lock race again (`HabitVersionConflictException`) |
 
