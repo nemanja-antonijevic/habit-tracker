@@ -10,18 +10,12 @@ public class ClientTierResolutionMetrics {
     private static final String METRIC_NAME =
         "habit.client.tier.resolutions";
 
-    private final Counter publicCounter;
     private final Counter resolvedCounter;
     private final Counter rejectedCounter;
 
     public ClientTierResolutionMetrics(
         MeterRegistry registry
     ) {
-        publicCounter = counter(
-            registry,
-            "public"
-        );
-
         resolvedCounter = counter(
             registry,
             "resolved"
@@ -31,10 +25,6 @@ public class ClientTierResolutionMetrics {
             registry,
             "rejected"
         );
-    }
-
-    public void recordPublic() {
-        publicCounter.increment();
     }
 
     public void recordResolved() {
@@ -52,7 +42,7 @@ public class ClientTierResolutionMetrics {
         return Counter
             .builder(METRIC_NAME)
             .description(
-                "Number of API key tier resolution outcomes"
+                "Number of API key authentication outcomes"
             )
             .tag("outcome", outcome)
             .register(registry);

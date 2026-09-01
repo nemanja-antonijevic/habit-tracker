@@ -25,16 +25,8 @@ public class RedisCacheConfig implements CachingConfigurer {
     public static final String DASHBOARD_STATS_CACHE =
         "dashboard-stats";
 
-    public static final String API_CLIENT_TIERS_CACHE =
-        "api-client-tiers";
-
     private static final Duration DASHBOARD_STATS_TTL =
         Duration.ofMinutes(5);
-
-    // Tier changes, especially revocation, must propagate
-    // faster than derived dashboard data.
-    private static final Duration API_CLIENT_TIERS_TTL =
-        Duration.ofMinutes(1);
 
     @Bean
     @ConditionalOnProperty(
@@ -65,27 +57,12 @@ public class RedisCacheConfig implements CachingConfigurer {
                         )
                 );
 
-        Jackson2JsonRedisSerializer<ClientTier> clientTierSerializer =
-            new Jackson2JsonRedisSerializer<>(ClientTier.class);
-
-        RedisCacheConfiguration apiClientTierConfiguration =
-            baseConfiguration
-                .entryTtl(API_CLIENT_TIERS_TTL)
-                .serializeValuesWith(
-                    RedisSerializationContext.SerializationPair
-                        .fromSerializer(clientTierSerializer)
-                );
-
         return RedisCacheManager
             .builder(connectionFactory)
             .enableStatistics()
             .withCacheConfiguration(
                 DASHBOARD_STATS_CACHE,
                 dashboardConfiguration
-            )
-            .withCacheConfiguration(
-                API_CLIENT_TIERS_CACHE,
-                apiClientTierConfiguration
             )
             .build();
     }

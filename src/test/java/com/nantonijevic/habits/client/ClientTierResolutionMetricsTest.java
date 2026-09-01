@@ -21,25 +21,18 @@ class ClientTierResolutionMetricsTest {
     }
 
     @Test
-    void recordsPublicResolution() {
-        metrics.recordPublic();
-
-        assertThat(count("public"))
-            .isEqualTo(1.0);
-
-        assertThat(count("resolved"))
-            .isZero();
-
-        assertThat(count("rejected"))
-            .isZero();
+    void doesNotPublishRetiredAnonymousPublicOutcome() {
+        assertThat(
+            registry
+                .find("habit.client.tier.resolutions")
+                .tag("outcome", "public")
+                .counter()
+        ).isNull();
     }
 
     @Test
     void recordsResolvedApiKey() {
         metrics.recordResolved();
-
-        assertThat(count("public"))
-            .isZero();
 
         assertThat(count("resolved"))
             .isEqualTo(1.0);
@@ -51,9 +44,6 @@ class ClientTierResolutionMetricsTest {
     @Test
     void recordsRejectedApiKey() {
         metrics.recordRejected();
-
-        assertThat(count("public"))
-            .isZero();
 
         assertThat(count("resolved"))
             .isZero();
