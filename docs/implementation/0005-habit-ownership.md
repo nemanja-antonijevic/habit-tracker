@@ -4,8 +4,9 @@ Companion to [ADR 0005](../adr/0005-scope-habits-to-api-client-owners.md). The A
 decision; this file records the ordering constraints and the traps found while reviewing it, so they
 are not rediscovered during implementation.
 
-Status: steps 1–3 complete (V17 applied, test suite authenticated, authentication boundary in place).
-Step 4 — owner scoping in SQL — is not started, so habits are still global to any authenticated client.
+Status: steps 1–4 complete (V17 applied, test suite authenticated, authentication boundary in place,
+owner scoping in SQL). Habits are scoped to the authenticated API client. V18 `NOT NULL`, the
+per-environment backfill and an authentication cache remain deferred.
 
 ## Step order
 
@@ -83,37 +84,154 @@ and all seven are covered explicitly. Removing the `active` guard (revoked clien
 adding `@Cacheable` to the identity lookup (two requests, one repository call) are both RED. Suite
 after the deletions: 227 / 0 / 0 / 0.
 
-### 4. Owner scoping in SQL, not above it
+### 4. Owner scoping in SQL, not above it (done)
 
 `HabitMapper.xml` has eight statements over `habits` — `findById`, `existsById`, `deleteById`,
 `findActive`, `insert`, `update`, `search`, `count` — plus the shared `searchWhere` fragment used by
 `search` and `count`. Every one needs the owner in the statement itself. A check performed before the
 call is not equivalent: it leaves a window and it does not protect callers that bypass the check.
 
+All eight now carry `owner_id`, and `searchWhere` opens with an unconditional `owner_id = #{ownerId}`
+so the predicate cannot be skipped by a `<if>` that happens to be false. `insert` writes
+`#{ownerId,jdbcType=BIGINT}` and `habitResultMap` maps the column, so the owner round-trips rather
+than being filtered on a column nothing populates.
+
+`update` is the one worth reading twice: its `WHERE` is `owner_id = … AND id = … AND version = …`.
+Ownership sits in the same predicate as the optimistic lock, so a cross-owner update cannot slip
+through the conflict-retry path either — the retry re-reads through the owner-scoped `findById`.
+
+`ClientContext` replaced `ClientTier` in all sixteen controller signatures; `context.clientId()` is
+passed explicitly down to the mapper and `context.tier()` is used only for response filtering. No
+`@ResolvedClientTier ClientTier` parameter survives in `src/main/java`.
+
+#### Entry and exit measurement
+
+Entry condition, measured before any change: provisioning a second client with one owned habit and
+running the existing suite as the first client produced **18 failures** — 14 in
+`HabitControllerIntegrationTest`, four in `HabitStatsIntegrationTest`.
+
+That number is an accidental-detection baseline, not a coverage count, and the composition proves it.
+`HabitStatsIntegrationTest` has 11 tests; exactly the **four** `getDashboardStats_*` ones failed. The
+other seven — `getStats_*`, `uncomplete_*`, the streak pair — are `{id}` paths against a habit the
+test itself created, so they could not fail no matter how leaky the scoping was. The baseline sees
+aggregate leakage only.
+
+Exit condition: the same mutation (second client, sentinel habit) now leaves **241 of 241** passing.
+Cross-owner access by ID is covered separately by `crossOwnerIdEndpointReturns404`, a
+`@ParameterizedTest` over a `CrossOwnerEndpoint` enum with one case per `{id}` endpoint — ten in one
+table rather than ten near-copies — plus `bulkCompleteTreatsForeignHabitAsNotFound`, which asserts the
+foreign habit appears in `notFound` **and** re-reads it afterwards to prove its completion count is
+unchanged. Full suite 241 / 0 / 0 / 0.
+
 ## Traps found in review
 
-### Kafka is a second write path with no client context
+### Every completion-table access inherits ownership rather than asserting it
+
+`HabitCompletionRepository` and `HabitCompletionStatRepository` are untouched by step 4. Every call
+into them is keyed by `habit_id` alone. Enumerated from `src/main/java` — five call sites guarded by a
+preceding owner-scoped habit lookup, plus dashboard stats, which the ADR covers explicitly:
+
+| Caller | Guard that runs first | Completion access |
+| --- | --- | --- |
+| `HabitQueryService.getHistory` | `existsById(ownerId, habitId)` | `findByHabitIdAndCompletedOnBetweenOptional` |
+| `HabitQueryService.getCompletionRate` | `findById(ownerId, habitId)` | `findCompletedDatesInPeriod(habitId, …)` |
+| `HabitQueryService.getStatsProjection` | `findById(ownerId, habitId)` | `findFirstByHabitIdOrderByCompletedOnDesc`, `findStatsByHabitId` |
+| `HabitCommandService.complete` | `findById(ownerId, habitId)` | `save(new HabitCompletion(habitId, today))` |
+| `HabitCommandService.uncomplete` | `findById(ownerId, habitId)` | `deleteByHabitIdAndCompletedOn`, `findByHabitIdOrderByCompletedOnDesc` |
+| `HabitQueryService.getDashboardStats` | `findActive(ownerId)` | `findLatestByHabitIds(activeHabitIds)` |
+
+Only the last row matches the ADR: it passes an ID set already selected for the owner, which is the
+mechanism the ADR names. The other five do not, and they contradict two sentences of it — "every read,
+insert, update and delete includes the owner ID in its database operation. A preceding ownership check
+alone is insufficient", and, more specifically, "completion history, completion rate and per-habit
+statistics enforce ownership through a join to `habits`". No such join exists; a preceding lookup was
+written instead.
+
+What actually protects these five is `fk_habit_completions_habit` (V8) plus the fact that `habits` is
+now owner-scoped: a `habit_id` obtained through an owner-scoped read cannot belong to another owner.
+The guard and the query also sit in one transaction, so there is no window between them.
+
+**This is inheritance, not assertion, and it is the kind of protection worth naming.** The line that
+looks like it carries the guarantee — the `existsById` / `findById` check — is not what holds; the
+foreign key is. Delete the guard and these paths still cannot cross owners, because there is no
+reachable `habitId` that would let them.
+
+Accepted as-is. Asserting ownership directly needs either an owner column on the completion tables,
+which the ADR rejects to keep `habits` the single source of ownership, or the join the ADR asked for.
+Revisit if any completion access is ever reached without first resolving the habit through an
+owner-scoped statement — that is the condition under which inherited protection stops holding, and it
+is not enforced by anything today.
+
+### Kafka: the consumer inherits ownership through `habitId`
 
 `HabitCompletedEventConsumer` (`@KafkaListener(topics = "habit-completed", groupId = "habit-stats")`)
-writes to the read model outside any HTTP request. The interceptor cannot reach it, so there is no
-authenticated client to attribute the work to. Decide explicitly how the consumer obtains ownership —
-carry the owner in the event payload, or derive it by joining through `habit_id` — rather than
-discovering the gap when statistics silently cross owners.
+writes to the read model outside any HTTP request, so the interceptor cannot reach it and there is no
+authenticated client on that path.
 
-### The dashboard cache key generator will throw, not misbehave
+It does not need one. `HabitCommandService` publishes the event only after the authenticated command
+path has resolved an owned habit through `findById(ownerId, habitId)`, so ownership is already decided
+upstream of the topic. The consumer writes `habit_completion_stats` keyed by `habit_id`, and `habits`
+remains the single ownership source of truth.
 
-`DashboardCacheKeyGenerator.generate` reads `LocalDate today = (LocalDate) params[0]`. Inserting
-`ownerId` as a new first method argument turns that line into a runtime `ClassCastException`. The
-positional contract has to be replaced with named or typed values, not worked around by argument
+Adding `ownerId` to the event payload was rejected for this step: `HabitEvent` is a sealed interface
+deserialized by `JsonDeserializer<HabitCompletedEvent>`, so a new field is a breaking topic-format
+change that does not describe already-queued messages, and it would duplicate ownership the habit
+foreign key already represents. Same class as the three paths above — inherited, not asserted.
+
+### The dashboard cache key generator throws on a shape mismatch, by design
+
+`DashboardCacheKeyGenerator.generate` previously read `LocalDate today = (LocalDate) params[0]`.
+Inserting `ownerId` as a new first argument would have turned that into a runtime
+`ClassCastException`, so the positional contract was replaced rather than worked around by argument
 order.
 
-Both generated forms need tests, and both must be checked against argument reordering:
+It now validates the shape up front — `params.length != 2`, `params[0] instanceof Long ownerId`,
+`params[1] instanceof LocalDate today` — and throws `IllegalArgumentException` naming the expected
+signature. The failure mode is deliberate: a future argument reorder fails loudly at the key
+generator instead of silently producing a key that mixes owners.
+
+Both generated forms are covered, and both must stay checked against argument reordering:
 
 - normal Redis path: `ownerId::generation::today`
 - generation-read failure: `bypass::UUID::ownerId::today`
 
 The bypass UUID prevents cache reuse; it does not authorise anything. The underlying dashboard read
-must be owner-scoped regardless of which key is produced.
+must be owner-scoped regardless of which key is produced — and is, through `findActive(ownerId)`.
+
+### `TestApiClientOwner` is H2-only and does not say so
+
+The step-4 helper `TestApiClientOwner.ensureExists` provisions an owner row with
+`MERGE INTO api_clients … KEY (id)`. That is H2 syntax; MySQL does not accept it. Seven test classes
+use it and all seven are H2. The two `MySqlIT` classes provision owners their own way —
+`HabitCompletionConcurrencyMySqlIT` builds `new Habit(ownerId, …)` directly — so nothing is broken
+today.
+
+The name carries no dialect hint, so the first `MySqlIT` that reaches for it fails at runtime for a
+reason its call site does not suggest. Same shape as the `spring.cache.type: none` trap below: green
+until touched from another context.
+
+Decided 2026-09-02: it stays as an explicitly test-only H2 helper, deferred to V18 rather than renamed
+now. No production path is affected, and V18 `NOT NULL` forces every owner fixture to be revisited
+anyway — including the two `MySqlIT` classes that currently provision owners their own way. Doing it
+twice buys nothing. The obligation is therefore attached to V18 below, not left as a loose observation.
+
+### The `ClientTier` branch in the argument resolver is unreachable from production
+
+`supportsParameter` accepts `ClientContext.class` **or** `ClientTier.class`, and `resolveArgument`
+returns `context.tier()` for the latter. After step 4 no `@ResolvedClientTier ClientTier` parameter
+exists in `src/main/java`, so that branch is reached only from `ClientTierArgumentResolverTest`.
+
+Step 3 set the opposite precedent in this same ADR — the dead `ClientTierResolver` path was deleted
+rather than left unused, so that no annotation survives that no code reaches. The branch is kept here
+as a resolver-level compatibility affordance; if it is not wanted, it should be removed together with
+its test rather than left as a second supported shape nothing uses.
+
+### `Habit(String, Instant)` now builds an ownerless habit
+
+The two-argument constructor delegates to `this(null, name, createdAt)`. No production code uses it —
+`HabitCommandService.create` calls the three-argument form — but it remains public and yields a habit
+that `insert` writes with `owner_id = NULL`, i.e. a row unreachable through the API. Legal while the
+column is nullable; a runtime failure once V18 makes it `NOT NULL`. Delete or deprecate it before V18.
 
 ### Owner-scoped cache tests need an explicit cache type
 
@@ -156,3 +274,17 @@ Backfill is an explicit per-environment operation, not part of a migration. The 
 unique `api_key_hash`, never by an assumed numeric ID. In the measured local environment all 229
 legacy rows map to the `Local dev` client. An environment whose legacy rows belong to more than one
 client needs a per-row mapping and cannot use the single-owner backfill.
+
+Two step-4 items are deferred here rather than to a separate cleanup, because `NOT NULL` forces both:
+
+- **`Habit(String, Instant)`** must be deleted or made unusable. It yields `owner_id = NULL`, which
+  V18 turns from an unreachable row into an insert failure.
+- **Owner fixtures must be unified across dialects.** `TestApiClientOwner` is H2-only
+  (`MERGE INTO ... KEY (id)`) while the two `MySqlIT` classes provision owners their own way. V18
+  removes the option of an unowned habit, so every test that creates a habit needs a working owner on
+  both dialects. That is the point at which one helper covering both is worth writing; renaming it
+  before then would be redone here.
+
+Do not read the current green suite as evidence that these are safe. It is green precisely because
+`owner_id` is still nullable — the same reason a green run before step 4 could not detect the teardown
+ordering failure above.

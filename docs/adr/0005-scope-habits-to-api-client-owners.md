@@ -3,12 +3,13 @@
 - Status: Accepted
 - Date: 2026-08-29
 - Supersedes: [ADR 0004](0004-accept-stale-client-tier-bounded-by-ttl.md), as of 2026-09-01
-- Implementation: [notes and step order](../implementation/0005-habit-ownership.md); steps 1–3 implemented (V17, authenticated test suite, authentication boundary), owner scoping pending
+- Implementation: [notes and step order](../implementation/0005-habit-ownership.md); steps 1–4 implemented (V17, authenticated test suite, authentication boundary, owner scoping in SQL), V18 and backfill deferred
 
 ## Context
 
 > This section describes the code as measured on 2026-08-29, before implementation. What has since
-> changed is recorded under [Implementation status](#implementation-status-2026-09-01).
+> changed is recorded under [Implementation status](#implementation-status-2026-09-01) and
+> [Owner scoping as built](#owner-scoping-as-built-2026-09-02).
 
 All habits currently belong to one global data set. `HabitMapper.xml` has eight statements over `habits`: `findById`, `existsById`, `deleteById`, `findActive`, `insert`, `update`, `search` and `count`. The shared `searchWhere` fragment affects both `search` and `count`. None of these statements carries an owner predicate.
 
@@ -41,6 +42,49 @@ A provisioned client with tier `PUBLIC` has an identity and can own habits. An a
 Identity resolution is not served from the existing one-minute tier cache. It performs a database lookup on every request until an authentication cache with explicit write invalidation is designed. This adds database cost but prevents a revoked credential from retaining access to an owner's data for the tier TTL.
 
 ADR 0004 is superseded as of 2026-09-01. The `api-client-tiers` namespace is retired from the authentication path. A future authentication cache must use a new, versioned cache name and serializer, so existing `ClientTier` entries are never deserialized as client contexts.
+
+
+#### Client context propagation addendum — 2026-09-02
+
+The step-4 entry condition was measured before writing owner-scoped SQL. A
+second API client was provisioned with exactly one habit whose `owner_id`
+references that client. Running the existing suite as the first client produced
+18 failures: 14 in `HabitControllerIntegrationTest` and four in
+`HabitStatsIntegrationTest`.
+
+That number is an accidental-detection baseline, not a coverage count. The 18
+tests expose aggregate leakage through list/count, due-today and dashboard
+queries. They do not exercise cross-owner access by ID. Ten of the sixteen
+controller endpoints accept a habit ID, and the pre-ownership suite always
+targets a habit created by the same test. Those ten paths therefore require new
+cross-owner tests that prove foreign and nonexistent IDs are both reported as
+`404 Not Found`. Closing the aggregate baseline from 18 failures to zero is
+necessary but is not sufficient evidence that owner scoping is complete.
+
+The authenticated client ID reaches the service layer through an explicit
+`ClientContext` controller parameter resolved from the request attribute set by
+`ClientAuthenticationInterceptor`. `ClientContext` replaces the existing
+`ClientTier` parameter in all sixteen habit-controller signatures. Endpoints
+that need response filtering read `context.tier()`, and every endpoint passes
+`context.clientId()` explicitly into its service and repository operations.
+
+Argument resolution remains only a consumer of the request attribute. Omitting
+the controller parameter cannot bypass authentication because the interceptor
+still runs for `/habits` and `/habits/**` before argument resolution.
+
+Services do not read `RequestContextHolder` and remain independent of HTTP
+infrastructure. Reading client context from `RequestContextHolder` was rejected
+because it would hide the ownership input and couple business services to
+request state.
+
+`HabitCompletedEventConsumer` does not receive a separate owner ID. Ownership
+is inherited through `habitId`: the producer publishes only after the
+authenticated command path has selected an owned habit, and `habits` remains
+the single ownership source of truth for completion history and statistics.
+Adding `ownerId` to the Kafka event payload was rejected for this step because
+it would be a breaking topic-format change, would not describe already queued
+messages, and would duplicate ownership already represented by the habit
+foreign-key relationship.
 
 ### Schema and migration sequence
 
@@ -123,7 +167,7 @@ ADR 0004's stale-tier acceptance no longer applies as of 2026-09-01, because ide
 
 ## Implementation status (2026-09-01)
 
-Steps 1–3 are implemented. Step 4, owner scoping in the eight `HabitMapper.xml` statements and the shared `searchWhere` fragment, is not started, so habits are still globally readable to any authenticated client.
+Steps 1–3 are implemented. Step 4, owner scoping in the eight `HabitMapper.xml` statements and the shared `searchWhere` fragment, was not started at this date; it was completed on 2026-09-02 and is recorded separately below.
 
 ### What was removed
 
@@ -146,3 +190,39 @@ Full suite after the removals: 227 tests, 0 failures, 0 errors, 0 skipped.
 ### Metric change
 
 `habit.client.tier.resolutions` keeps its name for compatibility, but now publishes only `outcome="resolved"` and `outcome="rejected"`; its description reads "Number of API key authentication outcomes". The `outcome="public"` counter is removed rather than left registered at a permanent zero, since anonymous access is no longer a possible outcome on `/habits`.
+
+## Owner scoping as built (2026-09-02)
+
+Step 4 is implemented. Habits are scoped to the authenticated API client. V18 `NOT NULL`, the per-environment backfill and an authentication cache remain deferred, so rows with `owner_id IS NULL` still exist and are unreachable through the API as specified.
+
+### Propagation and statements
+
+`ClientContext` replaced `ClientTier` in all sixteen controller signatures; `context.tier()` is used only for response filtering and `context.clientId()` is passed explicitly through service to mapper. No service reads `RequestContextHolder`.
+
+All eight `HabitMapper.xml` statements carry `owner_id`, `habitResultMap` maps the column, and `insert` writes it. `searchWhere` opens with an unconditional `owner_id = #{ownerId}` so no `<if>` can omit the predicate. `update` carries ownership in the same `WHERE` as the optimistic-lock version check, so the conflict-retry path cannot widen access.
+
+### Verification
+
+Entry condition, measured before any change: a second client with one owned habit made 18 existing tests fail — 14 controller, four dashboard/stat. That number is an accidental-detection baseline, not a coverage count; it detects aggregate leakage only. Seven of `HabitStatsIntegrationTest`'s 11 tests could not have failed regardless, because they address a habit the test itself created.
+
+Exit condition: the same mutation now leaves 241 of 241 passing. Access by ID is covered separately by a `@ParameterizedTest` over an enum with one case per `{id}` endpoint — all ten — asserting `404` for a foreign habit, plus a mixed-owner bulk test that asserts the foreign ID appears in `notFound` and that its completion count is unchanged afterwards.
+
+Full suite: 241 tests, 0 failures, 0 errors, 0 skipped.
+
+### Deviations from the decision, accepted knowingly
+
+Two places do not match this ADR as written. Both are recorded rather than silently reconciled.
+
+"Every read, insert, update and delete includes the owner ID in its database operation. A preceding ownership check alone is insufficient", and "completion history, completion rate and per-habit statistics enforce ownership through a join to `habits`". No such join was written. Five paths — `getHistory`, `getCompletionRate`, `getStatsProjection`, `complete` and `uncomplete` — perform an owner-scoped habit lookup and then query `HabitCompletionRepository` / `HabitCompletionStatRepository` by `habit_id` alone; neither repository was changed by step 4. Dashboard stats is the one completion access that does match, because it passes an ID set already selected by `findActive(ownerId)`.
+
+What holds the five is `fk_habit_completions_habit` plus the now owner-scoped `habits` table, in one transaction: a `habit_id` obtained through an owner-scoped read cannot belong to another owner. Asserting ownership directly would require either an owner column on those tables, which this ADR rejects, or the join above. The protection is inherited, not asserted, which is worth naming because the line that looks load-bearing — the preceding check — is not the one that holds, and nothing enforces that a future completion access will be preceded by an owner-scoped lookup at all.
+
+"The dead path was deleted rather than left in place unused, so no annotation survives that no code reaches." `ClientTierArgumentResolver.supportsParameter` still accepts `ClientTier` alongside `ClientContext`, and after step 4 that branch is reachable only from its own unit test. It is retained as a resolver-level compatibility affordance; to honour the step-3 precedent it should be removed together with that test.
+
+### Deferred cleanups this step created
+
+`Habit(String, Instant)` delegates to `this(null, name, createdAt)` and is unused in `src/main/java`. It builds a habit that `insert` writes with `owner_id = NULL` — legal now, a runtime failure after V18. Delete or deprecate it before V18.
+
+`TestApiClientOwner.ensureExists` uses H2's `MERGE INTO ... KEY (id)`. All seven current callers are H2 tests; the two `MySqlIT` classes provision owners themselves. The name carries no dialect hint, so the first `MySqlIT` to reuse it fails for a reason its call site does not suggest.
+
+It is kept as a deliberate test-only helper rather than renamed in this step: no production path is affected, and V18 requires every owner fixture to be revisited regardless, since `owner_id NOT NULL` removes the option of an unowned habit row. Both fixture items above are consequently preconditions of V18, not independent cleanups.

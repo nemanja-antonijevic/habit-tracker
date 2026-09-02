@@ -15,7 +15,9 @@ All routes live under `/habits` (`HabitController`).
 
 There is no anonymous access. A client with tier `PUBLIC` is a provisioned identity like any other; it receives fewer response fields, not weaker authentication.
 
-`X-Api-Key` authenticates the caller but does not yet authorize per-owner data access: habits are not scoped to their owner, so any authenticated client can read and modify every habit. Owner scoping is step 4 of [ADR 0005](adr/0005-scope-habits-to-api-client-owners.md) and is not implemented.
+`X-Api-Key` also determines which data the caller sees. Every habit belongs to the API client that created it, and every read, write and delete is scoped to that owner, so a client can only reach its own habits. Requesting a habit owned by another client returns `404 Not Found`, identical to requesting an ID that does not exist — the two cases are deliberately indistinguishable, so no response reveals whether another owner's habit exists. See [ADR 0005](adr/0005-scope-habits-to-api-client-owners.md).
+
+Habits created before ownership existed have no owner and are unreachable through the API until they are assigned. Making `owner_id` non-null is deferred.
 
 Keys are provisioned directly in `api_clients`, but only their lowercase SHA-256 hashes are stored. SHA-256 is intentionally deterministic so the high-entropy API key can be resolved through a unique indexed lookup; unlike a user password, it is not verified by scanning salted password hashes. No credential is seeded by Flyway, so a fresh database rejects every request to `/habits` until a key is provisioned. Secure provisioning, rotation, and rate limiting are deferred backlog work.
 
@@ -120,7 +122,7 @@ Body of every error.
 | `204 No Content` | Success with no body (delete) |
 | `400 Bad Request` | Validation failed, malformed JSON, or an illegal state transition (`InvalidHabitStateException`) |
 | `401 Unauthorized` | `X-Api-Key` missing, unknown, or belonging to a revoked client (`InvalidApiKeyException`). Raised by the interceptor before validation, so it takes precedence over `400` |
-| `404 Not Found` | Habit does not exist (`HabitNotFoundException`) |
+| `404 Not Found` | Habit does not exist, or is owned by another client (`HabitNotFoundException`) — the two cases are deliberately indistinguishable |
 | `409 Conflict` | Version mismatch on update; on `complete`, only when the single automatic retry loses the optimistic-lock race again (`HabitVersionConflictException`) |
 
 `GlobalExceptionHandler` (`@RestControllerAdvice`) centralizes the exception-to-status mapping.
@@ -212,7 +214,7 @@ GET /habits/{id}
 | Status | Condition |
 |--------|-----------|
 | `200` | Found |
-| `404` | Does not exist |
+| `404` | Does not exist, or is owned by another client |
 
 ## 4. Update a habit
 
@@ -246,7 +248,7 @@ Change the schedule too:
 |--------|-----------|
 | `200` | Updated |
 | `400` | Validation failed / `scheduledDays` is an empty array / malformed body |
-| `404` | Does not exist |
+| `404` | Does not exist, or is owned by another client |
 | `409` | Request `version` does not match the database version (someone updated it in the meantime) |
 
 ## 5. Delete a habit
@@ -264,7 +266,7 @@ DELETE /habits/{id}
 | Status | Condition |
 |--------|-----------|
 | `204` | Deleted |
-| `404` | Does not exist (including a repeated `DELETE` of an already-deleted habit) |
+| `404` | Does not exist, or is owned by another client (including a repeated `DELETE` of an already-deleted habit) |
 
 ## 6. Mark as done
 
@@ -286,7 +288,7 @@ Concurrent same-day completions converge to the same result regardless of timing
 |--------|-----------|
 | `200` | Marked (or a no-op if already marked today) |
 | `400` | Habit is archived, or today is not a scheduled day |
-| `404` | Does not exist |
+| `404` | Does not exist, or is owned by another client |
 | `409` | The single automatic retry lost another optimistic-lock race (rare) |
 
 ## 7. Undo today's completion
@@ -303,7 +305,7 @@ No body. Deletes today's history row, then recomputes `completionCount`, `curren
 |--------|-----------|
 | `200` | Undone |
 | `400` | Habit was not completed today, or is archived |
-| `404` | Does not exist |
+| `404` | Does not exist, or is owned by another client |
 
 ## 8. Archive a habit
 
@@ -320,7 +322,7 @@ Idempotent — a repeated `archive` is a no-op.
 | Status | Condition |
 |--------|-----------|
 | `200` | Archived |
-| `404` | Does not exist |
+| `404` | Does not exist, or is owned by another client |
 
 ## 9. Restore from archive
 
@@ -337,7 +339,7 @@ Idempotent — a repeated `unarchive` is a no-op.
 | Status | Condition |
 |--------|-----------|
 | `200` | Restored from archive |
-| `404` | Does not exist |
+| `404` | Does not exist, or is owned by another client |
 
 ## 10. Completion history
 
@@ -381,7 +383,7 @@ Both `from` and `to` are optional and inclusive. Supplying only one bounds that 
 |--------|-----------|
 | `200` | OK (empty `content: []` when there are no completed days, or none fall in the requested range) |
 | `400` | `from` is after `to` |
-| `404` | Does not exist |
+| `404` | Does not exist, or is owned by another client |
 
 ## 11. Aggregate statistics
 
@@ -404,7 +406,7 @@ Read from the read model `habit_completion_stats` (Kafka projection).
 | Status | Condition |
 |--------|-----------|
 | `200` | OK (zeros / `null` when there is no data) |
-| `404` | Does not exist |
+| `404` | Does not exist, or is owned by another client |
 
 Behavior:
 - **Eventual consistency** — the read model is filled asynchronously over Kafka. A call right after `complete` may return the old state until the consumer processes the event.
@@ -471,7 +473,7 @@ Request body (`BulkCompleteRequest`):
 
 **Best-effort semantics.** Each id is processed independently, in **its own transaction** — one bad id never rolls back the others. All expected per-item outcomes return `200 OK` with a per-item breakdown; the outcome is in the body, not the status code. For each id, exactly one bucket applies (checked in this order):
 
-- `notFound` — no habit with that id;
+- `notFound` — no habit with that id, or the habit is owned by another client (the two are indistinguishable, and a foreign habit is never modified);
 - `failed` — the habit exists but cannot be completed today (archived, or today is not a scheduled day); a permanent reason — retrying without changing the habit cannot succeed;
 - `skipped` — already completed today (idempotent no-op, not an error);
 - `conflicted` — a concurrent write raced this item and the bounded retry (one fresh-read attempt in a new transaction) also hit a conflict; a transient reason — the item produced no write and **may be retried**;
@@ -494,7 +496,7 @@ A duplicate id within the same request (e.g. `[1, 1]`) completes on the first oc
 | `completed` | `long[]` | Newly marked done today |
 | `skipped` | `long[]` | Already completed today |
 | `failed` | `long[]` | Archived, or today is not a scheduled day (permanent — do not retry) |
-| `notFound` | `long[]` | No habit with that id |
+| `notFound` | `long[]` | No habit with that id, or owned by another client |
 | `conflicted` | `long[]` | Lost a concurrent race after one retry (transient — safe to retry) |
 
 | Status | Condition |
@@ -589,7 +591,7 @@ Query parameters:
 |--------|-----------|
 | `200` | OK |
 | `400` | `from` after `to`, or a required parameter is missing / unparseable |
-| `404` | Habit does not exist |
+| `404` | Habit does not exist, or is owned by another client |
 
 Behavior:
 - **Inclusive window, clamped to the habit's age.** Both `from` and `to` count. The effective start is `max(from, habitCreatedDate)` — scheduled occurrences before the habit existed are never counted (`createdAt` is converted to a date with the system default zone, consistent with the rest of the domain). If the effective start is after `to` the window is empty and the response is `{ "scheduled": 0, "completed": 0, "rate": null }` without touching the read model.
