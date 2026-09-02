@@ -203,7 +203,7 @@ All eight `HabitMapper.xml` statements carry `owner_id`, `habitResultMap` maps t
 
 ### Verification
 
-Entry condition, measured before any change: a second client with one owned habit made 18 existing tests fail — 14 controller, four dashboard/stat. That number is an accidental-detection baseline, not a coverage count; it detects aggregate leakage only. Seven of `HabitStatsIntegrationTest`'s 11 tests could not have failed regardless, because they address a habit the test itself created.
+Entry condition, measured before any change: a second client with one owned habit made 18 existing tests fail — 14 controller, four dashboard/stat. That number is an accidental-detection baseline, not a coverage count; it detects aggregate leakage only. Six of `HabitStatsIntegrationTest`'s 10 tests could not have failed regardless, because they address a habit the test itself created.
 
 Exit condition: the same mutation now leaves 241 of 241 passing. Access by ID is covered separately by a `@ParameterizedTest` over an enum with one case per `{id}` endpoint — all ten — asserting `404` for a foreign habit, plus a mixed-owner bulk test that asserts the foreign ID appears in `notFound` and that its completion count is unchanged afterwards.
 

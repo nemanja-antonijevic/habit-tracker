@@ -111,8 +111,8 @@ running the existing suite as the first client produced **18 failures** — 14 i
 `HabitControllerIntegrationTest`, four in `HabitStatsIntegrationTest`.
 
 That number is an accidental-detection baseline, not a coverage count, and the composition proves it.
-`HabitStatsIntegrationTest` has 11 tests; exactly the **four** `getDashboardStats_*` ones failed. The
-other seven — `getStats_*`, `uncomplete_*`, the streak pair — are `{id}` paths against a habit the
+`HabitStatsIntegrationTest` has 10 tests; exactly the **four** `getDashboardStats_*` ones failed. The
+other six — `getStats_*`, `uncomplete_*`, the streak pair — are `{id}` paths against a habit the
 test itself created, so they could not fail no matter how leaky the scoping was. The baseline sees
 aggregate leakage only.
 
