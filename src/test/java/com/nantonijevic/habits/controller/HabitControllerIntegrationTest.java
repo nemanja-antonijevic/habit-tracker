@@ -13,6 +13,8 @@ import com.nantonijevic.habits.support.HabitTestFixtureRepository;
 import com.nantonijevic.habits.support.InternalApiClientFixture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.ResultActions;
@@ -59,6 +61,19 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     private static final Instant FIXED =
         Instant.parse("2026-08-14T10:00:00Z");
 
+    private enum CrossOwnerEndpoint {
+        GET_BY_ID,
+        DELETE,
+        UPDATE,
+        COMPLETE,
+        ARCHIVE,
+        UNARCHIVE,
+        STATS,
+        UNCOMPLETE,
+        HISTORY,
+        COMPLETION_RATE
+    }
+
     @Autowired
     @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
     private MockMvc mockMvc;
@@ -79,10 +94,15 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     private InternalApiClientFixture apiClientFixture;
 
     private String apiKey;
+    private Long ownerId;
 
     @BeforeEach
     void provisionInternalClient() {
-        apiKey = apiClientFixture.provisionInternalClient();
+        var client =
+            apiClientFixture
+                .provisionInternalClientWithIdentity();
+        apiKey = client.apiKey();
+        ownerId = client.clientId();
     }
 
     private ResultActions perform(
@@ -218,10 +238,10 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
     @Test
     void listHabits_returnsNewestFirst_byDefault() throws Exception {
         repository.save(
-            new Habit("Swim", FIXED)
+            new Habit(ownerId, "Swim", FIXED)
         );
         repository.save(
-            new Habit(
+            new Habit(ownerId,
                 "Gym",
                 FIXED.plusSeconds(1)
             )
@@ -240,8 +260,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void listHabits_returnsHabitByName_whenQueryIsCorrect() throws Exception {
-        repository.save(new Habit("Swim", FIXED));
-        repository.save(new Habit("Gym", FIXED));
+        repository.save(new Habit(ownerId, "Swim", FIXED));
+        repository.save(new Habit(ownerId, "Gym", FIXED));
 
         perform(get("/habits?name=Swim"))
                 .andExpect(status().is(200))
@@ -253,8 +273,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void listHabits_returnsHabitByName_whenMixcased() throws Exception {
-        repository.save(new Habit("Swim", FIXED));
-        repository.save(new Habit("Gym", FIXED));
+        repository.save(new Habit(ownerId, "Swim", FIXED));
+        repository.save(new Habit(ownerId, "Gym", FIXED));
 
         perform(get("/habits?name=SwIm"))
                 .andExpect(status().is(200))
@@ -266,8 +286,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void listHabits_returnsHabitByName_whenNameHasTrailingSpace() throws Exception {
-        repository.save(new Habit("Swim", FIXED));
-        repository.save(new Habit("Gym", FIXED));
+        repository.save(new Habit(ownerId, "Swim", FIXED));
+        repository.save(new Habit(ownerId, "Gym", FIXED));
 
         perform(get("/habits").param("name", "Swim  "))
                 .andExpect(status().is(200))
@@ -279,7 +299,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void listHabits_returnsHabitByName_whenNamePartiallyMatches() throws Exception {
-        repository.save(new Habit("Swim", FIXED));
+        repository.save(new Habit(ownerId, "Swim", FIXED));
 
         perform(get("/habits?name=wi"))
                 .andExpect(status().is(200))
@@ -291,8 +311,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void listHabits_returnsAllHabits_whenNameIsEmpty() throws Exception {
-        repository.save(new Habit("Swim", FIXED));
-        repository.save(new Habit("Gym", FIXED));
+        repository.save(new Habit(ownerId, "Swim", FIXED));
+        repository.save(new Habit(ownerId, "Gym", FIXED));
 
         perform(get("/habits?name="))
                 .andExpect(status().is(200))
@@ -301,8 +321,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void listHabits_returnsAllHabits_whenNameIsWhitespace() throws Exception {
-        repository.save(new Habit("Swim", FIXED));
-        repository.save(new Habit("Gym", FIXED));
+        repository.save(new Habit(ownerId, "Swim", FIXED));
+        repository.save(new Habit(ownerId, "Gym", FIXED));
 
         perform(get("/habits").param("name", "    "))
                 .andExpect(status().is(200))
@@ -311,8 +331,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void listHabits_returnsNoHabitsByName_whenNameDoesNotMatch() throws Exception {
-        repository.save(new Habit("Swim", FIXED));
-        repository.save(new Habit("Gym", FIXED));
+        repository.save(new Habit(ownerId, "Swim", FIXED));
+        repository.save(new Habit(ownerId, "Gym", FIXED));
 
         perform(get("/habits?name=Run"))
                 .andExpect(status().is(200))
@@ -321,7 +341,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void listHabits_excludesArchivedMatch_whenIncludeArchivedFalse() throws Exception {
-        var habit = new Habit("Read", FIXED);
+        var habit = new Habit(ownerId, "Read", FIXED);
 
         repository.save(habit);
 
@@ -334,7 +354,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void listHabits_includesArchivedMatch_whenIncludeArchivedTrue() throws Exception {
-        var habit = new Habit("Read", FIXED);
+        var habit = new Habit(ownerId, "Read", FIXED);
 
         repository.save(habit);
 
@@ -351,7 +371,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void listHabits_returnsZeroCurrentStreak_whenLastCompletionIsOlderThanYesterday() throws Exception {
-        var habit = new Habit("Read", FIXED);
+        var habit = new Habit(ownerId, "Read", FIXED);
 
         habit.complete(
             LocalDate.now(APPLICATION_ZONE).minusDays(3),
@@ -370,13 +390,13 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.content[0].name").value("Read"))
                 .andExpect(jsonPath("$.content[0].currentStreak").value(0));
 
-        var reloaded = repository.findById(habit.getId()).orElseThrow();
+        var reloaded = repository.findById(ownerId, habit.getId()).orElseThrow();
         assertThat(reloaded.getCurrentStreak()).isEqualTo(2);
     }
 
     @Test
     void getHabit_returnsHabit_whenExists() throws Exception {
-        var saved = repository.save(new Habit("Code 3 hours", FIXED));
+        var saved = repository.save(new Habit(ownerId, "Code 3 hours", FIXED));
 
         perform(get("/habits/" + saved.getId()))
                 .andExpect(status().is(200))
@@ -394,7 +414,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void getHabit_returnsCorrectHabit_whenMultipleExists() throws Exception {
-        var saved1 = repository.save(new Habit("Sport", FIXED));
+        var saved1 = repository.save(new Habit(ownerId, "Sport", FIXED));
 
         perform(get("/habits/" + saved1.getId()))
                 .andExpect(status().is(200))
@@ -405,7 +425,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void getHabit_returnsZeroCurrentStreak_whenLastCompletionIsOlderThanYesterday() throws Exception {
-        var habit = new Habit("Read", FIXED);
+        var habit = new Habit(ownerId, "Read", FIXED);
 
         habit.complete(
             LocalDate.now(APPLICATION_ZONE).minusDays(3),
@@ -422,13 +442,13 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.currentStreak").value(0));
 
-        var reloaded = repository.findById(saved.getId()).orElseThrow();
+        var reloaded = repository.findById(ownerId, saved.getId()).orElseThrow();
         assertThat(reloaded.getCurrentStreak()).isEqualTo(2);
     }
 
     @Test
     void getHabit_returnsCurrentStreak_whenLastCompletionWasYesterday() throws Exception {
-        var habit = new Habit("Read", FIXED);
+        var habit = new Habit(ownerId, "Read", FIXED);
 
         habit.complete(
             LocalDate.now(APPLICATION_ZONE).minusDays(2),
@@ -445,13 +465,13 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.currentStreak").value(2));
 
-        var reloaded = repository.findById(saved.getId()).orElseThrow();
+        var reloaded = repository.findById(ownerId, saved.getId()).orElseThrow();
         assertThat(reloaded.getCurrentStreak()).isEqualTo(2);
     }
 
     @Test
     void deleteHabit_returns204_andRemovesHabit() throws Exception {
-        var saved = repository.save(new Habit("Code 3 hours", FIXED));
+        var saved = repository.save(new Habit(ownerId, "Code 3 hours", FIXED));
 
         perform(delete("/habits/" + saved.getId()))
                 .andExpect(status().isNoContent());
@@ -469,7 +489,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void updateHabit_returns200_andUpdatesHabit() throws Exception {
-        var saved = repository.save(new Habit("Code 3 hours", FIXED));
+        var saved = repository.save(new Habit(ownerId, "Code 3 hours", FIXED));
         String jsonBody = "{\"name\": \"Code 6 hours\",\"version\": 0}";
 
         perform(put("/habits/" + saved.getId()).content(jsonBody).contentType(MediaType.APPLICATION_JSON))
@@ -526,7 +546,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void updateHabit_returns200_whenVersionMatches() throws Exception {
-        var saved = repository.save(new Habit("Code 3 hours", FIXED));
+        var saved = repository.save(new Habit(ownerId, "Code 3 hours", FIXED));
 
         String jsonBody = "{\"name\": \"Sleep\",\"version\": 0}";
 
@@ -542,7 +562,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void updateHabit_returns409_whenVersionStale() throws Exception {
-        var saved = repository.save(new Habit("Code 3 hours", FIXED));
+        var saved = repository.save(new Habit(ownerId, "Code 3 hours", FIXED));
         String jsonBody1 = "{\"name\": \"Sleep\",\"version\": 0}";
         String jsonBody2 = "{\"name\": \"Eat\",\"version\": 0}";
 
@@ -554,7 +574,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void updateHabit_updatesScheduledDays() throws Exception {
-        var habit = new Habit("Workout", FIXED);
+        var habit = new Habit(ownerId, "Workout", FIXED);
         habit.setScheduledDays(java.util.EnumSet.of(
                 java.time.DayOfWeek.MONDAY,
                 java.time.DayOfWeek.WEDNESDAY,
@@ -582,7 +602,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void updateHabit_keepsScheduledDays_whenNotProvided() throws Exception {
-        var habit = new Habit("Workout", FIXED);
+        var habit = new Habit(ownerId, "Workout", FIXED);
         habit.setScheduledDays(java.util.EnumSet.of(
                 java.time.DayOfWeek.MONDAY,
                 java.time.DayOfWeek.WEDNESDAY,
@@ -611,7 +631,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void completeHabit_returns200_andIncrementsCount() throws Exception {
-        var saved = repository.save(new Habit("Read 30 min", FIXED));
+        var saved = repository.save(new Habit(ownerId, "Read 30 min", FIXED));
 
         perform(post("/habits/" + saved.getId() + "/complete"))
                 .andExpect(status().isOk())
@@ -629,7 +649,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void complete_isIdempotent_whenSameDayTwice() throws Exception {
-        var saved = repository.save(new Habit("Read", FIXED));
+        var saved = repository.save(new Habit(ownerId, "Read", FIXED));
 
         perform(post("/habits/" + saved.getId() + "/complete"))
                 .andExpect(status().isOk());
@@ -640,7 +660,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void completeHabit_startsStreakAtOne_whenFirstCompletion() throws Exception {
-        var saved = repository.save(new Habit("Read", FIXED));
+        var saved = repository.save(new Habit(ownerId, "Read", FIXED));
 
         perform(post("/habits/" + saved.getId() + "/complete"));
         perform(get("/habits/" + saved.getId()))
@@ -650,7 +670,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void completeHabit_continuesStreak_whenCompletedYesterday() throws Exception {
-        var habit = repository.save(new Habit("Read", FIXED));
+        var habit = repository.save(new Habit(ownerId, "Read", FIXED));
         habit.complete(
             LocalDate.now(APPLICATION_ZONE).minusDays(1),
             APPLICATION_ZONE
@@ -664,7 +684,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void completeHabit_resetsStreakToOne_whenLastCompletedMoreThanOneDayAgo() throws Exception {
-        var habit = repository.save(new Habit("Read", FIXED));
+        var habit = repository.save(new Habit(ownerId, "Read", FIXED));
         habit.complete(
             LocalDate.now(APPLICATION_ZONE).minusDays(17),
             APPLICATION_ZONE
@@ -677,7 +697,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void completingArchivedHabitReturnsBadRequest() throws Exception {
-        var saved = repository.save(new Habit("Read", FIXED));
+        var saved = repository.save(new Habit(ownerId, "Read", FIXED));
 
         perform(post("/habits/" + saved.getId() + "/archive"))
                 .andExpect(status().isOk());
@@ -688,7 +708,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void complete_writesOneHistoryRow_whenCompleted() throws Exception {
-        var saved = repository.save(new Habit("Read", FIXED));
+        var saved = repository.save(new Habit(ownerId, "Read", FIXED));
 
         perform(post("/habits/" + saved.getId() + "/complete"))
                 .andExpect(status().isOk())
@@ -701,7 +721,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void complete_doesNotWriteHistory_whenSameDayTwice() throws Exception {
-        var saved = repository.save(new Habit("Read", FIXED));
+        var saved = repository.save(new Habit(ownerId, "Read", FIXED));
         perform(post("/habits/" + saved.getId() + "/complete"))
                 .andExpect(status().isOk());
         perform(post("/habits/" + saved.getId() + "/complete"))
@@ -731,7 +751,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void getStats_returnsZeroCountAndNullLastCompleted_forNewHabit() throws Exception {
-        var saved = repository.save(new Habit("Read 30 min", FIXED));
+        var saved = repository.save(new Habit(ownerId, "Read 30 min", FIXED));
 
         perform(get("/habits/" + saved.getId() + "/stats"))
                 .andExpect(status().isOk())
@@ -748,14 +768,14 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void uncomplete_returns400_whenCountIsZero() throws Exception {
-        var saved = repository.save(new Habit("Read 30 min", FIXED));
+        var saved = repository.save(new Habit(ownerId, "Read 30 min", FIXED));
         perform(post("/habits/" + saved.getId() + "/uncomplete"))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
     void uncomplete_returns200_andDecrementsCount_andClearsTimestamp() throws Exception {
-        var saved = repository.save(new Habit("Read 30 min", FIXED));
+        var saved = repository.save(new Habit(ownerId, "Read 30 min", FIXED));
         perform(post("/habits/" + saved.getId() + "/complete"));
         perform(post("/habits/" + saved.getId() + "/uncomplete"))
                 .andExpect(status().isOk())
@@ -768,8 +788,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void archivedHabitIsExcludedFromList() throws Exception {
-        var habit1 = new Habit("Read", FIXED);
-        var habit2 = new Habit("Eat", FIXED);
+        var habit1 = new Habit(ownerId, "Read", FIXED);
+        var habit2 = new Habit(ownerId, "Eat", FIXED);
 
         repository.save(habit1);
         repository.save(habit2);
@@ -786,7 +806,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void archivedHabit_exposesArchivedTrue_inListAndGetById() throws Exception {
-        var habit = new Habit("Read", FIXED);
+        var habit = new Habit(ownerId, "Read", FIXED);
 
         repository.save(habit);
 
@@ -806,8 +826,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void archivedHabitIncludedInList_whenIncludeArchivedTrue() throws Exception {
-        var habit1 = new Habit("Read", FIXED);
-        var habit2 = new Habit("Eat", FIXED.plusSeconds(1));
+        var habit1 = new Habit(ownerId, "Read", FIXED);
+        var habit2 = new Habit(ownerId, "Eat", FIXED.plusSeconds(1));
 
         repository.save(habit1);
         repository.save(habit2);
@@ -830,7 +850,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void unarchivedHabitReappearsInList() throws Exception {
-        var habit = new Habit("Eat", FIXED);
+        var habit = new Habit(ownerId, "Eat", FIXED);
         repository.save(habit);
 
         perform(post("/habits/" + habit.getId() + "/archive"))
@@ -853,7 +873,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void getHistory_returnsEmptyList_whenNoCompletions() throws Exception {
-        var saved = new Habit("Mess around", FIXED);
+        var saved = new Habit(ownerId, "Mess around", FIXED);
         repository.save(saved);
 
         perform(get("/habits/" + saved.getId() + "/history"))
@@ -863,7 +883,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void getHistory_returnsCompletions_whenCompleted() throws Exception {
-        var habit = new Habit("Mess around", FIXED);
+        var habit = new Habit(ownerId, "Mess around", FIXED);
         repository.save(habit);
 
         perform(post("/habits/" + habit.getId() + "/complete"))
@@ -877,7 +897,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void getHistory_returnsEmptyList_whenUncompleted() throws Exception {
-        var habit = new Habit("Mess around", FIXED);
+        var habit = new Habit(ownerId, "Mess around", FIXED);
         repository.save(habit);
 
         perform(post("/habits/" + habit.getId() + "/complete"))
@@ -891,7 +911,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void getHistory_returnsPagedResult_whenMoreThanOnePage() throws Exception {
-        var saved = repository.save(new Habit("Read", FIXED));
+        var saved = repository.save(new Habit(ownerId, "Read", FIXED));
         Long id = saved.getId();
         completionRepository.save(new HabitCompletion(id, LocalDate.now()));
         completionRepository.save(new HabitCompletion(id, LocalDate.now().minusDays(1)));
@@ -906,7 +926,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void getHistory_filtersCompletionsByDateRange_whenFromAndToProvided() throws Exception {
-        var saved = repository.save(new Habit("Read", FIXED));
+        var saved = repository.save(new Habit(ownerId, "Read", FIXED));
         Long id = saved.getId();
 
         completionRepository.save(new HabitCompletion(id, LocalDate.of(2024, 1, 9)));
@@ -924,7 +944,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void getHistory_filtersCompletionsFromDate_whenOnlyFromProvided() throws Exception {
-        var saved = repository.save(new Habit("Read", FIXED));
+        var saved = repository.save(new Habit(ownerId, "Read", FIXED));
         Long id = saved.getId();
 
         completionRepository.save(new HabitCompletion(id, LocalDate.of(2024, 1, 9)));
@@ -941,7 +961,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void getHistory_filtersCompletionsToDate_whenOnlyToProvided() throws Exception {
-        var saved = repository.save(new Habit("Read", FIXED));
+        var saved = repository.save(new Habit(ownerId, "Read", FIXED));
         Long id = saved.getId();
 
         completionRepository.save(new HabitCompletion(id, LocalDate.of(2024, 1, 9)));
@@ -958,7 +978,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void getHistory_returnsBadRequest_whenFromIsAfterTo() throws Exception {
-        var saved = repository.save(new Habit("Read", FIXED));
+        var saved = repository.save(new Habit(ownerId, "Read", FIXED));
         Long id = saved.getId();
 
         perform(get("/habits/" + id + "/history")
@@ -971,7 +991,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void getHistory_returnsAllCompletionsSortedDesc_whenNoDateRangeProvided() throws Exception {
-        var saved = repository.save(new Habit("Read", FIXED));
+        var saved = repository.save(new Habit(ownerId, "Read", FIXED));
         Long id = saved.getId();
 
         completionRepository.save(new HabitCompletion(id, LocalDate.of(2024, 1, 9)));
@@ -993,20 +1013,20 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         DayOfWeek todayDay = today.getDayOfWeek();
         DayOfWeek otherDay = todayDay.plus(1);
 
-        var due = new Habit("Due", FIXED);
+        var due = new Habit(ownerId, "Due", FIXED);
         due.setScheduledDays(EnumSet.of(todayDay));
         repository.save(due);
 
-        var notScheduledToday = new Habit("Not scheduled today", FIXED);
+        var notScheduledToday = new Habit(ownerId, "Not scheduled today", FIXED);
         notScheduledToday.setScheduledDays(EnumSet.of(otherDay));
         repository.save(notScheduledToday);
 
-        var alreadyCompletedToday = new Habit("Already completed today", FIXED);
+        var alreadyCompletedToday = new Habit(ownerId, "Already completed today", FIXED);
         alreadyCompletedToday.setScheduledDays(EnumSet.of(todayDay));
         alreadyCompletedToday.complete(today, APPLICATION_ZONE);
         repository.save(alreadyCompletedToday);
 
-        var archivedDue = new Habit("Archive due", FIXED);
+        var archivedDue = new Habit(ownerId, "Archive due", FIXED);
         archivedDue.setScheduledDays(EnumSet.of(todayDay));
         repository.save(archivedDue);
 
@@ -1026,24 +1046,24 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         DayOfWeek todayDay = today.getDayOfWeek();
         DayOfWeek otherDay = todayDay.plus(1);
 
-        var dueOne = new Habit("Due one", FIXED);
+        var dueOne = new Habit(ownerId, "Due one", FIXED);
         dueOne.setScheduledDays(EnumSet.of(todayDay));
         repository.save(dueOne);
 
-        var dueTwo = new Habit("Due two", FIXED);
+        var dueTwo = new Habit(ownerId, "Due two", FIXED);
         dueTwo.setScheduledDays(EnumSet.of(todayDay));
         repository.save(dueTwo);
 
-        var notScheduledToday = new Habit("Not scheduled today", FIXED);
+        var notScheduledToday = new Habit(ownerId, "Not scheduled today", FIXED);
         notScheduledToday.setScheduledDays(EnumSet.of(otherDay));
         repository.save(notScheduledToday);
 
-        var alreadyCompletedToday = new Habit("Already completed today", FIXED);
+        var alreadyCompletedToday = new Habit(ownerId, "Already completed today", FIXED);
         alreadyCompletedToday.setScheduledDays(EnumSet.of(todayDay));
         alreadyCompletedToday.complete(today, APPLICATION_ZONE);
         repository.save(alreadyCompletedToday);
 
-        var archivedDue = new Habit("Archived due", FIXED);
+        var archivedDue = new Habit(ownerId, "Archived due", FIXED);
         archivedDue.setScheduledDays(EnumSet.of(todayDay));
         repository.save(archivedDue);
 
@@ -1066,7 +1086,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         LocalDate today = LocalDate.now();
         DayOfWeek todayDay = today.getDayOfWeek();
 
-        var habit = new Habit("Archived", FIXED);
+        var habit = new Habit(ownerId, "Archived", FIXED);
         habit.setScheduledDays(EnumSet.of(todayDay));
         repository.save(habit);
 
@@ -1077,22 +1097,202 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
             .andExpect(jsonPath("$.count").value(0));
     }
 
+    @ParameterizedTest(name = "{0}")
+    @EnumSource(CrossOwnerEndpoint.class)
+    void crossOwnerIdEndpointReturns404(
+        CrossOwnerEndpoint endpoint
+    ) throws Exception {
+        var foreignClient =
+            apiClientFixture
+                .provisionInternalClientWithIdentity();
+
+        Habit foreignHabit = repository.save(
+            new Habit(
+                foreignClient.clientId(),
+                "Foreign habit " + endpoint,
+                FIXED
+            )
+        );
+
+        MockHttpServletRequestBuilder request =
+            switch (endpoint) {
+                case GET_BY_ID ->
+                    get(
+                        "/habits/{id}",
+                        foreignHabit.getId()
+                    );
+
+                case DELETE ->
+                    delete(
+                        "/habits/{id}",
+                        foreignHabit.getId()
+                    );
+
+                case UPDATE ->
+                    put(
+                        "/habits/{id}",
+                        foreignHabit.getId()
+                    )
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(
+                            """
+                            {
+                              "version": %d,
+                              "name": "Foreign updated"
+                            }
+                            """.formatted(
+                                foreignHabit.getVersion()
+                            )
+                        );
+
+                case COMPLETE ->
+                    post(
+                        "/habits/{id}/complete",
+                        foreignHabit.getId()
+                    );
+
+                case ARCHIVE ->
+                    post(
+                        "/habits/{id}/archive",
+                        foreignHabit.getId()
+                    );
+
+                case UNARCHIVE ->
+                    post(
+                        "/habits/{id}/unarchive",
+                        foreignHabit.getId()
+                    );
+
+                case STATS ->
+                    get(
+                        "/habits/{id}/stats",
+                        foreignHabit.getId()
+                    );
+
+                case UNCOMPLETE ->
+                    post(
+                        "/habits/{id}/uncomplete",
+                        foreignHabit.getId()
+                    );
+
+                case HISTORY ->
+                    get(
+                        "/habits/{id}/history",
+                        foreignHabit.getId()
+                    );
+
+                case COMPLETION_RATE ->
+                    get(
+                        "/habits/{id}/completion-rate",
+                        foreignHabit.getId()
+                    )
+                        .param("from", "2026-08-01")
+                        .param("to", "2026-08-31");
+            };
+
+        perform(request)
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void bulkCompleteTreatsForeignHabitAsNotFound()
+        throws Exception {
+        LocalDate today = LocalDate.now();
+        DayOfWeek todayDay = today.getDayOfWeek();
+
+        Habit ownedHabit =
+            new Habit(
+                ownerId,
+                "Owned bulk habit",
+                FIXED
+            );
+        ownedHabit.setScheduledDays(
+            EnumSet.of(todayDay)
+        );
+        ownedHabit = repository.save(ownedHabit);
+
+        var foreignClient =
+            apiClientFixture
+                .provisionInternalClientWithIdentity();
+
+        Habit foreignHabit =
+            new Habit(
+                foreignClient.clientId(),
+                "Foreign bulk habit",
+                FIXED
+            );
+        foreignHabit.setScheduledDays(
+            EnumSet.of(todayDay)
+        );
+        foreignHabit = repository.save(foreignHabit);
+
+        perform(
+            post("/habits/bulk-complete")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "habitIds": [%d, %d]
+                    }
+                    """.formatted(
+                        ownedHabit.getId(),
+                        foreignHabit.getId()
+                    )
+                )
+        )
+            .andExpect(status().isOk())
+            .andExpect(
+                jsonPath(
+                    "$.completed",
+                    containsInAnyOrder(
+                        ownedHabit.getId().intValue()
+                    )
+                )
+            )
+            .andExpect(
+                jsonPath(
+                    "$.notFound",
+                    containsInAnyOrder(
+                        foreignHabit.getId().intValue()
+                    )
+                )
+            )
+            .andExpect(
+                jsonPath("$.failed.length()")
+                    .value(0)
+            )
+            .andExpect(
+                jsonPath("$.conflicted.length()")
+                    .value(0)
+            );
+
+        Habit unchangedForeign =
+            repository.findById(
+                foreignClient.clientId(),
+                foreignHabit.getId()
+            ).orElseThrow();
+
+        assertThat(
+            unchangedForeign.getCompletionCount()
+        ).isZero();
+    }
+
     @Test
     void bulkComplete_returnsPerItemResult() throws Exception {
         LocalDate today = LocalDate.now();
         DayOfWeek todayDay = today.getDayOfWeek();
         DayOfWeek otherDay = todayDay.plus(1);
 
-        var completed = new Habit("Completed", FIXED);
+        var completed = new Habit(ownerId, "Completed", FIXED);
         completed.setScheduledDays(EnumSet.of(todayDay));
         repository.save(completed);
 
-        var skipped = new Habit("Skipped", FIXED);
+        var skipped = new Habit(ownerId, "Skipped", FIXED);
         skipped.setScheduledDays(EnumSet.of(todayDay));
         skipped.complete(today, APPLICATION_ZONE);
         repository.save(skipped);
 
-        var failed = new Habit("Failed", FIXED);
+        var failed = new Habit(ownerId, "Failed", FIXED);
         failed.setScheduledDays(EnumSet.of(otherDay));
         repository.save(failed);
 
@@ -1133,7 +1333,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         LocalDate today = LocalDate.now();
         DayOfWeek todayDay = today.getDayOfWeek();
 
-        var habit = new Habit("Read", FIXED);
+        var habit = new Habit(ownerId, "Read", FIXED);
         habit.setScheduledDays(EnumSet.of(todayDay));
         repository.save(habit);
 
@@ -1187,7 +1387,7 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
 
         // Creation precedes the measured window in every tested zone;
         // this test covers rate calculation, not zone conversion.
-        Habit habit = new Habit(
+        Habit habit = new Habit(ownerId,
             "Read",
             Instant.parse("2024-01-01T00:00:00Z")
         );

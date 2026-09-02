@@ -141,6 +141,7 @@ class HabitCompletionConcurrencyMySqlIT
     private ApiClientRepository apiClientRepository;
 
     private String apiKey;
+    private Long ownerId;
 
     @Autowired
     private HabitTestFixtureRepository fixtureRepository;
@@ -166,7 +167,11 @@ class HabitCompletionConcurrencyMySqlIT
 
     @BeforeEach
     void setUp() {
-        apiKey = apiClientFixture.provisionInternalClient();
+        var client =
+            apiClientFixture
+                .provisionInternalClientWithIdentity();
+        apiKey = client.apiKey();
+        ownerId = client.clientId();
 
         habitServiceLogger =
             (Logger) LoggerFactory.getLogger(
@@ -367,7 +372,7 @@ class HabitCompletionConcurrencyMySqlIT
 
             Habit persisted =
                 habitMapper.findById(
-                    habit.getId()
+                    ownerId, habit.getId()
                 );
 
             assertThat(
@@ -452,7 +457,7 @@ class HabitCompletionConcurrencyMySqlIT
         LocalDate today
     ) {
         Habit habit =
-            new Habit(
+            new Habit(ownerId,
                 "MySQL concurrent completion",
                 FIXED
             );

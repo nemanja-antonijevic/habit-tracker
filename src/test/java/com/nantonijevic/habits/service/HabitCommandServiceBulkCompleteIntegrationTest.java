@@ -40,6 +40,14 @@ import static org.mockito.Mockito.doThrow;
 class HabitCommandServiceBulkCompleteIntegrationTest
     extends AbstractIntegrationTest {
 
+    private static final Long OWNER_ID = 501L;
+
+    @org.junit.jupiter.api.BeforeEach
+    void ensureTestOwnerExists() {
+        com.nantonijevic.habits.support.TestApiClientOwner
+            .ensureExists(jdbcTemplate, OWNER_ID);
+    }
+
     // UTC+14 makes the business-day boundary differ from common host zones.
     private static final ZoneId TEST_ZONE =
         ZoneId.of("Pacific/Kiritimati");
@@ -91,16 +99,16 @@ class HabitCommandServiceBulkCompleteIntegrationTest
         assertThat(clock.getZone()).isEqualTo(ZoneId.of("Pacific/Kiritimati"));
 
         Habit habit = habitCommandService.create(
-            "Read",
+            OWNER_ID, "Read",
             Set.of(today.getDayOfWeek())
         );
 
         BulkCompleteResponse response = habitCommandService.bulkComplete(
-            List.of(habit.getId()),
+            OWNER_ID, List.of(habit.getId()),
             today
         );
 
-        Habit persisted = habitMapper.findById(habit.getId());
+        Habit persisted = habitMapper.findById(OWNER_ID, habit.getId());
 
         assertThat(response.completed()).containsExactly(habit.getId());
         assertThat(persisted.getCompletionCount()).isEqualTo(1);
@@ -116,13 +124,13 @@ class HabitCommandServiceBulkCompleteIntegrationTest
         LocalDate today = LocalDate.of(2024, 1, 5);
 
         Habit habit = habitCommandService.create(
-            "Read",
+            OWNER_ID, "Read",
             Set.of(today.getDayOfWeek())
         );
 
         BulkCompleteResponse response =
             habitCommandService.bulkComplete(
-                List.of(
+                OWNER_ID, List.of(
                     habit.getId(),
                     habit.getId()
                 ),
@@ -130,7 +138,7 @@ class HabitCommandServiceBulkCompleteIntegrationTest
             );
 
         Habit persisted =
-            habitMapper.findById(habit.getId());
+            habitMapper.findById(OWNER_ID, habit.getId());
 
         Integer completionRows =
             jdbcTemplate.queryForObject(
@@ -161,12 +169,12 @@ class HabitCommandServiceBulkCompleteIntegrationTest
         LocalDate today = LocalDate.of(2024, 1, 5);
 
         Habit conflictedHabit = habitCommandService.create(
-            "Read",
+            OWNER_ID, "Read",
             Set.of(today.getDayOfWeek())
         );
 
         Habit completedHabit = habitCommandService.create(
-            "Exercise",
+            OWNER_ID, "Exercise",
             Set.of(today.getDayOfWeek())
         );
 
@@ -187,7 +195,7 @@ class HabitCommandServiceBulkCompleteIntegrationTest
 
         BulkCompleteResponse response =
             habitCommandService.bulkComplete(
-                List.of(
+                OWNER_ID, List.of(
                     conflictedHabit.getId(),
                     completedHabit.getId()
                 ),
@@ -195,10 +203,10 @@ class HabitCommandServiceBulkCompleteIntegrationTest
             );
 
         Habit persistedConflicted =
-            habitMapper.findById(conflictedHabit.getId());
+            habitMapper.findById(OWNER_ID, conflictedHabit.getId());
 
         Habit persistedCompleted =
-            habitMapper.findById(completedHabit.getId());
+            habitMapper.findById(OWNER_ID, completedHabit.getId());
 
         Integer conflictedCompletionRows =
             jdbcTemplate.queryForObject(

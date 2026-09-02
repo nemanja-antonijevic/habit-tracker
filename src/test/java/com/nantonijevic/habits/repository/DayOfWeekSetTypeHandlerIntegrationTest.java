@@ -23,6 +23,14 @@ import static org.mockito.Mockito.when;
 @MybatisTest
 class DayOfWeekSetTypeHandlerIntegrationTest {
 
+    private static final Long OWNER_ID = 501L;
+
+    @org.junit.jupiter.api.BeforeEach
+    void ensureTestOwnerExists() {
+        com.nantonijevic.habits.support.TestApiClientOwner
+            .ensureExists(jdbcTemplate, OWNER_ID);
+    }
+
     @Autowired
     private HabitMapper habitMapper;
 
@@ -33,15 +41,16 @@ class DayOfWeekSetTypeHandlerIntegrationTest {
     void mapsPersistedScheduledDays() {
         jdbcTemplate.update("""
             INSERT INTO habits (
+                owner_id,
                 id,
                 name,
                 scheduled_days,
                 created_at
             )
-            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-            """, 501L, "Workout", "TUESDAY,THURSDAY");
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """, OWNER_ID, 501L, "Workout", "TUESDAY,THURSDAY");
 
-        Habit habit = habitMapper.findById(501L);
+        Habit habit = habitMapper.findById(OWNER_ID, 501L);
 
         assertThat(habit.getScheduledDays())
             .containsExactly(
@@ -54,15 +63,16 @@ class DayOfWeekSetTypeHandlerIntegrationTest {
     void rejectsEmptyPersistedScheduledDays() {
         jdbcTemplate.update("""
         INSERT INTO habits (
+                owner_id,
             id,
             name,
             scheduled_days,
             created_at
         )
-        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-        """, 502L, "Invalid habit", "");
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """, OWNER_ID, 502L, "Invalid habit", "");
 
-        assertThatThrownBy(() -> habitMapper.findById(502L))
+        assertThatThrownBy(() -> habitMapper.findById(OWNER_ID, 502L))
             .isInstanceOf(MyBatisSystemException.class)
             .hasRootCauseInstanceOf(
                 InvalidScheduledDaysPersistenceException.class

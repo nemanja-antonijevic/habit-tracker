@@ -34,6 +34,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class HabitQueryServiceTest {
 
+    private static final Long OWNER_ID = 101L;
+
     private static final ZoneId TEST_ZONE =
         ZoneId.of("UTC");
 
@@ -90,7 +92,9 @@ class HabitQueryServiceTest {
             )
         );
 
-        when(habitMapper.findById(habitId))
+        when(habitMapper.findById(
+                OWNER_ID,
+                habitId))
             .thenReturn(habit);
 
         when(
@@ -106,6 +110,7 @@ class HabitQueryServiceTest {
 
         var response =
             habitQueryService.getCompletionRate(
+               OWNER_ID,
                 habitId,
                 from,
                 to
@@ -132,11 +137,14 @@ class HabitQueryServiceTest {
         LocalDate to =
             LocalDate.of(2000, 1, 31);
 
-        when(habitMapper.findById(habitId))
+        when(habitMapper.findById(
+                OWNER_ID,
+                habitId))
             .thenReturn(habit);
 
         var response =
             habitQueryService.getCompletionRate(
+               OWNER_ID,
                 habitId,
                 from,
                 to
@@ -180,11 +188,14 @@ class HabitQueryServiceTest {
         when(clock.getZone())
             .thenReturn(businessZone);
 
-        when(habitMapper.findById(habitId))
+        when(habitMapper.findById(
+                OWNER_ID,
+                habitId))
             .thenReturn(habit);
 
         HabitCompletionRateResponse response =
             habitQueryService.getCompletionRate(
+               OWNER_ID,
                 habitId,
                 from,
                 to
@@ -243,7 +254,9 @@ class HabitQueryServiceTest {
             EnumSet.allOf(DayOfWeek.class)
         );
 
-        when(habitMapper.findById(habitId))
+        when(habitMapper.findById(
+                OWNER_ID,
+                habitId))
             .thenReturn(habit);
 
         when(
@@ -262,6 +275,7 @@ class HabitQueryServiceTest {
 
         var response =
             habitQueryService.getCompletionRate(
+               OWNER_ID,
                 habitId,
                 from,
                 to
@@ -294,14 +308,16 @@ class HabitQueryServiceTest {
         LocalDate to =
             LocalDate.of(2024, 1, 31);
 
-        when(habitMapper.findById(habitId))
+        when(habitMapper.findById(
+                OWNER_ID,
+                habitId))
             .thenReturn(null);
 
         assertThatThrownBy(
             () ->
                 habitQueryService
                     .getCompletionRate(
-                        habitId,
+                        OWNER_ID, habitId,
                         from,
                         to
                     )
@@ -351,7 +367,9 @@ class HabitQueryServiceTest {
             )
         );
 
-        when(habitMapper.findById(habitId))
+        when(habitMapper.findById(
+                OWNER_ID,
+                habitId))
             .thenReturn(habit);
 
         when(
@@ -370,6 +388,7 @@ class HabitQueryServiceTest {
 
         var response =
             habitQueryService.getCompletionRate(
+               OWNER_ID,
                 habitId,
                 scheduledDate,
                 offDay
@@ -413,7 +432,9 @@ class HabitQueryServiceTest {
             )
         );
 
-        when(habitMapper.findById(habitId))
+        when(habitMapper.findById(
+                OWNER_ID,
+                habitId))
             .thenReturn(habit);
 
         when(
@@ -427,6 +448,7 @@ class HabitQueryServiceTest {
 
         var response =
             habitQueryService.getCompletionRate(
+               OWNER_ID,
                 habitId,
                 from,
                 to
@@ -464,7 +486,9 @@ class HabitQueryServiceTest {
             )
         );
 
-        when(habitMapper.findById(habitId))
+        when(habitMapper.findById(
+                OWNER_ID,
+                habitId))
             .thenReturn(habit);
 
         when(
@@ -478,6 +502,7 @@ class HabitQueryServiceTest {
 
         var response =
             habitQueryService.getCompletionRate(
+               OWNER_ID,
                 habitId,
                 date,
                 date
@@ -498,11 +523,12 @@ class HabitQueryServiceTest {
         LocalDate today =
             LocalDate.of(2026, 8, 1);
 
-        when(habitMapper.findActive())
+        when(habitMapper.findActive(OWNER_ID))
             .thenReturn(List.of());
 
         var dashboard =
             habitQueryService.getDashboardStats(
+               OWNER_ID,
                 today
             );
 
@@ -522,7 +548,7 @@ class HabitQueryServiceTest {
         assertThat(dashboard.totalHabits())
             .isZero();
 
-        verify(habitMapper).findActive();
+        verify(habitMapper).findActive(OWNER_ID);
 
         verifyNoInteractions(
             completionStatRepository

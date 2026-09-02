@@ -41,6 +41,8 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class HabitCommandServiceTest {
 
+    private static final Long OWNER_ID = 101L;
+
     private static final ZoneId TEST_ZONE =
         ZoneId.of("UTC");
 
@@ -127,6 +129,7 @@ class HabitCommandServiceTest {
 
         Habit created =
             habitCommandService.create(
+               OWNER_ID,
                 "Exercise",
                 scheduledDays
             );
@@ -162,7 +165,9 @@ class HabitCommandServiceTest {
                 DayOfWeek.THURSDAY
             );
 
-        when(habitMapper.findById(habitId))
+        when(habitMapper.findById(
+                OWNER_ID,
+                habitId))
             .thenReturn(existingHabit);
 
         when(
@@ -173,6 +178,7 @@ class HabitCommandServiceTest {
 
         Habit updated =
             habitCommandService.update(
+               OWNER_ID,
                 habitId,
                 version,
                 "New name",
@@ -186,7 +192,7 @@ class HabitCommandServiceTest {
             .isEqualTo(newScheduledDays);
 
         verify(habitMapper)
-            .findById(habitId);
+            .findById(OWNER_ID, habitId);
 
         verify(habitWriteRepository)
             .save(same(existingHabit));
@@ -208,11 +214,14 @@ class HabitCommandServiceTest {
             4L
         );
 
-        when(habitMapper.findById(habitId))
+        when(habitMapper.findById(
+                OWNER_ID,
+                habitId))
             .thenReturn(existingHabit);
 
         assertThatThrownBy(
             () -> habitCommandService.update(
+               OWNER_ID,
                 habitId,
                 3L,
                 "Changed name",
@@ -230,7 +239,7 @@ class HabitCommandServiceTest {
             .isEqualTo("Original name");
 
         verify(habitMapper)
-            .findById(habitId);
+            .findById(OWNER_ID, habitId);
 
         verify(
             habitWriteRepository,
@@ -256,7 +265,9 @@ class HabitCommandServiceTest {
             2L
         );
 
-        when(habitMapper.findById(habitId))
+        when(habitMapper.findById(
+                OWNER_ID,
+                habitId))
             .thenReturn(existingHabit);
 
         when(
@@ -266,13 +277,15 @@ class HabitCommandServiceTest {
         ).thenReturn(existingHabit);
 
         Habit archived =
-            habitCommandService.archive(habitId);
+            habitCommandService.archive(
+               OWNER_ID,
+                habitId);
 
         assertThat(archived.isArchived())
             .isTrue();
 
         verify(habitMapper)
-            .findById(habitId);
+            .findById(OWNER_ID, habitId);
 
         verify(habitWriteRepository)
             .save(same(existingHabit));
@@ -296,7 +309,9 @@ class HabitCommandServiceTest {
             2L
         );
 
-        when(habitMapper.findById(habitId))
+        when(habitMapper.findById(
+                OWNER_ID,
+                habitId))
             .thenReturn(existingHabit);
 
         when(
@@ -306,13 +321,15 @@ class HabitCommandServiceTest {
         ).thenReturn(existingHabit);
 
         Habit unarchived =
-            habitCommandService.unarchive(habitId);
+            habitCommandService.unarchive(
+               OWNER_ID,
+                habitId);
 
         assertThat(unarchived.isArchived())
             .isFalse();
 
         verify(habitMapper)
-            .findById(habitId);
+            .findById(OWNER_ID, habitId);
 
         verify(habitWriteRepository)
             .save(same(existingHabit));
@@ -342,11 +359,14 @@ class HabitCommandServiceTest {
             2L
         );
 
-        when(habitMapper.findById(habitId))
+        when(habitMapper.findById(
+                OWNER_ID,
+                habitId))
             .thenReturn(existingHabit);
 
         Habit result =
             habitCommandService.complete(
+               OWNER_ID,
                 habitId,
                 today
             );
@@ -361,7 +381,7 @@ class HabitCommandServiceTest {
             .isEqualTo(2L);
 
         verify(habitMapper)
-            .findById(habitId);
+            .findById(OWNER_ID, habitId);
 
         verify(
             habitWriteRepository,
@@ -390,7 +410,9 @@ class HabitCommandServiceTest {
             2L
         );
 
-        when(habitMapper.findById(habitId))
+        when(habitMapper.findById(
+                OWNER_ID,
+                habitId))
             .thenReturn(existingHabit);
 
         when(
@@ -401,6 +423,7 @@ class HabitCommandServiceTest {
 
         Habit completed =
             habitCommandService.complete(
+               OWNER_ID,
                 habitId,
                 today
             );
@@ -412,7 +435,7 @@ class HabitCommandServiceTest {
             .isEqualTo(1);
 
         verify(habitMapper)
-            .findById(habitId);
+            .findById(OWNER_ID, habitId);
 
         verify(completionRepository)
             .save(any(HabitCompletion.class));
@@ -446,7 +469,9 @@ class HabitCommandServiceTest {
         when(clock.getZone())
             .thenReturn(businessZone);
 
-        when(habitMapper.findById(habitId))
+        when(habitMapper.findById(
+                OWNER_ID,
+                habitId))
             .thenReturn(existingHabit);
 
         when(
@@ -457,6 +482,7 @@ class HabitCommandServiceTest {
 
         Habit completed =
             habitCommandService.complete(
+               OWNER_ID,
                 habitId,
                 today
             );
@@ -507,14 +533,19 @@ class HabitCommandServiceTest {
             2L
         );
 
-        when(habitMapper.findById(41L))
+        when(habitMapper.findById(
+                OWNER_ID,
+                41L))
             .thenReturn(firstHabit);
 
-        when(habitMapper.findById(42L))
+        when(habitMapper.findById(
+                OWNER_ID,
+                42L))
             .thenReturn(secondHabit);
 
         habitCommandService.bulkComplete(
-            List.of(41L, 42L),
+               OWNER_ID,
+                List.of(41L, 42L),
             today
         );
 
@@ -551,11 +582,14 @@ class HabitCommandServiceTest {
             2L
         );
 
-        when(habitMapper.findById(habitId))
+        when(habitMapper.findById(
+                OWNER_ID,
+                habitId))
             .thenReturn(alreadyCompleted);
 
         habitCommandService.bulkComplete(
-            List.of(habitId),
+               OWNER_ID,
+                List.of(habitId),
             today
         );
 
@@ -593,7 +627,9 @@ class HabitCommandServiceTest {
             1L
         );
 
-        when(habitMapper.findById(habitId))
+        when(habitMapper.findById(
+                OWNER_ID,
+                habitId))
             .thenReturn(
                 firstSnapshot,
                 retrySnapshot
@@ -617,6 +653,7 @@ class HabitCommandServiceTest {
 
         var response =
             habitCommandService.bulkComplete(
+               OWNER_ID,
                 List.of(habitId),
                 today
             );
@@ -630,7 +667,7 @@ class HabitCommandServiceTest {
         verify(
             habitMapper,
             times(2)
-        ).findById(habitId);
+        ).findById(OWNER_ID, habitId);
 
         verify(habitWriteRepository)
             .save(same(firstSnapshot));
@@ -691,6 +728,7 @@ class HabitCommandServiceTest {
 
         when(
             habitMapper.findById(
+                OWNER_ID,
                 conflictedHabitId
             )
         ).thenReturn(
@@ -700,6 +738,7 @@ class HabitCommandServiceTest {
 
         when(
             habitMapper.findById(
+                OWNER_ID,
                 completedHabitId
             )
         ).thenReturn(completedHabit);
@@ -732,6 +771,7 @@ class HabitCommandServiceTest {
 
         var response =
             habitCommandService.bulkComplete(
+               OWNER_ID,
                 List.of(
                     conflictedHabitId,
                     completedHabitId
@@ -757,10 +797,10 @@ class HabitCommandServiceTest {
         verify(
             habitMapper,
             times(2)
-        ).findById(conflictedHabitId);
+        ).findById(OWNER_ID, conflictedHabitId);
 
         verify(habitMapper)
-            .findById(completedHabitId);
+            .findById(OWNER_ID, completedHabitId);
 
         verify(
             completionRepository,
@@ -808,12 +848,14 @@ class HabitCommandServiceTest {
 
         when(
             habitMapper.findById(
+                OWNER_ID,
                 completedHabitId
             )
         ).thenReturn(completedHabit);
 
         when(
             habitMapper.findById(
+                OWNER_ID,
                 brokenHabitId
             )
         ).thenThrow(
@@ -824,6 +866,7 @@ class HabitCommandServiceTest {
 
         assertThatThrownBy(
             () -> habitCommandService.bulkComplete(
+               OWNER_ID,
                 List.of(
                     completedHabitId,
                     brokenHabitId
@@ -864,7 +907,7 @@ class HabitCommandServiceTest {
         assertThatThrownBy(
             () -> habitCommandService
                 .bulkComplete(
-                    List.of(habitId),
+                    OWNER_ID, List.of(habitId),
                     today
                 )
         )
@@ -903,7 +946,9 @@ class HabitCommandServiceTest {
             2L
         );
 
-        when(habitMapper.findById(habitId))
+        when(habitMapper.findById(
+                OWNER_ID,
+                habitId))
             .thenReturn(existingHabit);
 
         when(
@@ -921,6 +966,7 @@ class HabitCommandServiceTest {
 
         Habit uncompleted =
             habitCommandService.uncomplete(
+               OWNER_ID,
                 habitId,
                 today
             );
@@ -934,7 +980,7 @@ class HabitCommandServiceTest {
         ).isNull();
 
         verify(habitMapper)
-            .findById(habitId);
+            .findById(OWNER_ID, habitId);
 
         verify(completionRepository)
             .deleteByHabitIdAndCompletedOn(
@@ -960,19 +1006,21 @@ class HabitCommandServiceTest {
     void deleteUsesMyBatisExistenceCheckAndDelete() {
         Long habitId = 42L;
 
-        when(habitMapper.existsById(habitId))
+        when(habitMapper.existsById(OWNER_ID, habitId))
             .thenReturn(true);
 
-        when(habitMapper.deleteById(habitId))
+        when(habitMapper.deleteById(OWNER_ID, habitId))
             .thenReturn(1);
 
-        habitCommandService.delete(habitId);
+        habitCommandService.delete(
+               OWNER_ID,
+                habitId);
 
         verify(habitMapper)
-            .existsById(habitId);
+            .existsById(OWNER_ID, habitId);
 
         verify(habitMapper)
-            .deleteById(habitId);
+            .deleteById(OWNER_ID, habitId);
 
         verify(applicationEventPublisher)
             .publishEvent(
@@ -984,13 +1032,14 @@ class HabitCommandServiceTest {
     void deleteThrowsNotFoundAndDoesNotDeleteWhenHabitDoesNotExist() {
         Long habitId = 42L;
 
-        when(habitMapper.existsById(habitId))
+        when(habitMapper.existsById(OWNER_ID, habitId))
             .thenReturn(false);
 
         assertThatThrownBy(
             () ->
                 habitCommandService.delete(
-                    habitId
+               OWNER_ID,
+                habitId
                 )
         )
             .isInstanceOf(
@@ -1001,12 +1050,12 @@ class HabitCommandServiceTest {
             );
 
         verify(habitMapper)
-            .existsById(habitId);
+            .existsById(OWNER_ID, habitId);
 
         verify(
             habitMapper,
             never()
-        ).deleteById(habitId);
+        ).deleteById(OWNER_ID, habitId);
 
         verify(
             applicationEventPublisher,
@@ -1041,7 +1090,9 @@ class HabitCommandServiceTest {
         freshlyCompletedHabit
             .synchronizePersistenceVersion(1L);
 
-        when(habitMapper.findById(habitId))
+        when(habitMapper.findById(
+                OWNER_ID,
+                habitId))
             .thenReturn(
                 staleHabit,
                 freshlyCompletedHabit
@@ -1059,6 +1110,7 @@ class HabitCommandServiceTest {
 
         Habit result =
             habitCommandService.complete(
+               OWNER_ID,
                 habitId,
                 today
             );
@@ -1075,7 +1127,7 @@ class HabitCommandServiceTest {
         verify(
             habitMapper,
             times(2)
-        ).findById(habitId);
+        ).findById(OWNER_ID, habitId);
 
         verify(habitWriteRepository)
             .save(same(staleHabit));
@@ -1153,7 +1205,9 @@ class HabitCommandServiceTest {
         secondSnapshot
             .synchronizePersistenceVersion(1L);
 
-        when(habitMapper.findById(habitId))
+        when(habitMapper.findById(
+                OWNER_ID,
+                habitId))
             .thenReturn(
                 firstSnapshot,
                 secondSnapshot
@@ -1182,7 +1236,8 @@ class HabitCommandServiceTest {
         assertThatThrownBy(
             () ->
                 habitCommandService.complete(
-                    habitId,
+               OWNER_ID,
+                habitId,
                     today
                 )
         )
@@ -1196,7 +1251,7 @@ class HabitCommandServiceTest {
         verify(
             habitMapper,
             times(2)
-        ).findById(habitId);
+        ).findById(OWNER_ID, habitId);
 
         verify(habitWriteRepository)
             .save(same(firstSnapshot));
@@ -1272,7 +1327,8 @@ class HabitCommandServiceTest {
         assertThatThrownBy(
             () ->
                 habitCommandService.complete(
-                    habitId,
+               OWNER_ID,
+                habitId,
                     today
                 )
         )

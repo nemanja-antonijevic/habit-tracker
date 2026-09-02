@@ -29,8 +29,13 @@ public class HabitTestFixtureRepository {
         return habitWriteRepository.save(habit);
     }
 
-    public Optional<Habit> findById(Long habitId) {
-        return Optional.ofNullable(habitMapper.findById(habitId));
+    public Optional<Habit> findById(
+        Long ownerId,
+        Long habitId
+    ) {
+        return Optional.ofNullable(
+            habitMapper.findById(ownerId, habitId)
+        );
     }
 
     public void deleteAll() {

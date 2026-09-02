@@ -1,6 +1,6 @@
 package com.nantonijevic.habits.controller;
 
-import com.nantonijevic.habits.client.ClientTier;
+import com.nantonijevic.habits.client.ClientContext;
 import com.nantonijevic.habits.client.HabitResponseTransformer;
 import com.nantonijevic.habits.client.ResolvedClientTier;
 import com.nantonijevic.habits.domain.Habit;
@@ -65,11 +65,12 @@ public class HabitController {
     @PostMapping
     public ResponseEntity<HabitResponse> create(
         @Valid @RequestBody CreateHabitRequest request,
-        @ResolvedClientTier ClientTier tier
+        @ResolvedClientTier ClientContext context
     ) {
         LocalDate today = LocalDate.now(clock);
 
         Habit saved = habitCommandService.create(
+            context.clientId(),
             request.name(),
             request.scheduledDays()
         );
@@ -81,7 +82,7 @@ public class HabitController {
                     today,
                     clock.getZone()
                 ),
-                tier
+                context.tier()
             );
 
         return ResponseEntity
@@ -92,10 +93,17 @@ public class HabitController {
     }
 
     @PostMapping("/bulk-complete")
-    public BulkCompleteResponse bulkComplete(@Valid @RequestBody BulkCompleteRequest request) {
+    public BulkCompleteResponse bulkComplete(
+        @Valid @RequestBody BulkCompleteRequest request,
+        @ResolvedClientTier ClientContext context
+    ) {
         LocalDate today = LocalDate.now(clock);
 
-        return habitCommandService.bulkComplete(request.habitIds(), today);
+        return habitCommandService.bulkComplete(
+            context.clientId(),
+            request.habitIds(),
+            today
+        );
     }
 
     @GetMapping
@@ -105,13 +113,14 @@ public class HabitController {
         @RequestParam(required = false)
         String name,
         Pageable pageable,
-        @ResolvedClientTier ClientTier tier
+        @ResolvedClientTier ClientContext context
     ) {
         LocalDate today = LocalDate.now(clock);
 
         Page<HabitResponse> response =
             habitQueryService
                 .list(
+                    context.clientId(),
                     includeArchived,
                     name,
                     pageable
@@ -126,17 +135,17 @@ public class HabitController {
 
         return habitResponseTransformer.transform(
             response,
-            tier
+            context.tier()
         );
     }
 
     @GetMapping("/{id}")
     public HabitResponse getById(
         @PathVariable Long id,
-        @ResolvedClientTier ClientTier tier
+        @ResolvedClientTier ClientContext context
     ) {
         LocalDate today = LocalDate.now(clock);
-        Habit habit = habitQueryService.getById(id);
+        Habit habit = habitQueryService.getById(context.clientId(), id);
 
         return habitResponseTransformer.transform(
             HabitResponse.from(
@@ -144,25 +153,29 @@ public class HabitController {
                 today,
                 clock.getZone()
             ),
-            tier
+            context.tier()
         );
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable Long id) {
-        habitCommandService.delete(id);
+    public void delete(
+        @PathVariable Long id,
+        @ResolvedClientTier ClientContext context
+    ) {
+        habitCommandService.delete(context.clientId(), id);
     }
 
     @PutMapping("/{id}")
     public HabitResponse update(
         @PathVariable Long id,
         @Valid @RequestBody UpdateHabitRequest request,
-        @ResolvedClientTier ClientTier tier
+        @ResolvedClientTier ClientContext context
     ) {
         LocalDate today = LocalDate.now(clock);
 
         Habit habit = habitCommandService.update(
+            context.clientId(),
             id,
             request.version(),
             request.name(),
@@ -175,18 +188,18 @@ public class HabitController {
                 today,
                 clock.getZone()
             ),
-            tier
+            context.tier()
         );
     }
 
     @PostMapping("/{id}/complete")
     public HabitResponse complete(
         @PathVariable Long id,
-        @ResolvedClientTier ClientTier tier
+        @ResolvedClientTier ClientContext context
     ) {
         LocalDate today = LocalDate.now(clock);
         Habit habit =
-            habitCommandService.complete(id, today);
+            habitCommandService.complete(context.clientId(), id, today);
 
         return habitResponseTransformer.transform(
             HabitResponse.from(
@@ -194,17 +207,17 @@ public class HabitController {
                 today,
                 clock.getZone()
             ),
-            tier
+            context.tier()
         );
     }
 
     @PostMapping("/{id}/archive")
     public HabitResponse archive(
         @PathVariable Long id,
-        @ResolvedClientTier ClientTier tier
+        @ResolvedClientTier ClientContext context
     ) {
         LocalDate today = LocalDate.now(clock);
-        Habit habit = habitCommandService.archive(id);
+        Habit habit = habitCommandService.archive(context.clientId(), id);
 
         return habitResponseTransformer.transform(
             HabitResponse.from(
@@ -212,17 +225,17 @@ public class HabitController {
                 today,
                 clock.getZone()
             ),
-            tier
+            context.tier()
         );
     }
 
     @PostMapping("/{id}/unarchive")
     public HabitResponse unarchive(
         @PathVariable Long id,
-        @ResolvedClientTier ClientTier tier
+        @ResolvedClientTier ClientContext context
     ) {
         LocalDate today = LocalDate.now(clock);
-        Habit habit = habitCommandService.unarchive(id);
+        Habit habit = habitCommandService.unarchive(context.clientId(), id);
 
         return habitResponseTransformer.transform(
             HabitResponse.from(
@@ -230,25 +243,32 @@ public class HabitController {
                 today,
                 clock.getZone()
             ),
-            tier
+            context.tier()
         );
     }
 
     @GetMapping("/{id}/stats")
-    public HabitStatsResponse getStats(@PathVariable Long id) {
-        HabitStatsView view = habitQueryService.getStatsProjection(id, LocalDate.now(clock));
+    public HabitStatsResponse getStats(
+        @PathVariable Long id,
+        @ResolvedClientTier ClientContext context
+    ) {
+        HabitStatsView view = habitQueryService.getStatsProjection(
+            context.clientId(),
+            id,
+            LocalDate.now(clock)
+        );
         return HabitStatsResponse.from(view);
     }
 
     @PostMapping("/{id}/uncomplete")
     public HabitResponse uncomplete(
         @PathVariable Long id,
-        @ResolvedClientTier ClientTier tier
+        @ResolvedClientTier ClientContext context
     ) {
         LocalDate today = LocalDate.now(clock);
 
         Habit habit =
-            habitCommandService.uncomplete(id, today);
+            habitCommandService.uncomplete(context.clientId(), id, today);
 
         return habitResponseTransformer.transform(
             HabitResponse.from(
@@ -256,7 +276,7 @@ public class HabitController {
                 today,
                 clock.getZone()
             ),
-            tier
+            context.tier()
         );
     }
 
@@ -265,8 +285,15 @@ public class HabitController {
             @PathVariable Long id,
             @RequestParam(required = false) LocalDate from,
             @RequestParam(required = false) LocalDate to,
-            Pageable pageable) {
-        return habitQueryService.getHistory(id, from, to, pageable)
+            Pageable pageable,
+            @ResolvedClientTier ClientContext context) {
+        return habitQueryService.getHistory(
+                context.clientId(),
+                id,
+                from,
+                to,
+                pageable
+            )
                 .map(HabitCompletionResponse::from);
     }
 
@@ -274,8 +301,10 @@ public class HabitController {
     public HabitCompletionRateResponse getCompletionRate(
         @PathVariable Long id,
         @RequestParam LocalDate from,
-        @RequestParam LocalDate to) {
+        @RequestParam LocalDate to,
+        @ResolvedClientTier ClientContext context) {
         return habitQueryService.getCompletionRate(
+            context.clientId(),
             id,
             from,
             to
@@ -285,13 +314,13 @@ public class HabitController {
     @GetMapping("/due-today")
     public Page<HabitResponse> dueToday(
         Pageable pageable,
-        @ResolvedClientTier ClientTier tier
+        @ResolvedClientTier ClientContext context
     ) {
         LocalDate today = LocalDate.now(clock);
 
         Page<HabitResponse> response =
             habitQueryService
-                .dueToday(today, pageable)
+                .dueToday(context.clientId(), today, pageable)
                 .map(habit ->
                     HabitResponse.from(
                         habit,
@@ -302,21 +331,31 @@ public class HabitController {
 
         return habitResponseTransformer.transform(
             response,
-            tier
+            context.tier()
         );
     }
 
     @GetMapping("/due-today/count")
-    public DueTodayCountResponse dueTodayCount() {
+    public DueTodayCountResponse dueTodayCount(
+        @ResolvedClientTier ClientContext context
+    ) {
         LocalDate today = LocalDate.now(clock);
 
-        long count = habitQueryService.countDueToday(today);
+        long count = habitQueryService.countDueToday(
+            context.clientId(),
+            today
+        );
 
         return new DueTodayCountResponse(count);
     }
 
     @GetMapping("/stats")
-    public HabitDashboardResponse getDashboardStats() {
-        return habitQueryService.getDashboardStats(LocalDate.now(clock));
+    public HabitDashboardResponse getDashboardStats(
+        @ResolvedClientTier ClientContext context
+    ) {
+        return habitQueryService.getDashboardStats(
+            context.clientId(),
+            LocalDate.now(clock)
+        );
     }
 }

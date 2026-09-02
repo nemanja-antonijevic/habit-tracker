@@ -95,6 +95,7 @@ public class HabitStatsIntegrationTest {
     private ApiClientRepository apiClientRepository;
 
     private String apiKey;
+    private Long ownerId;
 
     @SpyBean
     private HabitCompletedEventConsumer consumer;
@@ -106,7 +107,11 @@ public class HabitStatsIntegrationTest {
         completionRepository.deleteAll();
         statRepository.deleteAll();
         jdbcTemplate.update("DELETE FROM habits");
-        apiKey = apiClientFixture.provisionInternalClient();
+        var client =
+            apiClientFixture
+                .provisionInternalClientWithIdentity();
+        apiKey = client.apiKey();
+        ownerId = client.clientId();
 
         doAnswer(invocation -> {
             Object result = invocation.callRealMethod();
@@ -148,7 +153,7 @@ public class HabitStatsIntegrationTest {
     void getStats_returnsCorrectCountAndTimestamp_afterComplete() throws Exception {
         expectEvents(1);
 
-        Habit saved = habitWriteRepository.save(new Habit("Read 30 min", clock.instant()));
+        Habit saved = habitWriteRepository.save(new Habit(ownerId, "Read 30 min", clock.instant()));
 
         perform(post("/habits/" + saved.getId() + "/complete"))
                 .andExpect(status().isOk());
@@ -165,7 +170,7 @@ public class HabitStatsIntegrationTest {
     void getStats_returnsCurrentStreak_afterConsecutiveCompletions() throws Exception {
         expectEvents(3);
 
-        var habit = habitWriteRepository.save(new Habit("Read", clock.instant()));
+        var habit = habitWriteRepository.save(new Habit(ownerId, "Read", clock.instant()));
         LocalDate today = LocalDate.now(clock);
 
         publishCompletedEvent(habit.getId(), today.minusDays(2), 1, 1);
@@ -185,7 +190,7 @@ public class HabitStatsIntegrationTest {
 
         LocalDate today = LocalDate.now(clock);
 
-        var habit = new Habit("Read 30 min", clock.instant());
+        var habit = new Habit(ownerId, "Read 30 min", clock.instant());
 
         // Seed the write model through the entity and the read model through events; this test verifies both.
         habit.complete(
@@ -226,7 +231,7 @@ public class HabitStatsIntegrationTest {
     void firstCompleteSetsLongestStreakToOne() throws Exception {
         expectEvents(1);
 
-        var habit = new Habit("Read 30 min", clock.instant());
+        var habit = new Habit(ownerId, "Read 30 min", clock.instant());
         habitWriteRepository.save(habit);
 
         perform(post("/habits/" + habit.getId() + "/complete"))
@@ -244,7 +249,7 @@ public class HabitStatsIntegrationTest {
     void streakResetDoesNotLowerLongestStreak() throws Exception {
         expectEvents(4);
 
-        var habit = habitWriteRepository.save(new Habit("Read 30 min", clock.instant()));
+        var habit = habitWriteRepository.save(new Habit(ownerId, "Read 30 min", clock.instant()));
         LocalDate today = LocalDate.now(clock);
 
         publishCompletedEvent(habit.getId(), today.minusDays(4), 1, 1);
@@ -277,7 +282,7 @@ public class HabitStatsIntegrationTest {
             previousScheduledDay = previousScheduledDay.minusDays(1);
         }
 
-        var habit = new Habit("Workout", clock.instant());
+        var habit = new Habit(ownerId, "Workout", clock.instant());
         habit.setScheduledDays(scheduledDays);
         var saved = habitWriteRepository.save(habit);
 
@@ -317,19 +322,19 @@ public class HabitStatsIntegrationTest {
         DayOfWeek todayDay = today.getDayOfWeek();
         DayOfWeek tomorrowDay = today.plusDays(1).getDayOfWeek();
 
-        var completedDueHabit = new Habit("Completed today", clock.instant());
+        var completedDueHabit = new Habit(ownerId, "Completed today", clock.instant());
         completedDueHabit.setScheduledDays(EnumSet.of(todayDay));
         habitWriteRepository.save(completedDueHabit);
 
-        var incompleteDueHabit = new Habit("Still due today", clock.instant());
+        var incompleteDueHabit = new Habit(ownerId, "Still due today", clock.instant());
         incompleteDueHabit.setScheduledDays(EnumSet.of(todayDay));
         habitWriteRepository.save(incompleteDueHabit);
 
-        var notDueTodayHabit = new Habit("Not due today", clock.instant());
+        var notDueTodayHabit = new Habit(ownerId, "Not due today", clock.instant());
         notDueTodayHabit.setScheduledDays(EnumSet.of(tomorrowDay));
         habitWriteRepository.save(notDueTodayHabit);
 
-        var archivedHabit = new Habit("Archived habit", clock.instant());
+        var archivedHabit = new Habit(ownerId, "Archived habit", clock.instant());
         archivedHabit.setScheduledDays(EnumSet.of(todayDay));
         habitWriteRepository.save(archivedHabit);
 
@@ -370,8 +375,8 @@ public class HabitStatsIntegrationTest {
     void getDashboardStats_returnsZeroLongestStreakWhenNoActiveStreaksExist() throws Exception {
         LocalDate today = LocalDate.now(clock);
 
-        var firstHabit = habitWriteRepository.save(new Habit("Read", clock.instant()));
-        var secondHabit = habitWriteRepository.save(new Habit("Workout", clock.instant()));
+        var firstHabit = habitWriteRepository.save(new Habit(ownerId, "Read", clock.instant()));
+        var secondHabit = habitWriteRepository.save(new Habit(ownerId, "Workout", clock.instant()));
 
         expectEvents(2);
 
@@ -394,11 +399,11 @@ public class HabitStatsIntegrationTest {
         LocalDate today = LocalDate.now(clock);
 
         var threeDayStreakHabit = habitWriteRepository.save(
-            new Habit("Three day streak", clock.instant())
+            new Habit(ownerId, "Three day streak", clock.instant())
         );
 
         var sevenDayStreakHabit = habitWriteRepository.save(
-            new Habit("Seven day streak", clock.instant())
+            new Habit(ownerId, "Seven day streak", clock.instant())
         );
 
         expectEvents(2);

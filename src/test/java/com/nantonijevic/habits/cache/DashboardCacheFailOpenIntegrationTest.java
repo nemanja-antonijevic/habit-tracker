@@ -35,6 +35,14 @@ import static org.mockito.ArgumentMatchers.any;
 })
 class DashboardCacheFailOpenIntegrationTest {
 
+    private static final Long OWNER_ID = 501L;
+
+    @org.junit.jupiter.api.BeforeEach
+    void ensureTestOwnerExists() {
+        com.nantonijevic.habits.support.TestApiClientOwner
+            .ensureExists(jdbcTemplate, OWNER_ID);
+    }
+
     @Autowired
     private HabitCommandService habitCommandService;
 
@@ -76,12 +84,12 @@ class DashboardCacheFailOpenIntegrationTest {
     @Test
     void createCommitsWhenDashboardCacheEvictionFails() {
         Habit created = habitCommandService.create(
-            "Read",
+            OWNER_ID, "Read",
             EnumSet.allOf(DayOfWeek.class)
         );
 
         assertThat(created.getId()).isNotNull();
-        assertThat(habitMapper.findById(created.getId())).isNotNull();
+        assertThat(habitMapper.findById(OWNER_ID, created.getId())).isNotNull();
 
         verify(dashboardCacheGeneration).advance();
         verify(cache).clear();
@@ -95,7 +103,9 @@ class DashboardCacheFailOpenIntegrationTest {
         long generation = 7L;
 
         String key =
-            generation
+            OWNER_ID
+                + "::"
+                + generation
                 + "::"
                 + today;
 
@@ -111,7 +121,7 @@ class DashboardCacheFailOpenIntegrationTest {
             );
 
         HabitDashboardResponse response =
-            habitQueryService.getDashboardStats(today);
+            habitQueryService.getDashboardStats(OWNER_ID, today);
 
         assertThat(response).isNotNull();
         assertThat(response.totalHabits()).isZero();
@@ -128,7 +138,9 @@ class DashboardCacheFailOpenIntegrationTest {
         long generation = 7L;
 
         String key =
-            generation
+            OWNER_ID
+                + "::"
+                + generation
                 + "::"
                 + today;
 
@@ -151,7 +163,7 @@ class DashboardCacheFailOpenIntegrationTest {
             );
 
         HabitDashboardResponse response =
-            habitQueryService.getDashboardStats(today);
+            habitQueryService.getDashboardStats(OWNER_ID, today);
 
         assertThat(response).isNotNull();
         assertThat(response.totalHabits()).isZero();
@@ -174,7 +186,7 @@ class DashboardCacheFailOpenIntegrationTest {
         );
 
         HabitDashboardResponse response =
-            habitQueryService.getDashboardStats(today);
+            habitQueryService.getDashboardStats(OWNER_ID, today);
 
         assertThat(response).isNotNull();
         assertThat(response.totalHabits()).isZero();

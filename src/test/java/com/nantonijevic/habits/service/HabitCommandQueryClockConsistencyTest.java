@@ -34,6 +34,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class HabitCommandQueryClockConsistencyTest {
 
+    private static final Long OWNER_ID = 101L;
+
     private static final ZoneId TEST_ZONE =
         ZoneId.of("UTC");
 
@@ -121,13 +123,16 @@ class HabitCommandQueryClockConsistencyTest {
 
         Habit habit =
             habitCommandService.create(
+                OWNER_ID,
                 "Read",
                 EnumSet.allOf(
                     DayOfWeek.class
                 )
             );
 
-        when(habitMapper.findById(habitId))
+        when(habitMapper.findById(
+                OWNER_ID,
+                habitId))
             .thenReturn(habit);
 
         when(
@@ -142,12 +147,14 @@ class HabitCommandQueryClockConsistencyTest {
         );
 
         habitCommandService.complete(
-            habitId,
+                OWNER_ID,
+                habitId,
             businessDate
         );
 
         var response =
             habitQueryService.getCompletionRate(
+                OWNER_ID,
                 habitId,
                 businessDate,
                 businessDate

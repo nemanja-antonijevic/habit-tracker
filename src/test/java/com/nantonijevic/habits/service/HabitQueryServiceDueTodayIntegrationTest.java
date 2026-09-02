@@ -19,6 +19,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 class HabitQueryServiceDueTodayIntegrationTest
     extends AbstractIntegrationTest {
 
+    private static final Long OWNER_ID = 501L;
+
+    @org.junit.jupiter.api.BeforeEach
+    void ensureTestOwnerExists() {
+        com.nantonijevic.habits.support.TestApiClientOwner
+            .ensureExists(jdbcTemplate, OWNER_ID);
+    }
+
     @Autowired
     private HabitQueryService habitQueryService;
 
@@ -70,16 +78,16 @@ class HabitQueryServiceDueTodayIntegrationTest
         );
 
         Page<Habit> firstPage = habitQueryService.dueToday(
-            today,
+            OWNER_ID, today,
             PageRequest.of(0, 1)
         );
 
         Page<Habit> secondPage = habitQueryService.dueToday(
-            today,
+            OWNER_ID, today,
             PageRequest.of(1, 1)
         );
 
-        long count = habitQueryService.countDueToday(today);
+        long count = habitQueryService.countDueToday(OWNER_ID, today);
 
         assertThat(firstPage.getContent())
             .extracting(Habit::getName)
@@ -108,14 +116,16 @@ class HabitQueryServiceDueTodayIntegrationTest
 
         jdbcTemplate.update("""
             INSERT INTO habits (
+                owner_id,
                 name,
                 scheduled_days,
                 archived,
                 last_completed_at,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
+            OWNER_ID,
             name,
             scheduledDays,
             archived,

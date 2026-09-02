@@ -8,6 +8,7 @@ import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
 import com.nantonijevic.habits.repository.HabitWriteRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
@@ -19,6 +20,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @Transactional
 class HabitQueryServiceStatsIntegrationTest extends AbstractIntegrationTest {
+
+    private static final Long OWNER_ID = 501L;
+
+    @org.junit.jupiter.api.BeforeEach
+    void ensureTestOwnerExists() {
+        com.nantonijevic.habits.support.TestApiClientOwner
+            .ensureExists(jdbcTemplate, OWNER_ID);
+    }
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @Autowired
     private HabitQueryService habitQueryService;
@@ -35,6 +47,7 @@ class HabitQueryServiceStatsIntegrationTest extends AbstractIntegrationTest {
         LocalDate lastCompleted = LocalDate.of(2024, 1, 3);
 
         Habit habit = new Habit(
+            OWNER_ID,
             "Workout",
             Instant.parse("2023-12-31T00:00:00Z")
         );
@@ -58,7 +71,7 @@ class HabitQueryServiceStatsIntegrationTest extends AbstractIntegrationTest {
         );
 
         HabitStatsView result = habitQueryService.getStatsProjection(
-            saved.getId(),
+            OWNER_ID, saved.getId(),
             today
         );
 

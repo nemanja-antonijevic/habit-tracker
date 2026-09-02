@@ -54,6 +54,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 )
 class DashboardCacheRaceIT {
 
+    private static final Long OWNER_ID = 501L;
+
     private static final int REDIS_PORT = 6379;
 
     @Container
@@ -182,7 +184,7 @@ class DashboardCacheRaceIT {
                 executor.submit(
                     () ->
                         habitQueryService.getDashboardStats(
-                            today
+                            OWNER_ID, today
                         )
                 );
 
@@ -295,7 +297,7 @@ class DashboardCacheRaceIT {
                 .isGreaterThan(readerGeneration);
 
             HabitDashboardResponse dashboardAfterInvalidation =
-                habitQueryService.getDashboardStats(today);
+                habitQueryService.getDashboardStats(OWNER_ID, today);
 
             assertThat(
                 dashboardAfterInvalidation

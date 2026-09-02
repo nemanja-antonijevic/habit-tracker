@@ -11,11 +11,20 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Transactional
 class HabitMapperIntegrationTest extends AbstractIntegrationTest {
+
+    private static final Long OWNER_ID = 501L;
+
+    @org.junit.jupiter.api.BeforeEach
+    void ensureTestOwnerExists() {
+        com.nantonijevic.habits.support.TestApiClientOwner
+            .ensureExists(jdbcTemplate, OWNER_ID);
+    }
 
     @Autowired
     private HabitMapper habitMapper;
@@ -28,11 +37,11 @@ class HabitMapperIntegrationTest extends AbstractIntegrationTest {
     @Test
     void findsHabitById() {
         jdbcTemplate.update("""
-            INSERT INTO habits (id, name, scheduled_days, created_at)
-            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-            """, 42L, "Workout", "MONDAY,WEDNESDAY,FRIDAY");
+            INSERT INTO habits (owner_id, id, name, scheduled_days, created_at)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """, OWNER_ID, 42L, "Workout", "MONDAY,WEDNESDAY,FRIDAY");
 
-        Habit habit = habitMapper.findById(42L);
+        Habit habit = habitMapper.findById(OWNER_ID, 42L);
 
         assertThat(habit).isNotNull();
         assertThat(habit.getId()).isEqualTo(42L);
@@ -49,24 +58,52 @@ class HabitMapperIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void insertedOwnerRoundTripsThroughResultMap() {
+        Long ownerId = OWNER_ID;
+
+        Habit inserted = new Habit(
+            ownerId,
+            "Owned habit",
+            Instant.parse("2026-09-02T06:00:00Z")
+        );
+
+        habitMapper.insert(inserted);
+
+        Habit loaded =
+            habitMapper.findById(
+                ownerId,
+                inserted.getId()
+            );
+
+        assertThat(loaded)
+            .isNotNull();
+
+        assertThat(loaded.getOwnerId())
+            .isEqualTo(ownerId);
+
+        assertThat(loaded.getName())
+            .isEqualTo("Owned habit");
+    }
+
+    @Test
     void searchesActiveHabitsByNameWithPagination() {
         jdbcTemplate.update("""
-            INSERT INTO habits (id, name, archived, created_at)
-            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-            """, 101L, "Morning Run", false);
+            INSERT INTO habits (owner_id, id, name, archived, created_at)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """, OWNER_ID, 101L, "Morning Run", false);
 
         jdbcTemplate.update("""
-            INSERT INTO habits (id, name, archived, created_at)
-            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-            """, 102L, "Evening Run", false);
+            INSERT INTO habits (owner_id, id, name, archived, created_at)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """, OWNER_ID, 102L, "Evening Run", false);
 
         jdbcTemplate.update("""
-            INSERT INTO habits (id, name, archived, created_at)
-            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-            """, 103L, "Archived Run", true);
+            INSERT INTO habits (owner_id, id, name, archived, created_at)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """, OWNER_ID, 103L, "Archived Run", true);
 
         Page<Habit> result = habitSearchRepository.search(
-            "RUN",
+            OWNER_ID, "RUN",
             false,
             PageRequest.of(
                 0,
@@ -85,17 +122,17 @@ class HabitMapperIntegrationTest extends AbstractIntegrationTest {
     @Test
     void deletesHabitByIdAndReturnsAffectedRows() {
         jdbcTemplate.update("""
-            INSERT INTO habits (id, name, created_at)
-            VALUES (?, ?, CURRENT_TIMESTAMP)
-            """, 201L, "Delete me");
+            INSERT INTO habits (owner_id, id, name, created_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            """, OWNER_ID, 201L, "Delete me");
 
-        assertThat(habitMapper.existsById(201L)).isTrue();
+        assertThat(habitMapper.existsById(OWNER_ID, 201L)).isTrue();
 
-        int firstDeleteAffectedRows = habitMapper.deleteById(201L);
-        int secondDeleteAffectedRows = habitMapper.deleteById(201L);
+        int firstDeleteAffectedRows = habitMapper.deleteById(OWNER_ID, 201L);
+        int secondDeleteAffectedRows = habitMapper.deleteById(OWNER_ID, 201L);
 
         assertThat(firstDeleteAffectedRows).isEqualTo(1);
         assertThat(secondDeleteAffectedRows).isZero();
-        assertThat(habitMapper.existsById(201L)).isFalse();
+        assertThat(habitMapper.existsById(OWNER_ID, 201L)).isFalse();
     }
 }

@@ -7,6 +7,7 @@ import org.springframework.data.domain.Pageable;
 public interface HabitSearchRepository {
 
     Page<Habit> search(
+        Long ownerId,
         String name,
         boolean includeArchived,
         Pageable pageable

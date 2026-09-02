@@ -66,10 +66,15 @@ class HabitStreakConsistencyIntegrationTest {
     private InternalApiClientFixture apiClientFixture;
 
     private String apiKey;
+    private Long ownerId;
 
     @BeforeEach
     void provisionInternalClient() {
-        apiKey = apiClientFixture.provisionInternalClient();
+        var client =
+            apiClientFixture
+                .provisionInternalClientWithIdentity();
+        apiKey = client.apiKey();
+        ownerId = client.clientId();
     }
 
     private ResultActions perform(
@@ -86,7 +91,7 @@ class HabitStreakConsistencyIntegrationTest {
 
     @Test
     void statsEndpointsUseSamePreviousScheduledDayRule() throws Exception {
-        Habit habit = new Habit("Read", clock.instant());
+        Habit habit = new Habit(ownerId, "Read", clock.instant());
         habit.setScheduledDays(EnumSet.of(
             DayOfWeek.MONDAY,
             DayOfWeek.WEDNESDAY,

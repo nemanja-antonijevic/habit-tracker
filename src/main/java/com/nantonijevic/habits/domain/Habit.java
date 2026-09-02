@@ -12,6 +12,8 @@ public class Habit {
 
     private Long id;
 
+    private Long ownerId;
+
     private Long version;
 
     private String name;
@@ -34,6 +36,15 @@ public class Habit {
     }
 
     public Habit(String name, Instant createdAt) {
+        this(null, name, createdAt);
+    }
+
+    public Habit(
+        Long ownerId,
+        String name,
+        Instant createdAt
+    ) {
+        this.ownerId = ownerId;
         this.name = name;
         this.createdAt = Objects.requireNonNull(
             createdAt,
@@ -58,6 +69,10 @@ public class Habit {
 
     public Long getId() {
         return id;
+    }
+
+    public Long getOwnerId() {
+        return ownerId;
     }
 
     public String getName() {

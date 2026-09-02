@@ -68,6 +68,7 @@ class HabitCompletionConcurrencyIntegrationTest
     private ApiClientRepository apiClientRepository;
 
     private String apiKey;
+    private Long ownerId;
 
     @Autowired
     private HabitTestFixtureRepository fixtureRepository;
@@ -86,7 +87,11 @@ class HabitCompletionConcurrencyIntegrationTest
 
     @BeforeEach
     void provisionInternalClient() {
-        apiKey = apiClientFixture.provisionInternalClient();
+        var client =
+            apiClientFixture
+                .provisionInternalClientWithIdentity();
+        apiKey = client.apiKey();
+        ownerId = client.clientId();
     }
 
     @AfterEach
@@ -212,7 +217,7 @@ class HabitCompletionConcurrencyIntegrationTest
 
             Habit persisted =
                 habitMapper.findById(
-                    habit.getId()
+                    ownerId, habit.getId()
                 );
 
             assertThat(
@@ -272,7 +277,7 @@ class HabitCompletionConcurrencyIntegrationTest
         LocalDate today
     ) {
         Habit habit =
-            new Habit(
+            new Habit(ownerId,
                 "Concurrent completion",
                 FIXED
             );

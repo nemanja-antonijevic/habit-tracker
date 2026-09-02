@@ -54,9 +54,9 @@ public class HabitCommandService {
         this.clock = clock;
     }
 
-    public Habit complete(Long habitId, LocalDate today) {
+    public Habit complete(Long ownerId, Long habitId, LocalDate today) {
         try {
-            return executeCompleteAttempt(habitId, today);
+            return executeCompleteAttempt(ownerId, habitId, today);
         } catch (HabitVersionConflictException firstConflict) {
             logger.info(
                 "Habit completion version conflict; retrying once, "
@@ -67,7 +67,7 @@ public class HabitCommandService {
             );
 
             try {
-                return executeCompleteAttempt(habitId, today);
+                return executeCompleteAttempt(ownerId, habitId, today);
             } catch (HabitVersionConflictException retryConflict) {
                 logger.warn(
                     "Habit completion retry exhausted, "
@@ -83,20 +83,21 @@ public class HabitCommandService {
     }
 
     private Habit executeCompleteAttempt(
+        Long ownerId,
         Long habitId,
         LocalDate today
     ) {
         return Objects.requireNonNull(
             transactionTemplate.execute(
-                status -> completeAttempt(habitId, today)
+                status -> completeAttempt(ownerId, habitId, today)
             ),
             "Completion transaction must return a Habit"
         );
     }
 
-    private Habit completeAttempt(Long habitId, LocalDate today) {
+    private Habit completeAttempt(Long ownerId, Long habitId, LocalDate today) {
         Habit habit = Optional.ofNullable(
-                habitMapper.findById(habitId)
+                habitMapper.findById(ownerId, habitId)
             )
             .orElseThrow(
                 () -> new HabitNotFoundException(habitId)
@@ -144,6 +145,7 @@ public class HabitCommandService {
     // Wrapping this method in a transaction would make TransactionTemplate join it
     // through REQUIRED propagation and break per-item durability.
     public BulkCompleteResponse bulkComplete(
+        Long ownerId,
         List<Long> habitIds,
         LocalDate today
     ) {
@@ -158,7 +160,7 @@ public class HabitCommandService {
         // for every item. The request is capped at 100 ids.
         for (Long habitId : habitIds) {
             BulkCompleteOutcome outcome =
-                completeBulkItemWithRetry(habitId, today);
+                completeBulkItemWithRetry(ownerId, habitId, today);
 
             switch (outcome) {
                 case COMPLETED -> completed.add(habitId);
@@ -179,11 +181,12 @@ public class HabitCommandService {
     }
 
     private BulkCompleteOutcome completeBulkItemWithRetry(
+        Long ownerId,
         Long habitId,
         LocalDate today
     ) {
         try {
-            return executeBulkCompleteAttempt(habitId, today);
+            return executeBulkCompleteAttempt(ownerId, habitId, today);
         } catch (HabitVersionConflictException firstConflict) {
             logger.info(
                 "Bulk habit completion version conflict; retrying once, "
@@ -194,7 +197,7 @@ public class HabitCommandService {
             );
 
             try {
-                return executeBulkCompleteAttempt(habitId, today);
+                return executeBulkCompleteAttempt(ownerId, habitId, today);
             } catch (HabitVersionConflictException retryConflict) {
                 logger.warn(
                     "Bulk habit completion retry exhausted, "
@@ -210,22 +213,24 @@ public class HabitCommandService {
     }
 
     private BulkCompleteOutcome executeBulkCompleteAttempt(
+        Long ownerId,
         Long habitId,
         LocalDate today
     ) {
         return Objects.requireNonNull(
             transactionTemplate.execute(
-                status -> bulkCompleteAttempt(habitId, today)
+                status -> bulkCompleteAttempt(ownerId, habitId, today)
             ),
             "Bulk completion transaction must return an outcome"
         );
     }
 
     private BulkCompleteOutcome bulkCompleteAttempt(
+        Long ownerId,
         Long habitId,
         LocalDate today
     ) {
-        Habit habit = habitMapper.findById(habitId);
+        Habit habit = habitMapper.findById(ownerId, habitId);
 
         if (habit == null) {
             return BulkCompleteOutcome.NOT_FOUND;
@@ -258,8 +263,8 @@ public class HabitCommandService {
     }
 
     @Transactional
-    public Habit create(String name, Set<DayOfWeek> scheduledDays) {
-        Habit habit = new Habit(name, clock.instant());
+    public Habit create(Long ownerId, String name, Set<DayOfWeek> scheduledDays) {
+        Habit habit = new Habit(ownerId, name, clock.instant());
 
         EnumSet<DayOfWeek> effectiveScheduledDays = scheduledDays == null
                 ? EnumSet.allOf(DayOfWeek.class)
@@ -275,8 +280,8 @@ public class HabitCommandService {
     }
 
     @Transactional
-    public Habit uncomplete(Long habitId, LocalDate today) {
-        Habit habit = Optional.ofNullable(habitMapper.findById(habitId))
+    public Habit uncomplete(Long ownerId, Long habitId, LocalDate today) {
+        Habit habit = Optional.ofNullable(habitMapper.findById(ownerId, habitId))
             .orElseThrow(() -> new HabitNotFoundException(habitId));
 
         completionRepository.deleteByHabitIdAndCompletedOn(habitId, today);
@@ -310,8 +315,8 @@ public class HabitCommandService {
     }
 
     @Transactional
-    public Habit update(Long habitId, Long version, String name, Set<DayOfWeek> scheduledDays) {
-        Habit habit = Optional.ofNullable(habitMapper.findById(habitId))
+    public Habit update(Long ownerId, Long habitId, Long version, String name, Set<DayOfWeek> scheduledDays) {
+        Habit habit = Optional.ofNullable(habitMapper.findById(ownerId, habitId))
             .orElseThrow(() -> new HabitNotFoundException(habitId));
 
         if (!habit.getVersion().equals(version)) {
@@ -335,8 +340,8 @@ public class HabitCommandService {
     }
 
     @Transactional
-    public Habit archive(Long habitId) {
-        Habit habit = Optional.ofNullable(habitMapper.findById(habitId))
+    public Habit archive(Long ownerId, Long habitId) {
+        Habit habit = Optional.ofNullable(habitMapper.findById(ownerId, habitId))
             .orElseThrow(() -> new HabitNotFoundException(habitId));
 
         habit.archive();
@@ -353,8 +358,8 @@ public class HabitCommandService {
     }
 
     @Transactional
-    public Habit unarchive(Long habitId) {
-        Habit habit = Optional.ofNullable(habitMapper.findById(habitId))
+    public Habit unarchive(Long ownerId, Long habitId) {
+        Habit habit = Optional.ofNullable(habitMapper.findById(ownerId, habitId))
             .orElseThrow(() -> new HabitNotFoundException(habitId));
 
         habit.unarchive();
@@ -371,12 +376,12 @@ public class HabitCommandService {
     }
 
     @Transactional
-    public void delete(Long habitId) {
-        if (!habitMapper.existsById(habitId)) {
+    public void delete(Long ownerId, Long habitId) {
+        if (!habitMapper.existsById(ownerId, habitId)) {
             throw new HabitNotFoundException(habitId);
         }
 
-        habitMapper.deleteById(habitId);
+        habitMapper.deleteById(ownerId, habitId);
 
         applicationEventPublisher.publishEvent(
             new DashboardChangedEvent()

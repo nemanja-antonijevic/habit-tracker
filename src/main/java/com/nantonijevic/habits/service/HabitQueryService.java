@@ -57,9 +57,9 @@ public class HabitQueryService {
         this.clock = clock;
     }
 
-    public Habit getById(Long habitId) {
+    public Habit getById(Long ownerId, Long habitId) {
         return Optional.ofNullable(
-            habitMapper.findById(habitId)
+            habitMapper.findById(ownerId, habitId)
         ).orElseThrow(
             () -> new HabitNotFoundException(habitId)
         );
@@ -67,6 +67,7 @@ public class HabitQueryService {
 
     @Transactional(readOnly = true)
     public Page<Habit> list(
+        Long ownerId,
         boolean includeArchived,
         String name,
         Pageable pageable
@@ -89,6 +90,7 @@ public class HabitQueryService {
                 : name.trim();
 
         return habitSearchRepository.search(
+            ownerId,
             normalizedName,
             includeArchived,
             effectivePageable
@@ -97,6 +99,7 @@ public class HabitQueryService {
 
     @Transactional(readOnly = true)
     public Page<HabitCompletion> getHistory(
+        Long ownerId,
         Long habitId,
         LocalDate from,
         LocalDate to,
@@ -106,7 +109,7 @@ public class HabitQueryService {
             throw new InvalidDateRangeException();
         }
 
-        if (!habitMapper.existsById(habitId)) {
+        if (!habitMapper.existsById(ownerId, habitId)) {
             throw new HabitNotFoundException(habitId);
         }
 
@@ -121,13 +124,14 @@ public class HabitQueryService {
 
     @Transactional(readOnly = true)
     public Page<Habit> dueToday(
+        Long ownerId,
         LocalDate today,
         Pageable pageable
     ) {
         // scheduled_days je CSV-serijalizovana kolona, pa filtriranje po danu ne
         // radimo u SQL WHERE — učitavamo aktivne habite i filtriramo u memoriji.
         // Prihvatljivo za ličnu skalu (desetine habita); nije za velike skupove.
-        List<Habit> filtered = habitMapper.findActive()
+        List<Habit> filtered = habitMapper.findActive(ownerId)
             .stream()
             .filter(habit -> isDueToday(habit, today))
             .toList();
@@ -151,8 +155,8 @@ public class HabitQueryService {
     }
 
     @Transactional(readOnly = true)
-    public long countDueToday(LocalDate today) {
-        return habitMapper.findActive()
+    public long countDueToday(Long ownerId, LocalDate today) {
+        return habitMapper.findActive(ownerId)
             .stream()
             .filter(habit -> isDueToday(habit, today))
             .count();
@@ -160,6 +164,7 @@ public class HabitQueryService {
 
     @Transactional(readOnly = true)
     public HabitCompletionRateResponse getCompletionRate(
+        Long ownerId,
         Long habitId,
         LocalDate from,
         LocalDate to
@@ -169,7 +174,7 @@ public class HabitQueryService {
         }
 
         Habit habit = Optional.ofNullable(
-            habitMapper.findById(habitId)
+            habitMapper.findById(ownerId, habitId)
         ).orElseThrow(
             () -> new HabitNotFoundException(habitId)
         );
@@ -233,11 +238,12 @@ public class HabitQueryService {
 
     @Transactional(readOnly = true)
     public HabitStatsView getStatsProjection(
+        Long ownerId,
         Long habitId,
         LocalDate today
     ) {
         Habit habit = Optional.ofNullable(
-            habitMapper.findById(habitId)
+            habitMapper.findById(ownerId, habitId)
         ).orElseThrow(
             () -> new HabitNotFoundException(habitId)
         );
@@ -280,10 +286,11 @@ public class HabitQueryService {
                 + ") == 'redis'"
     )
     public HabitDashboardResponse getDashboardStats(
+        Long ownerId,
         LocalDate today
     ) {
         List<Habit> activeHabits =
-            habitMapper.findActive();
+            habitMapper.findActive(ownerId);
 
         List<Long> activeHabitIds =
             activeHabits.stream()

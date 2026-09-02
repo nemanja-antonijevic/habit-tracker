@@ -57,20 +57,24 @@ class ClientTierFilteringIntegrationTest
     private ApiKeyHasher apiKeyHasher;
 
     private String publicApiKey;
+    private Long publicClientId;
 
     @BeforeEach
     void provisionPublicClient() {
         publicApiKey =
             "public-key-" + UUID.randomUUID();
 
-        apiClientRepository.saveAndFlush(
-            new ApiClient(
-                apiKeyHasher.hash(publicApiKey),
-                ClientTier.PUBLIC,
-                "Public client",
-                CREATED_AT
-            )
-        );
+        ApiClient publicClient =
+            apiClientRepository.saveAndFlush(
+                new ApiClient(
+                    apiKeyHasher.hash(publicApiKey),
+                    ClientTier.PUBLIC,
+                    "Public client",
+                    CREATED_AT
+                )
+            );
+
+        publicClientId = publicClient.getId();
     }
 
     @Test
@@ -78,7 +82,7 @@ class ClientTierFilteringIntegrationTest
         throws Exception {
 
         Habit saved = habitRepository.save(
-            new Habit("Read", CREATED_AT)
+            new Habit(publicClientId, "Read", CREATED_AT)
         );
 
         mockMvc.perform(
@@ -111,21 +115,38 @@ class ClientTierFilteringIntegrationTest
     void listFiltersFieldsWithoutChangingPaginationMetadata()
         throws Exception {
 
-        apiClientRepository.saveAndFlush(
-            new ApiClient(
-                apiKeyHasher.hash("internal-key"),
-                ClientTier.INTERNAL,
-                "Internal client",
-                Instant.parse("2026-08-19T09:00:00Z")
+        ApiClient internalClient =
+            apiClientRepository.saveAndFlush(
+                new ApiClient(
+                    apiKeyHasher.hash("internal-key"),
+                    ClientTier.INTERNAL,
+                    "Internal client",
+                    Instant.parse("2026-08-19T09:00:00Z")
+                )
+            );
+
+        habitRepository.save(
+            new Habit(publicClientId, "Tier list A", CREATED_AT)
+        );
+
+        habitRepository.save(
+            new Habit(publicClientId,
+                "Tier list B",
+                CREATED_AT.plusSeconds(1)
             )
         );
 
         habitRepository.save(
-            new Habit("Tier list A", CREATED_AT)
+            new Habit(
+                internalClient.getId(),
+                "Tier list A",
+                CREATED_AT
+            )
         );
 
         habitRepository.save(
             new Habit(
+                internalClient.getId(),
                 "Tier list B",
                 CREATED_AT.plusSeconds(1)
             )
@@ -214,17 +235,22 @@ class ClientTierFilteringIntegrationTest
     void completeUsesTrustedTierFiltering()
         throws Exception {
 
-        apiClientRepository.saveAndFlush(
-            new ApiClient(
-                apiKeyHasher.hash("trusted-key"),
-                ClientTier.TRUSTED,
-                "Trusted client",
-                Instant.parse("2026-08-19T09:00:00Z")
-            )
-        );
+        ApiClient trustedClient =
+            apiClientRepository.saveAndFlush(
+                new ApiClient(
+                    apiKeyHasher.hash("trusted-key"),
+                    ClientTier.TRUSTED,
+                    "Trusted client",
+                    Instant.parse("2026-08-19T09:00:00Z")
+                )
+            );
 
         Habit saved = habitRepository.save(
-            new Habit("Complete tier habit", CREATED_AT)
+            new Habit(
+                trustedClient.getId(),
+                "Complete tier habit",
+                CREATED_AT
+            )
         );
 
         mockMvc.perform(
@@ -301,7 +327,7 @@ class ClientTierFilteringIntegrationTest
         throws Exception {
 
         Habit saved = habitRepository.save(
-            new Habit(
+            new Habit(publicClientId,
                 "Unknown API key",
                 CREATED_AT
             )
@@ -344,7 +370,7 @@ class ClientTierFilteringIntegrationTest
             );
         }
 
-        Habit habit = new Habit(
+        Habit habit = new Habit(publicClientId,
             name,
             CREATED_AT.plusSeconds(endpoint.ordinal())
         );

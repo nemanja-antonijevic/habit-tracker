@@ -8,6 +8,7 @@
     <resultMap id="habitResultMap"
                type="com.nantonijevic.habits.domain.Habit">
         <id column="id" property="id"/>
+        <result column="owner_id" property="ownerId"/>
         <result column="version" property="version"/>
         <result column="name" property="name"/>
         <result column="completion_count" property="completionCount"/>
@@ -23,8 +24,9 @@
 
     <sql id="searchWhere">
         <where>
+            owner_id = #{ownerId}
             <if test="includeArchived == false">
-                archived = FALSE
+                AND archived = FALSE
             </if>
             <if test="name != null">
                 AND LOWER(name) LIKE LOWER(CONCAT('%', #{name}, '%'))
@@ -33,9 +35,9 @@
     </sql>
 
     <select id="findById"
-            parameterType="java.lang.Long"
             resultMap="habitResultMap">
         SELECT id,
+        owner_id,
         version,
         name,
         completion_count,
@@ -46,25 +48,28 @@
         created_at,
         scheduled_days
         FROM habits
-        WHERE id = #{id}
+        WHERE owner_id = #{ownerId}
+        AND id = #{id}
     </select>
 
     <select id="existsById"
-            parameterType="java.lang.Long"
             resultType="boolean">
         SELECT COUNT(*)
         FROM habits
-        WHERE id = #{id}
+        WHERE owner_id = #{ownerId}
+        AND id = #{id}
     </select>
 
     <delete id="deleteById">
         DELETE FROM habits
-        WHERE id = #{id}
+        WHERE owner_id = #{ownerId}
+        AND id = #{id}
     </delete>
 
     <select id="findActive"
             resultMap="habitResultMap">
         SELECT id,
+        owner_id,
         version,
         name,
         completion_count,
@@ -75,7 +80,8 @@
         created_at,
         scheduled_days
         FROM habits
-        WHERE archived = FALSE
+        WHERE owner_id = #{ownerId}
+        AND archived = FALSE
         ORDER BY created_at DESC, id DESC
     </select>
 
@@ -84,6 +90,7 @@
             useGeneratedKeys="true"
             keyProperty="id">
         INSERT INTO habits (
+        owner_id,
         name,
         scheduled_days,
         completion_count,
@@ -94,6 +101,7 @@
         created_at
         )
         VALUES (
+        #{ownerId,jdbcType=BIGINT},
         #{name},
         #{scheduledDays,
             jdbcType=VARCHAR,
@@ -120,13 +128,15 @@
         current_streak = #{currentStreak},
         last_completed_at = #{lastCompletedAt},
         version = version + 1
-        WHERE id = #{id}
+        WHERE owner_id = #{ownerId}
+        AND id = #{id}
         AND version = #{version}
     </update>
 
     <select id="search"
             resultMap="habitResultMap">
         SELECT id,
+        owner_id,
         version,
         name,
         completion_count,

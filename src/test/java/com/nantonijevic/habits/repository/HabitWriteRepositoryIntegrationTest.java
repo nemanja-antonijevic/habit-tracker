@@ -18,6 +18,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @Transactional
 class HabitWriteRepositoryIntegrationTest extends AbstractIntegrationTest {
 
+    private static final Long OWNER_ID = 501L;
+
+    @org.junit.jupiter.api.BeforeEach
+    void ensureTestOwnerExists() {
+        com.nantonijevic.habits.support.TestApiClientOwner
+            .ensureExists(jdbcTemplate, OWNER_ID);
+    }
+
     private static final Instant FIXED =
         Instant.parse("2026-01-15T12:00:00Z");
 
@@ -32,7 +40,7 @@ class HabitWriteRepositoryIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void insertsHabitAndSynchronizesGeneratedIdAndVersion() {
-        Habit habit = new Habit("Workout", FIXED);
+        Habit habit = new Habit(OWNER_ID, "Workout", FIXED);
 
         habit.setScheduledDays(
             EnumSet.of(
@@ -81,7 +89,7 @@ class HabitWriteRepositoryIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void updatesHabitAndIncrementsVersionInDatabaseAndMemory() {
-        Habit habit = new Habit("Workout", FIXED);
+        Habit habit = new Habit(OWNER_ID, "Workout", FIXED);
         habitRepository.save(habit);
 
         assertThat(habit.getVersion()).isZero();
@@ -125,7 +133,7 @@ class HabitWriteRepositoryIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void rejectsUpdateWhenVersionIsStale() {
-        Habit habit = new Habit("Workout", FIXED);
+        Habit habit = new Habit(OWNER_ID, "Workout", FIXED);
         habitRepository.save(habit);
 
         habit.setName("Current name");
@@ -133,7 +141,7 @@ class HabitWriteRepositoryIntegrationTest extends AbstractIntegrationTest {
 
         assertThat(habit.getVersion()).isEqualTo(1L);
 
-        Habit staleHabit = habitMapper.findById(habit.getId());
+        Habit staleHabit = habitMapper.findById(OWNER_ID, habit.getId());
 
         staleHabit.setName("Stale name");
         staleHabit.synchronizePersistenceVersion(0L);

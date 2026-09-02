@@ -9,19 +9,31 @@ import java.util.List;
 @Mapper
 public interface HabitMapper {
 
-    Habit findById(Long id);
+    Habit findById(
+        @Param("ownerId") Long ownerId,
+        @Param("id") Long id
+    );
 
-    boolean existsById(Long id);
+    boolean existsById(
+        @Param("ownerId") Long ownerId,
+        @Param("id") Long id
+    );
 
-    int deleteById(Long id);
+    int deleteById(
+        @Param("ownerId") Long ownerId,
+        @Param("id") Long id
+    );
 
-    List<Habit> findActive();
+    List<Habit> findActive(
+        @Param("ownerId") Long ownerId
+    );
 
     int insert(Habit habit);
 
     int update(Habit habit);
 
     List<Habit> search(
+            @Param("ownerId") Long ownerId,
             @Param("name") String name,
             @Param("includeArchived") boolean includeArchived,
             @Param("orderBy") String orderBy,
@@ -30,6 +42,7 @@ public interface HabitMapper {
     );
 
     long count(
+            @Param("ownerId") Long ownerId,
             @Param("name") String name,
             @Param("includeArchived") boolean includeArchived
     );

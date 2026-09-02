@@ -30,6 +30,20 @@ class ClientTierArgumentResolverTest {
     }
 
     @Test
+    void supportsAnnotatedClientContextParameter()
+        throws Exception {
+
+        assertThat(
+            resolver.supportsParameter(
+                parameterFor(
+                    "annotatedClientContext",
+                    ClientContext.class
+                )
+            )
+        ).isTrue();
+    }
+
+    @Test
     void doesNotClaimUnannotatedClientTierParameter()
         throws Exception {
 
@@ -58,7 +72,8 @@ class ClientTierArgumentResolverTest {
     }
 
     @Test
-    void returnsTierFromAuthenticatedClientContext() {
+    void returnsTierFromAuthenticatedClientContext()
+        throws Exception {
         MockHttpServletRequest request =
             new MockHttpServletRequest();
 
@@ -71,25 +86,64 @@ class ClientTierArgumentResolverTest {
             )
         );
 
-        ClientTier tier = resolver.resolveArgument(
-            null,
+        Object resolved = resolver.resolveArgument(
+            parameterFor(
+                "annotatedClientTier",
+                ClientTier.class
+            ),
             null,
             new ServletWebRequest(request),
             null
         );
 
-        assertThat(tier)
+        assertThat(resolved)
             .isEqualTo(ClientTier.INTERNAL);
     }
 
     @Test
-    void rejectsMissingClientContext() {
+    void returnsAuthenticatedClientContext()
+        throws Exception {
+
+        MockHttpServletRequest request =
+            new MockHttpServletRequest();
+
+        ClientContext context =
+            new ClientContext(
+                42L,
+                ClientTier.INTERNAL
+            );
+
+        request.setAttribute(
+            ClientAuthenticationInterceptor
+                .CLIENT_CONTEXT_ATTRIBUTE,
+            context
+        );
+
+        Object resolved = resolver.resolveArgument(
+            parameterFor(
+                "annotatedClientContext",
+                ClientContext.class
+            ),
+            null,
+            new ServletWebRequest(request),
+            null
+        );
+
+        assertThat(resolved).isSameAs(context);
+    }
+
+    @Test
+    void rejectsMissingClientContext()
+        throws Exception {
         MockHttpServletRequest request =
             new MockHttpServletRequest();
 
         assertThatThrownBy(
             () -> resolver.resolveArgument(
-                null,
+                parameterFor(
+                    "annotatedClientContext",
+                    ClientContext.class
+                ),
                 null,
                 new ServletWebRequest(request),
                 null
@@ -115,6 +169,11 @@ class ClientTierArgumentResolverTest {
 
         void annotatedClientTier(
             @ResolvedClientTier ClientTier tier
+        ) {
+        }
+
+        void annotatedClientContext(
+            @ResolvedClientTier ClientContext context
         ) {
         }
 

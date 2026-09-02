@@ -27,20 +27,27 @@ public class InternalApiClientFixture {
     }
 
     public String provisionInternalClient() {
+        return provisionInternalClientWithIdentity()
+            .apiKey();
+    }
+
+    public ProvisionedApiClient
+    provisionInternalClientWithIdentity() {
         return provisionInternalClient(true);
     }
 
     public String provisionRevokedInternalClient() {
-        return provisionInternalClient(false);
+        return provisionInternalClient(false)
+            .apiKey();
     }
 
-    private String provisionInternalClient(
+    private ProvisionedApiClient provisionInternalClient(
         boolean active
     ) {
         String rawApiKey =
             "integration-internal-" + UUID.randomUUID();
 
-        repository.saveAndFlush(
+        ApiClient client = repository.saveAndFlush(
             new ApiClient(
                 apiKeyHasher.hash(rawApiKey),
                 ClientTier.INTERNAL,
@@ -50,6 +57,15 @@ public class InternalApiClientFixture {
             )
         );
 
-        return rawApiKey;
+        return new ProvisionedApiClient(
+            rawApiKey,
+            client.getId()
+        );
+    }
+
+    public record ProvisionedApiClient(
+        String apiKey,
+        Long clientId
+    ) {
     }
 }

@@ -17,15 +17,18 @@ public class ClientTierArgumentResolver
     public boolean supportsParameter(
         MethodParameter parameter
     ) {
-        return parameter.getParameterType()
-            .equals(ClientTier.class)
-            && parameter.hasParameterAnnotation(
+        Class<?> parameterType = parameter.getParameterType();
+
+        return (
+            parameterType.equals(ClientContext.class)
+                || parameterType.equals(ClientTier.class)
+        ) && parameter.hasParameterAnnotation(
             ResolvedClientTier.class
         );
     }
 
     @Override
-    public ClientTier resolveArgument(
+    public Object resolveArgument(
         MethodParameter parameter,
         ModelAndViewContainer modelAndViewContainer,
         NativeWebRequest webRequest,
@@ -41,6 +44,9 @@ public class ClientTierArgumentResolver
             throw new InvalidApiKeyException();
         }
 
-        return context.tier();
+        return parameter.getParameterType()
+            .equals(ClientContext.class)
+                ? context
+                : context.tier();
     }
 }

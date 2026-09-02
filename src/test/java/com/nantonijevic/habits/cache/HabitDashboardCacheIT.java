@@ -46,6 +46,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 })
 class HabitDashboardCacheIT {
 
+    private static final Long OWNER_ID = 501L;
+
     private static final int REDIS_PORT = 6379;
 
     @Container
@@ -101,13 +103,13 @@ class HabitDashboardCacheIT {
     void secondDashboardRequestIsCacheHitAndDoesNotRepeatDatabaseRead() {
         LocalDate today = LocalDate.of(2026, 7, 20);
 
-        when(habitMapper.findActive())
+        when(habitMapper.findActive(OWNER_ID))
             .thenReturn(List.of());
 
-        habitQueryService.getDashboardStats(today);
-        habitQueryService.getDashboardStats(today);
+        habitQueryService.getDashboardStats(OWNER_ID, today);
+        habitQueryService.getDashboardStats(OWNER_ID, today);
 
-        verify(habitMapper, times(1)).findActive();
+        verify(habitMapper, times(1)).findActive(OWNER_ID);
     }
 
     @Test
@@ -115,23 +117,23 @@ class HabitDashboardCacheIT {
         LocalDate firstDate = LocalDate.of(2026, 7, 20);
         LocalDate secondDate = firstDate.plusDays(1);
 
-        when(habitMapper.findActive())
+        when(habitMapper.findActive(OWNER_ID))
             .thenReturn(List.of());
 
-        habitQueryService.getDashboardStats(firstDate);
-        habitQueryService.getDashboardStats(secondDate);
+        habitQueryService.getDashboardStats(OWNER_ID, firstDate);
+        habitQueryService.getDashboardStats(OWNER_ID, secondDate);
 
-        verify(habitMapper, times(2)).findActive();
+        verify(habitMapper, times(2)).findActive(OWNER_ID);
     }
 
     @Test
     void dashboardCacheUsesExpectedKeyJsonValueAndFiveMinuteTtl() {
         LocalDate today = LocalDate.of(2026, 7, 20);
 
-        when(habitMapper.findActive())
+        when(habitMapper.findActive(OWNER_ID))
             .thenReturn(List.of());
 
-        habitQueryService.getDashboardStats(today);
+        habitQueryService.getDashboardStats(OWNER_ID, today);
 
         String key = dashboardKey(today);
 
@@ -158,10 +160,10 @@ class HabitDashboardCacheIT {
     void dashboardCacheIsEvictedOnlyAfterTransactionCommits() {
         LocalDate today = LocalDate.of(2026, 7, 20);
 
-        when(habitMapper.findActive())
+        when(habitMapper.findActive(OWNER_ID))
             .thenReturn(List.of());
 
-        habitQueryService.getDashboardStats(today);
+        habitQueryService.getDashboardStats(OWNER_ID, today);
 
         String key = dashboardKey(today);
 
@@ -189,10 +191,10 @@ class HabitDashboardCacheIT {
     void createEvictsDashboardCacheAfterTransactionCommits() {
         LocalDate today = LocalDate.of(2026, 7, 20);
 
-        when(habitMapper.findActive())
+        when(habitMapper.findActive(OWNER_ID))
             .thenReturn(List.of());
 
-        habitQueryService.getDashboardStats(today);
+        habitQueryService.getDashboardStats(OWNER_ID, today);
 
         String key = dashboardKey(today);
 
@@ -203,7 +205,7 @@ class HabitDashboardCacheIT {
         )).thenAnswer(invocation -> invocation.getArgument(0));
 
         habitCommandService.create(
-            "Read",
+            OWNER_ID, "Read",
             EnumSet.allOf(DayOfWeek.class)
         );
 
@@ -218,12 +220,12 @@ class HabitDashboardCacheIT {
         assertThat(cache).isNotNull();
 
         cache.clearStatistics();
-        when(habitMapper.findActive()).thenReturn(List.of());
+        when(habitMapper.findActive(OWNER_ID)).thenReturn(List.of());
 
         LocalDate today = LocalDate.of(2026, 8, 1);
 
-        habitQueryService.getDashboardStats(today);
-        habitQueryService.getDashboardStats(today);
+        habitQueryService.getDashboardStats(OWNER_ID, today);
+        habitQueryService.getDashboardStats(OWNER_ID, today);
 
         CacheStatistics statistics = cache.getStatistics();
 
@@ -234,6 +236,8 @@ class HabitDashboardCacheIT {
 
     private String dashboardKey(LocalDate today) {
         return DASHBOARD_STATS_CACHE
+            + "::"
+            + OWNER_ID
             + "::"
             + dashboardCacheGeneration.current()
             + "::"

@@ -36,6 +36,7 @@ public class HabitSearchRepositoryImpl implements HabitSearchRepository {
 
     @Override
     public Page<Habit> search(
+        Long ownerId,
         String name,
         boolean includeArchived,
         Pageable pageable
@@ -51,6 +52,7 @@ public class HabitSearchRepositoryImpl implements HabitSearchRepository {
             : null;
 
         List<Habit> content = habitMapper.search(
+            ownerId,
             name,
             includeArchived,
             orderBy,
@@ -58,7 +60,11 @@ public class HabitSearchRepositoryImpl implements HabitSearchRepository {
             offset
         );
 
-        long total = habitMapper.count(name, includeArchived);
+        long total = habitMapper.count(
+            ownerId,
+            name,
+            includeArchived
+        );
 
         return new PageImpl<>(content, pageable, total);
     }

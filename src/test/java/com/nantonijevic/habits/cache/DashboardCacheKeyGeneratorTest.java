@@ -26,6 +26,7 @@ class DashboardCacheKeyGeneratorTest {
 
         Method method = HabitQueryService.class.getMethod(
             "getDashboardStats",
+            Long.class,
             LocalDate.class
         );
 
@@ -34,11 +35,12 @@ class DashboardCacheKeyGeneratorTest {
         Object key = keyGenerator.generate(
             new Object(),
             method,
+            42L,
             today
         );
 
         assertThat(key).isEqualTo(
-            "7::2026-07-24"
+            "42::7::2026-07-24"
         );
     }
 
@@ -50,6 +52,7 @@ class DashboardCacheKeyGeneratorTest {
 
         Method method = HabitQueryService.class.getMethod(
             "getDashboardStats",
+            Long.class,
             LocalDate.class
         );
 
@@ -62,22 +65,24 @@ class DashboardCacheKeyGeneratorTest {
         Object firstKey = keyGenerator.generate(
             new Object(),
             method,
+            42L,
             today
         );
 
         Object secondKey = keyGenerator.generate(
             new Object(),
             method,
+            42L,
             today
         );
 
         assertThat(firstKey.toString())
             .startsWith("bypass::")
-            .endsWith("::2026-07-24");
+            .endsWith("::42::2026-07-24");
 
         assertThat(secondKey.toString())
             .startsWith("bypass::")
-            .endsWith("::2026-07-24");
+            .endsWith("::42::2026-07-24");
 
         assertThat(firstKey).isNotEqualTo(secondKey);
     }
@@ -90,6 +95,7 @@ class DashboardCacheKeyGeneratorTest {
 
         Method method = HabitQueryService.class.getMethod(
             "getDashboardStats",
+            Long.class,
             LocalDate.class
         );
 
@@ -103,7 +109,8 @@ class DashboardCacheKeyGeneratorTest {
             () -> keyGenerator.generate(
                 new Object(),
                 method,
-                today
+                42L,
+            today
             )
         )
             .isInstanceOf(IllegalStateException.class)

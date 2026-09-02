@@ -32,16 +32,29 @@ public class DashboardCacheKeyGenerator implements KeyGenerator {
         Method method,
         Object... params
     ) {
-        LocalDate today = (LocalDate) params[0];
+        if (
+            params.length != 2
+                || !(params[0] instanceof Long ownerId)
+                || !(params[1] instanceof LocalDate today)
+        ) {
+            throw new IllegalArgumentException(
+                "Dashboard cache key requires "
+                    + "(Long ownerId, LocalDate today)"
+            );
+        }
 
         try {
-            return generation.current()
+            return ownerId
+                + "::"
+                + generation.current()
                 + "::"
                 + today;
         } catch (DataAccessException exception) {
             String bypassKey =
                 "bypass::"
                     + UUID.randomUUID()
+                    + "::"
+                    + ownerId
                     + "::"
                     + today;
 

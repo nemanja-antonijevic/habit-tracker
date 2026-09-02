@@ -1,5 +1,6 @@
 package com.nantonijevic.habits.controller;
 
+import com.nantonijevic.habits.client.ClientContext;
 import com.nantonijevic.habits.client.ClientTier;
 import com.nantonijevic.habits.client.HabitResponseTransformer;
 import com.nantonijevic.habits.domain.Habit;
@@ -22,6 +23,11 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class HabitControllerTest {
+
+    private static final long OWNER_ID = 101L;
+
+    private static final ClientContext CLIENT_CONTEXT =
+        new ClientContext(OWNER_ID, ClientTier.INTERNAL);
 
     @Mock
     private HabitCommandService habitCommandService;
@@ -52,6 +58,7 @@ class HabitControllerTest {
 
         when(
             habitCommandService.complete(
+                eq(OWNER_ID),
                 eq(42L),
                 any(LocalDate.class)
             )
@@ -68,11 +75,12 @@ class HabitControllerTest {
 
         controller.complete(
             42L,
-            ClientTier.INTERNAL
+            CLIENT_CONTEXT
         );
 
         verify(habitCommandService)
             .complete(
+                OWNER_ID,
                 42L,
                 expectedBusinessDate
             );
