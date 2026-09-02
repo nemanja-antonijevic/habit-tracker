@@ -121,7 +121,39 @@ Cross-owner access by ID is covered separately by `crossOwnerIdEndpointReturns40
 `@ParameterizedTest` over a `CrossOwnerEndpoint` enum with one case per `{id}` endpoint — ten in one
 table rather than ten near-copies — plus `bulkCompleteTreatsForeignHabitAsNotFound`, which asserts the
 foreign habit appears in `notFound` **and** re-reads it afterwards to prove its completion count is
-unchanged. Full suite 241 / 0 / 0 / 0.
+unchanged.
+
+**Both numbers are surefire only.** `18 → 0` and `241 / 0 / 0 / 0` come from `mvn test`, which runs
+40 classes and 241 tests and binds nothing named `*IT`. The four integration-test classes go through
+failsafe on `verify`, and they were not executed once while step 4 was being written — not locally,
+not through the assistant. Entry and exit are therefore comparable to each other but neither is a
+verification of the cut.
+
+The first `mvn verify` after the step failed. See [Bug 36](#bug-36-verify-caught-what-mvn-test-could-not-skip-into)
+below; measured after the fix, surefire is 241 / 0 / 0 / 0 and failsafe 13 / 0 / 0 / 0, with
+`./mvnw -B clean verify` at exit 0.
+
+#### Bug 36: `verify` caught what `mvn test` could not skip into
+
+`DashboardCacheRaceIT` created its habit with the two-argument constructor, so the row carried
+`owner_id = NULL` while the test read the dashboard as owner `501`. The chain, in order:
+
+1. `findActive(ownerId)` is now owner-scoped, so the `NULL`-owner row is invisible to `501`
+2. `activeHabitIds` is empty
+3. `HabitQueryService` short-circuits — `activeHabitIds.isEmpty() ? Map.of() : findLatestByHabitIds(...)`
+4. the test's `@Around` aspect is bound to `findLatestByHabitIds`, so it never fires
+5. `snapshotRead.countDown()` never runs and the 5-second `await` returns `false`
+
+**The failure message described step 5; the defect was step 1.** Not a race, not a flake —
+deterministic. Its sibling `HabitDashboardCacheIT` passes because it mocks `findActive`, so it never
+touches the column that changed: same feature, two tests, only the one using a real repository felt
+step 4.
+
+Fixed by provisioning the owner through `TestApiClientOwner.ensureExists` before the save — the order
+matters, `fk_habits_owner` is `ON DELETE RESTRICT` — and by prepending `ownerId` to both cache keys
+the test constructs, to match `DashboardCacheKeyGenerator`. Same class as the `-DskipTests` trap: green
+from **absence of execution**, not from success. The difference is that here CI caught what the local
+command skipped.
 
 ## Traps found in review
 
@@ -228,10 +260,32 @@ its test rather than left as a second supported shape nothing uses.
 
 ### `Habit(String, Instant)` now builds an ownerless habit
 
-The two-argument constructor delegates to `this(null, name, createdAt)`. No production code uses it —
-`HabitCommandService.create` calls the three-argument form — but it remains public and yields a habit
-that `insert` writes with `owner_id = NULL`, i.e. a row unreachable through the API. Legal while the
-column is nullable; a runtime failure once V18 makes it `NOT NULL`. Delete or deprecate it before V18.
+The two-argument constructor delegates to `this(null, name, createdAt)`, so `insert` writes
+`owner_id = NULL` and the row is unreachable through the API.
+
+This was first written up as a V18 item, reasoning that no production code calls it —
+`HabitCommandService.create` uses the three-argument form. **That reasoning was true and irrelevant, and
+Bug 36 disproved the boundary the same day.** 39 test call sites use the constructor, and owner scoping
+on its own, with the column still nullable, was enough to break one of them. `NOT NULL` was never
+required.
+
+Where it stands now, enumerated rather than recalled:
+
+| Callers | Reach the database | Status |
+| --- | --- | --- |
+| `HabitCommandServiceTest` (21), `HabitQueryServiceTest` (7), `HabitTest` (9), `HabitControllerTest` (1), `HabitResponseTest` (1) | no | safe — `owner_id` never persisted |
+| `HabitCompletionRepositoryIntegrationTest` | yes | latent — queries by `habit_id`, never through `findActive`, so it passes |
+| `DashboardCacheRaceIT` | yes | **broke**, fixed 2026-09-02 |
+
+So the hazard is not a future migration failure; it is any test that saves through this constructor and
+then reads through an owner-scoped statement. Fixing only the one IT that failed closes nothing — the
+next such test fails identically. The open decision is delete the constructor now, or keep it with a
+test that pins it as unit-only; either way it is a today decision, not a V18 one. It is listed under
+V18 below **only** because `NOT NULL` makes it an insert failure as well, which is a second reason, not
+the first.
+
+This is the mirror image of "correct for an unstated reason": a claim that something is harmless until a
+future migration, where the protection was in fact already absent.
 
 ### Owner-scoped cache tests need an explicit cache type
 
@@ -278,7 +332,8 @@ client needs a per-row mapping and cannot use the single-owner backfill.
 Two step-4 items are deferred here rather than to a separate cleanup, because `NOT NULL` forces both:
 
 - **`Habit(String, Instant)`** must be deleted or made unusable. It yields `owner_id = NULL`, which
-  V18 turns from an unreachable row into an insert failure.
+  V18 turns from an unreachable row into an insert failure. V18 is the deadline, not the trigger — it
+  already broke one integration test under step 4 alone (Bug 36 above), so the decision is open now.
 - **Owner fixtures must be unified across dialects.** `TestApiClientOwner` is H2-only
   (`MERGE INTO ... KEY (id)`) while the two `MySqlIT` classes provision owners their own way. V18
   removes the option of an unowned habit, so every test that creates a habit needs a working owner on

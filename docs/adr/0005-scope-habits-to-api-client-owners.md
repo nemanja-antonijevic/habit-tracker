@@ -207,7 +207,17 @@ Entry condition, measured before any change: a second client with one owned habi
 
 Exit condition: the same mutation now leaves 241 of 241 passing. Access by ID is covered separately by a `@ParameterizedTest` over an enum with one case per `{id}` endpoint — all ten — asserting `404` for a foreign habit, plus a mixed-owner bulk test that asserts the foreign ID appears in `notFound` and that its completion count is unchanged afterwards.
 
-Full suite: 241 tests, 0 failures, 0 errors, 0 skipped.
+Both entry and exit numbers above are **surefire only** (`mvn test`, 40 classes, 241 tests). They are comparable to each other but they are not a verification of the cut: the four `*IT` classes bind to failsafe and were not executed while step 4 was being written. The first `mvn verify` after the step failed, on `DashboardCacheRaceIT` — see [Bug 36](#bug-36-the-first-verify-after-this-step-failed-2026-09-02) below.
+
+Measured after that fix: surefire 241 / 0 / 0 / 0 and failsafe 13 / 0 / 0 / 0, `./mvnw -B clean verify` exit 0.
+
+### Bug 36: the first `verify` after this step failed (2026-09-02)
+
+`DashboardCacheRaceIT` built its habit with the two-argument `Habit` constructor, so the row carried `owner_id = NULL` while the test read the dashboard as owner `501`. Owner-scoped `findActive(ownerId)` no longer saw the row, `activeHabitIds` came back empty, `HabitQueryService` short-circuits `findLatestByHabitIds` on an empty list, the test's `@Around` aspect on that method therefore never fired, and the latch it counts down timed out. Deterministic, not a race: the failure message named the timeout, the defect was the ownerless fixture.
+
+Fixed by provisioning the owner through `TestApiClientOwner.ensureExists` and using the three-argument constructor; the two cache keys the test builds also needed `ownerId` prepended to match `DashboardCacheKeyGenerator`.
+
+The finding worth keeping is not the fixture. It is that the exit condition above was measured with a command that does not run integration tests, so a green suite and a passing build were different claims for the whole of step 4.
 
 ### Deviations from the decision, accepted knowingly
 
@@ -221,7 +231,9 @@ What holds the five is `fk_habit_completions_habit` plus the now owner-scoped `h
 
 ### Deferred cleanups this step created
 
-`Habit(String, Instant)` delegates to `this(null, name, createdAt)` and is unused in `src/main/java`. It builds a habit that `insert` writes with `owner_id = NULL` — legal now, a runtime failure after V18. Delete or deprecate it before V18.
+`Habit(String, Instant)` delegates to `this(null, name, createdAt)` and is unused in `src/main/java`. It builds a habit that `insert` writes with `owner_id = NULL`.
+
+This was first recorded here as a V18 problem, on the grounds that no production code calls it. That boundary was wrong and Bug 36 above disproved it the same day: 39 test call sites use it, and owner scoping alone — without `NOT NULL` — was enough to break one integration test. The constructor is a live hazard for any test that reads through an owner-scoped statement, not a future migration hazard. One further call site is latent today: `HabitCompletionRepositoryIntegrationTest` saves an ownerless habit and queries completions by `habit_id`, never through `findActive`, so it passes. Whether to delete the constructor, or keep it with a test that documents it as unit-only, is an open decision and not deferrable to V18.
 
 `TestApiClientOwner.ensureExists` uses H2's `MERGE INTO ... KEY (id)`. All seven current callers are H2 tests; the two `MySqlIT` classes provision owners themselves. The name carries no dialect hint, so the first `MySqlIT` to reuse it fails for a reason its call site does not suggest.
 
