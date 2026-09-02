@@ -108,6 +108,9 @@ class DashboardCacheRaceIT {
     @BeforeEach
     void clearStateBeforeTest() {
         clearState();
+
+        com.nantonijevic.habits.support.TestApiClientOwner
+            .ensureExists(jdbcTemplate, OWNER_ID);
     }
 
     @AfterEach
@@ -126,6 +129,7 @@ class DashboardCacheRaceIT {
             LocalDate.of(2026, 7, 21);
 
         Habit habit = new Habit(
+            OWNER_ID,
             "Read",
             Instant.parse("2026-01-15T00:00:00Z")
         );
@@ -155,6 +159,8 @@ class DashboardCacheRaceIT {
 
         String staleDashboardKey =
             RedisCacheConfig.DASHBOARD_STATS_CACHE
+                + "::"
+                + OWNER_ID
                 + "::"
                 + readerGeneration
                 + "::"
@@ -311,6 +317,8 @@ class DashboardCacheRaceIT {
 
             String activeDashboardKey =
                 RedisCacheConfig.DASHBOARD_STATS_CACHE
+                    + "::"
+                    + OWNER_ID
                     + "::"
                     + activeGeneration
                     + "::"
