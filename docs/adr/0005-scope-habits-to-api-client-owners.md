@@ -229,12 +229,16 @@ What holds the five is `fk_habit_completions_habit` plus the now owner-scoped `h
 
 "The dead path was deleted rather than left in place unused, so no annotation survives that no code reaches." `ClientTierArgumentResolver.supportsParameter` still accepts `ClientTier` alongside `ClientContext`, and after step 4 that branch is reachable only from its own unit test. It is retained as a resolver-level compatibility affordance; to honour the step-3 precedent it should be removed together with that test.
 
-### Deferred cleanups this step created
+### Cleanups this step created
 
-`Habit(String, Instant)` delegates to `this(null, name, createdAt)` and is unused in `src/main/java`. It builds a habit that `insert` writes with `owner_id = NULL`.
+`Habit(String, Instant)` delegated to `this(null, name, createdAt)` and was the only path that could build a habit `insert` writes with `owner_id = NULL`.
 
-This was first recorded here as a V18 problem, on the grounds that no production code calls it. That boundary was wrong and Bug 36 above disproved it the same day: 39 test call sites use it, and owner scoping alone — without `NOT NULL` — was enough to break one integration test. The constructor is a live hazard for any test that reads through an owner-scoped statement, not a future migration hazard. One further call site is latent today: `HabitCompletionRepositoryIntegrationTest` saves an ownerless habit and queries completions by `habit_id`, never through `findActive`, so it passes. Whether to delete the constructor, or keep it with a test that documents it as unit-only, is an open decision and not deferrable to V18.
+This was first recorded here as a V18 problem, on the grounds that no production code calls it. That boundary was wrong and Bug 36 above disproved it the same day: 39 test call sites used it, and owner scoping alone — without `NOT NULL` — was enough to break one integration test.
 
-`TestApiClientOwner.ensureExists` uses H2's `MERGE INTO ... KEY (id)`. All seven current callers are H2 tests; the two `MySqlIT` classes provision owners themselves. The name carries no dialect hint, so the first `MySqlIT` to reuse it fails for a reason its call site does not suggest.
+**Resolved 2026-09-03: the constructor is deleted and `ownerId` is now `Objects.requireNonNull` in the remaining three-argument form.** All 39 unit call sites pass an explicit test owner, and `HabitCompletionRepositoryIntegrationTest` — latent until then, because it queried by `habit_id` and never through `findActive` — provisions a real FK owner through `TestApiClientOwner.ensureExists`. `HabitTest.rejectsMissingOwner` pins the guard; removing the `requireNonNull` fails that test and nothing else, so the protection is asserted rather than incidental. Measured after the change: surefire 242 / 0 / 0 / 0 over 40 classes, failsafe 13 / 0 / 0 / 0 over four.
 
-It is kept as a deliberate test-only helper rather than renamed in this step: no production path is affected, and V18 requires every owner fixture to be revisited regardless, since `owner_id NOT NULL` removes the option of an unowned habit row. Both fixture items above are consequently preconditions of V18, not independent cleanups.
+The guard covers construction, not hydration. `Habit` has no `ownerId` setter, and MyBatis builds rows through `protected Habit()` plus `habitResultMap`, so reading a legacy `owner_id = NULL` row still yields a `Habit` with a null owner and does not throw — deliberately, since a nullable column must stay readable. What no longer exists is a way for Java to *create* one. Closing the column itself remains V18's job.
+
+`TestApiClientOwner.ensureExists` uses H2's `MERGE INTO ... KEY (id)`. Its callers are H2 tests; the two `MySqlIT` classes provision owners themselves. The name carries no dialect hint, so the first `MySqlIT` to reuse it fails for a reason its call site does not suggest.
+
+It is kept as a deliberate test-only helper rather than renamed in this step: no production path is affected, and V18 requires every owner fixture to be revisited regardless, since `owner_id NOT NULL` removes the option of an unowned habit row. This helper is therefore the one remaining fixture precondition of V18; the constructor item above is closed.

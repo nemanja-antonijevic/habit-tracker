@@ -258,31 +258,51 @@ rather than left unused, so that no annotation survives that no code reaches. Th
 as a resolver-level compatibility affordance; if it is not wanted, it should be removed together with
 its test rather than left as a second supported shape nothing uses.
 
-### `Habit(String, Instant)` now builds an ownerless habit
+### `Habit(String, Instant)` built an ownerless habit — deleted 2026-09-03
 
-The two-argument constructor delegates to `this(null, name, createdAt)`, so `insert` writes
-`owner_id = NULL` and the row is unreachable through the API.
+The two-argument constructor delegated to `this(null, name, createdAt)`, so `insert` wrote
+`owner_id = NULL` and the row was unreachable through the API.
 
 This was first written up as a V18 item, reasoning that no production code calls it —
 `HabitCommandService.create` uses the three-argument form. **That reasoning was true and irrelevant, and
-Bug 36 disproved the boundary the same day.** 39 test call sites use the constructor, and owner scoping
+Bug 36 disproved the boundary the same day.** 39 test call sites used the constructor, and owner scoping
 on its own, with the column still nullable, was enough to break one of them. `NOT NULL` was never
 required.
 
-Where it stands now, enumerated rather than recalled:
+Where it stood when the decision was taken, enumerated rather than recalled:
 
 | Callers | Reach the database | Status |
 | --- | --- | --- |
 | `HabitCommandServiceTest` (21), `HabitQueryServiceTest` (7), `HabitTest` (9), `HabitControllerTest` (1), `HabitResponseTest` (1) | no | safe — `owner_id` never persisted |
-| `HabitCompletionRepositoryIntegrationTest` | yes | latent — queries by `habit_id`, never through `findActive`, so it passes |
+| `HabitCompletionRepositoryIntegrationTest` | yes | latent — queries by `habit_id`, never through `findActive`, so it passed |
 | `DashboardCacheRaceIT` | yes | **broke**, fixed 2026-09-02 |
 
-So the hazard is not a future migration failure; it is any test that saves through this constructor and
-then reads through an owner-scoped statement. Fixing only the one IT that failed closes nothing — the
-next such test fails identically. The open decision is delete the constructor now, or keep it with a
-test that pins it as unit-only; either way it is a today decision, not a V18 one. It is listed under
-V18 below **only** because `NOT NULL` makes it an insert failure as well, which is a second reason, not
-the first.
+Fixing only the one IT that failed would have closed nothing — the next test that saves through the
+constructor and reads through an owner-scoped statement fails identically.
+
+**Resolved: the constructor is deleted, and `ownerId` in the remaining three-argument form is
+`Objects.requireNonNull`.** The 39 unit call sites pass an explicit test owner — `101L` in unit classes,
+`501L` where a real row is written, matching the convention already in the suite.
+`HabitCompletionRepositoryIntegrationTest` provisions a real FK owner via
+`TestApiClientOwner.ensureExists` in `@BeforeEach`, ordered before the fixture save because
+`fk_habits_owner` is `ON DELETE RESTRICT`.
+
+Two things measured rather than assumed:
+
+- `HabitTest.rejectsMissingOwner` pins the guard. Removing the `requireNonNull` fails that test and
+  nothing else — so it is the assertion carrying the protection, not a side effect of another test.
+- No call site passes `null` as `ownerId` to the three-argument form, and `Habit` exposes no
+  `ownerId` setter, so construction is the only writable entry point and it is now closed.
+
+The guard does **not** cover hydration. MyBatis builds rows through `protected Habit()` and
+`habitResultMap`, bypassing the constructor, so a legacy `owner_id = NULL` row still reads back as a
+`Habit` with a null owner without throwing. That is intended while the column is nullable; V18 is what
+closes the column. The claim this step earns is narrower than "no ownerless habit exists": Java can no
+longer *create* one.
+
+Measured after the change: surefire 242 / 0 / 0 / 0 over 40 classes (the +1 over 241 is
+`rejectsMissingOwner`, confirmed executed in the surefire XML), failsafe 13 / 0 / 0 / 0 over four,
+`./mvnw -B verify` exit 0.
 
 This is the mirror image of "correct for an unstated reason": a claim that something is harmless until a
 future migration, where the protection was in fact already absent.
@@ -329,11 +349,12 @@ unique `api_key_hash`, never by an assumed numeric ID. In the measured local env
 legacy rows map to the `Local dev` client. An environment whose legacy rows belong to more than one
 client needs a per-row mapping and cannot use the single-owner backfill.
 
-Two step-4 items are deferred here rather than to a separate cleanup, because `NOT NULL` forces both:
+One step-4 item is deferred here rather than to a separate cleanup, because `NOT NULL` forces it.
+The second is already closed:
 
-- **`Habit(String, Instant)`** must be deleted or made unusable. It yields `owner_id = NULL`, which
-  V18 turns from an unreachable row into an insert failure. V18 is the deadline, not the trigger — it
-  already broke one integration test under step 4 alone (Bug 36 above), so the decision is open now.
+- ~~**`Habit(String, Instant)`** must be deleted or made unusable.~~ **Done 2026-09-03**, ahead of
+  V18 and for a reason V18 did not supply: step 4 alone broke one integration test through it
+  (Bug 36 above). V18 was the deadline, never the trigger.
 - **Owner fixtures must be unified across dialects.** `TestApiClientOwner` is H2-only
   (`MERGE INTO ... KEY (id)`) while the two `MySqlIT` classes provision owners their own way. V18
   removes the option of an unowned habit, so every test that creates a habit needs a working owner on
