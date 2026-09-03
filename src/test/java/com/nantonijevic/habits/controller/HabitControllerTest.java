@@ -24,7 +24,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class HabitControllerTest {
 
-    private static final long OWNER_ID = 101L;
+    private static final Long OWNER_ID = 101L;
 
     private static final ClientContext CLIENT_CONTEXT =
         new ClientContext(OWNER_ID, ClientTier.INTERNAL);
@@ -54,7 +54,7 @@ class HabitControllerTest {
             LocalDate.now(clock);
 
         Habit habit =
-            new Habit("Read", clock.instant());
+            new Habit(OWNER_ID, "Read", clock.instant());
 
         when(
             habitCommandService.complete(

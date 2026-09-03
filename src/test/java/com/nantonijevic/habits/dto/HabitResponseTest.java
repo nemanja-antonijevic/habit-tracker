@@ -13,12 +13,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class HabitResponseTest {
 
+    private static final Long OWNER_ID = 101L;
+
     private static final ZoneId TEST_ZONE =
         ZoneId.of("UTC");
 
     @Test
     void fromUsesProvidedTodayForCurrentStreak() {
-        Habit habit = new Habit("Read", Instant.EPOCH);
+        Habit habit = new Habit(OWNER_ID, "Read", Instant.EPOCH);
 
         habit.setScheduledDays(EnumSet.of(
             DayOfWeek.MONDAY,

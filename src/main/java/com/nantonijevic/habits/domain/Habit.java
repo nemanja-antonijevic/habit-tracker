@@ -35,16 +35,15 @@ public class Habit {
     protected Habit() {
     }
 
-    public Habit(String name, Instant createdAt) {
-        this(null, name, createdAt);
-    }
-
     public Habit(
         Long ownerId,
         String name,
         Instant createdAt
     ) {
-        this.ownerId = ownerId;
+        this.ownerId = Objects.requireNonNull(
+            ownerId,
+            "ownerId must not be null"
+        );
         this.name = name;
         this.createdAt = Objects.requireNonNull(
             createdAt,

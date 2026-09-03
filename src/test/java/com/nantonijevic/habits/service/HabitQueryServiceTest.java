@@ -70,7 +70,7 @@ class HabitQueryServiceTest {
     @Test
     void completionRateRoundsOneThirdToFourDecimalPlaces() {
         Long habitId = 42L;
-        Habit habit = new Habit("Read", FIXED);
+        Habit habit = new Habit(OWNER_ID, "Read", FIXED);
 
         LocalDate createdDate =
             LocalDate.ofInstant(
@@ -129,7 +129,7 @@ class HabitQueryServiceTest {
     @Test
     void completionRateReturnsEmptyResponseWithoutQueryWhenHabitWasCreatedAfterWindow() {
         Long habitId = 42L;
-        Habit habit = new Habit("Read", FIXED);
+        Habit habit = new Habit(OWNER_ID, "Read", FIXED);
 
         LocalDate from =
             LocalDate.of(2000, 1, 1);
@@ -183,7 +183,7 @@ class HabitQueryServiceTest {
             LocalDate.of(2026, 8, 1);
 
         Habit habit =
-            new Habit("Read", createdAt);
+            new Habit(OWNER_ID, "Read", createdAt);
 
         when(clock.getZone())
             .thenReturn(businessZone);
@@ -225,7 +225,7 @@ class HabitQueryServiceTest {
         Long habitId = 42L;
 
         Habit habit =
-            new Habit("Read", FIXED);
+            new Habit(OWNER_ID, "Read", FIXED);
 
         Instant createdAt =
             Instant.parse(
@@ -339,7 +339,7 @@ class HabitQueryServiceTest {
         Long habitId = 42L;
 
         Habit habit =
-            new Habit("Read", FIXED);
+            new Habit(OWNER_ID, "Read", FIXED);
 
         Instant createdAt =
             Instant.parse(
@@ -409,7 +409,7 @@ class HabitQueryServiceTest {
         Long habitId = 42L;
 
         Habit habit =
-            new Habit("Read", FIXED);
+            new Habit(OWNER_ID, "Read", FIXED);
 
         LocalDate createdDate =
             LocalDate.ofInstant(
@@ -469,7 +469,7 @@ class HabitQueryServiceTest {
         Long habitId = 42L;
 
         Habit habit =
-            new Habit("Read", FIXED);
+            new Habit(OWNER_ID, "Read", FIXED);
 
         LocalDate createdDate =
             LocalDate.ofInstant(

@@ -14,6 +14,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class HabitTest {
 
+    private static final Long OWNER_ID = 101L;
+
     private static final ZoneId TEST_ZONE =
         ZoneId.of("UTC");
 
@@ -21,8 +23,21 @@ public class HabitTest {
         Instant.parse("2026-01-15T12:00:00Z");
 
     @Test
+    void rejectsMissingOwner() {
+        assertThatThrownBy(
+            () -> new Habit(
+                null,
+                "Ownerless",
+                FIXED
+            )
+        )
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("ownerId must not be null");
+    }
+
+    @Test
     void reComplete_sameDay_afterUncomplete_restoresStreak() {
-        Habit habit = new Habit("Read 30 min", FIXED);
+        Habit habit = new Habit(OWNER_ID, "Read 30 min", FIXED);
         LocalDate today = LocalDate.now(TEST_ZONE);
 
         habit.complete(
@@ -58,7 +73,7 @@ public class HabitTest {
 
     @Test
     void previousScheduledDateBeforeSkipsOffDays() {
-        Habit habit = new Habit("Workout", FIXED);
+        Habit habit = new Habit(OWNER_ID, "Workout", FIXED);
         habit.setScheduledDays(EnumSet.of(
                 DayOfWeek.MONDAY,
                 DayOfWeek.WEDNESDAY,
@@ -73,7 +88,7 @@ public class HabitTest {
 
     @Test
     void completeThrowsWhenTodayIsNotScheduled() {
-        Habit habit = new Habit("Workout", FIXED);
+        Habit habit = new Habit(OWNER_ID, "Workout", FIXED);
         habit.setScheduledDays(EnumSet.of(
                 DayOfWeek.MONDAY,
                 DayOfWeek.WEDNESDAY,
@@ -89,7 +104,7 @@ public class HabitTest {
 
     @Test
     void completeContinuesStreakAcrossOffDays() {
-        Habit habit = new Habit("Workout", FIXED);
+        Habit habit = new Habit(OWNER_ID, "Workout", FIXED);
         habit.setScheduledDays(EnumSet.of(
                 DayOfWeek.MONDAY,
                 DayOfWeek.WEDNESDAY,
@@ -108,7 +123,7 @@ public class HabitTest {
 
     @Test
     void uncompleteLastCompletionRecomputesLongestStreakWhenLatestCompletionCreatedNewRecord() {
-        Habit habit = new Habit("Read 30 min", FIXED);
+        Habit habit = new Habit(OWNER_ID, "Read 30 min", FIXED);
 
         LocalDate day1 = LocalDate.of(2026, 7, 1);
         LocalDate day2 = LocalDate.of(2026, 7, 2);
@@ -132,7 +147,7 @@ public class HabitTest {
 
     @Test
     void uncompleteLastCompletionSetsCurrentStreakToZeroWhenRemainingHistoryIsNotAlive() {
-        Habit habit = new Habit("Read 30 min", FIXED);
+        Habit habit = new Habit(OWNER_ID, "Read 30 min", FIXED);
 
         LocalDate day1 = LocalDate.of(2026, 7, 1);
         LocalDate day2 = LocalDate.of(2026, 7, 2);
@@ -158,7 +173,7 @@ public class HabitTest {
 
     @Test
     void effectiveCurrentStreakStaysAliveAcrossOffDays() {
-        Habit habit = new Habit("Workout", FIXED);
+        Habit habit = new Habit(OWNER_ID, "Workout", FIXED);
         habit.setScheduledDays(EnumSet.of(
                 DayOfWeek.MONDAY,
                 DayOfWeek.WEDNESDAY,
@@ -174,7 +189,7 @@ public class HabitTest {
 
     @Test
     void setScheduledDaysRejectsEmptySchedule() {
-        Habit habit = new Habit("Workout", FIXED);
+        Habit habit = new Habit(OWNER_ID, "Workout", FIXED);
 
         assertThatThrownBy(() -> habit.setScheduledDays(EnumSet.noneOf(DayOfWeek.class)))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -182,7 +197,7 @@ public class HabitTest {
 
     @Test
     void getScheduledDaysReturnsDefensiveCopy() {
-        Habit habit = new Habit("Workout", FIXED);
+        Habit habit = new Habit(OWNER_ID, "Workout", FIXED);
         EnumSet<DayOfWeek> scheduledDays = habit.getScheduledDays();
 
         scheduledDays.clear();

@@ -4,10 +4,13 @@ import com.nantonijevic.habits.AbstractIntegrationTest;
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.domain.HabitCompletion;
 import com.nantonijevic.habits.support.HabitTestFixtureRepository;
+import com.nantonijevic.habits.support.TestApiClientOwner;
 import org.h2.jdbc.JdbcSQLIntegrityConstraintViolationException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -20,16 +23,30 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class HabitCompletionRepositoryIntegrationTest
     extends AbstractIntegrationTest {
 
+    private static final Long OWNER_ID = 501L;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     @Autowired
     private HabitCompletionRepository completionRepository;
 
     @Autowired
     private HabitTestFixtureRepository habitFixtureRepository;
 
+    @BeforeEach
+    void ensureTestOwnerExists() {
+        TestApiClientOwner.ensureExists(
+            jdbcTemplate,
+            OWNER_ID
+        );
+    }
+
     @Test
     void rejectsDuplicateCompletionForSameHabitAndDate() {
         Habit habit = habitFixtureRepository.save(
             new Habit(
+                OWNER_ID,
                 "Unique completion test",
                 Instant.parse("2026-01-15T00:00:00Z")
             )
