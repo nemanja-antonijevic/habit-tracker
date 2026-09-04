@@ -233,10 +233,12 @@ must be owner-scoped regardless of which key is produced — and is, through `fi
 ### `TestApiClientOwner` is H2-only and does not say so
 
 The step-4 helper `TestApiClientOwner.ensureExists` provisions an owner row with
-`MERGE INTO api_clients … KEY (id)`. That is H2 syntax; MySQL does not accept it. Seven test classes
-use it and all seven are H2. The two `MySqlIT` classes provision owners their own way —
-`HabitCompletionConcurrencyMySqlIT` builds `new Habit(ownerId, …)` directly — so nothing is broken
-today.
+`MERGE INTO api_clients … KEY (id)`. That is H2 syntax; MySQL does not accept it. **Nine** test classes
+use it and all nine are H2 (`MySQLContainer` references: zero in every one). The count was seven when
+this was written on 2026-09-02; `51ef692` added `HabitCompletionRepositoryIntegrationTest`, and
+`1a668da` added `DashboardCacheRaceIT`. The two `MySqlIT` classes provision owners their own way —
+`HabitCompletionConcurrencyMySqlIT` through `InternalApiClientFixture` (JPA `saveAndFlush`, dialect
+neutral), and `ApiClientHashConstraintMySqlIT` creates no habits at all — so nothing is broken today.
 
 The name carries no dialect hint, so the first `MySqlIT` that reaches for it fails at runtime for a
 reason its call site does not suggest. Same shape as the `spring.cache.type: none` trap below: green
@@ -246,6 +248,15 @@ Decided 2026-09-02: it stays as an explicitly test-only H2 helper, deferred to V
 now. No production path is affected, and V18 `NOT NULL` forces every owner fixture to be revisited
 anyway — including the two `MySqlIT` classes that currently provision owners their own way. Doing it
 twice buys nothing. The obligation is therefore attached to V18 below, not left as a loose observation.
+
+**Correction, measured 2026-09-04 (Day 90): the reasoning in the paragraph above is wrong, and the
+V18 obligation it created does not exist.** The split between the two mechanisms is clean, not mixed:
+the nine `TestApiClientOwner` classes are H2-only and the two `MySqlIT` classes never touch that
+helper. **No test creates a habit on both dialects**, so `MERGE INTO` is never executed against MySQL
+and `NOT NULL` cannot break it. "V18 forces every owner fixture to be revisited" was inferred from the
+constraint rather than from the call sites; enumerating them shows there is nothing for the constraint
+to force. Renaming the helper for clarity is still worth doing — the dialect trap in the paragraph
+above is real — but it is ordinary hygiene with no dependency on V18 in either direction.
 
 ### The `ClientTier` branch in the argument resolver is unreachable from production
 
@@ -355,12 +366,26 @@ The second is already closed:
 - ~~**`Habit(String, Instant)`** must be deleted or made unusable.~~ **Done 2026-09-03**, ahead of
   V18 and for a reason V18 did not supply: step 4 alone broke one integration test through it
   (Bug 36 above). V18 was the deadline, never the trigger.
-- **Owner fixtures must be unified across dialects.** `TestApiClientOwner` is H2-only
-  (`MERGE INTO ... KEY (id)`) while the two `MySqlIT` classes provision owners their own way. V18
-  removes the option of an unowned habit, so every test that creates a habit needs a working owner on
-  both dialects. That is the point at which one helper covering both is worth writing; renaming it
-  before then would be redone here.
+- ~~**Owner fixtures must be unified across dialects.**~~ **Withdrawn 2026-09-04** — not done, and not
+  an obligation in the first place. The claim was that `TestApiClientOwner` being H2-only
+  (`MERGE INTO ... KEY (id)`) means "every test that creates a habit needs a working owner on both
+  dialects" once `NOT NULL` lands. Enumerating the call sites disproves the premise: all **nine**
+  `TestApiClientOwner` classes have zero `MySQLContainer` references, the two `MySqlIT` classes use
+  `InternalApiClientFixture` (JPA, dialect neutral) or create no habits at all, and **no test creates a
+  habit on both dialects**. `MERGE INTO` never reaches MySQL, so the constraint cannot break it.
+  Unifying the helpers remains reasonable hygiene against the dialect trap, but it is not blocked by
+  V18 and does not block it.
+
+**So V18's remaining precondition is the backfill, and nothing else in the test suite.** Both items
+originally deferred here are now closed — one implemented (`Habit(String, Instant)`, 2026-09-03), one
+withdrawn as never required (above). What is genuinely unmeasured is the DDL itself: `ADD owner_id
+BIGINT NOT NULL` was measured on MySQL with `STRICT_TRANS_TABLES` and silently assigned `0`, but
+`ALTER TABLE habits MODIFY owner_id bigint NOT NULL` against a **populated, backfilled** table has not
+been. Measure that before writing V18, on a copy with the 229 legacy rows present.
 
 Do not read the current green suite as evidence that these are safe. It is green precisely because
 `owner_id` is still nullable — the same reason a green run before step 4 could not detect the teardown
-ordering failure above.
+ordering failure above. **That warning stands, and it cuts both ways: the green suite is also not
+evidence that a deferred item is real.** The withdrawn bullet above sat here for two days as an
+obligation derived from the constraint rather than from the call sites, which is the same error in the
+opposite direction — asserted without measurement, and green either way.
