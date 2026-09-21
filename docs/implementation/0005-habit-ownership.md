@@ -360,6 +360,15 @@ unique `api_key_hash`, never by an assumed numeric ID. In the measured local env
 legacy rows map to the `Local dev` client. An environment whose legacy rows belong to more than one
 client needs a per-row mapping and cannot use the single-owner backfill.
 
+That 229-row statement is a historical environment measurement, not the current volume's schema
+state. On 2026-09-21 the prescribed read-only aggregate against `habits_data` failed with MySQL
+`1054 (42S22): Unknown column 'owner_id' in 'field list'`. No DDL was run against that volume. It is
+therefore still pre-V17, and `null_owners` / `distinct_owners` cannot be measured there until the
+expand migration has been applied deliberately. An absent column must not be recorded as zero null
+owners; schema state is now the first rollout precondition. The Step-1 record is therefore
+`total = not returned` (the earlier recorded total is 229), `null_owners = N/A`, and
+`distinct_owners = N/A` — not three zeroes.
+
 One step-4 item is deferred here rather than to a separate cleanup, because `NOT NULL` forces it.
 The second is already closed:
 
@@ -376,12 +385,35 @@ The second is already closed:
   Unifying the helpers remains reasonable hygiene against the dialect trap, but it is not blocked by
   V18 and does not block it.
 
-**So V18's remaining precondition is the backfill, and nothing else in the test suite.** Both items
-originally deferred here are now closed — one implemented (`Habit(String, Instant)`, 2026-09-03), one
-withdrawn as never required (above). What is genuinely unmeasured is the DDL itself: `ADD owner_id
-BIGINT NOT NULL` was measured on MySQL with `STRICT_TRANS_TABLES` and silently assigned `0`, but
-`ALTER TABLE habits MODIFY owner_id bigint NOT NULL` against a **populated, backfilled** table has not
-been. Measure that before writing V18, on a copy with the 229 legacy rows present.
+**So V18's remaining operational precondition is the backfill, and nothing else in the test suite.**
+Both items originally deferred here are now closed — one implemented (`Habit(String, Instant)`,
+2026-09-03), one withdrawn as never required (above).
+
+The DDL itself was measured on 2026-09-21, before writing V18. The H2 probe used 2.2.224 with the
+suite's MySQL mode flags; the MySQL probe used a disposable `mysql:8.0` container resolving to
+8.0.46 with `STRICT_TRANS_TABLES`. Both schemas contained the V17 index and foreign key.
+
+| Measurement | Statement | Dialect | Data | Observed outcome |
+|---|---|---|---|---|
+| B1 | `MODIFY owner_id bigint NOT NULL` | H2 MODE=MySQL | orphan present | Rejected: `90081-224`, `Column "owner_id" contains null values`; the row remained `NULL`. |
+| B2 | `MODIFY owner_id bigint NOT NULL` | H2 MODE=MySQL | no nulls | Succeeded; `IS_NULLABLE=NO`; `fk_habits_owner` and `idx_habits_owner` remained. |
+| B3 | `ALTER COLUMN owner_id bigint NOT NULL` | H2 MODE=MySQL | no nulls | Succeeded; `IS_NULLABLE=NO`; the FK and index remained. |
+| B4 | `ALTER COLUMN owner_id bigint NOT NULL` | MySQL 8.0.46 | no nulls | Rejected: `1064 (42000)`, syntax error near `bigint NOT NULL`. |
+| A1 | `MODIFY owner_id bigint NOT NULL` | MySQL 8.0.46 | orphan present | Rejected: `1138 (22004) Invalid use of NULL value`; the row remained `NULL` and the column remained nullable. |
+| A2 | `MODIFY owner_id bigint NOT NULL` | MySQL 8.0.46 | no nulls | Succeeded; the owned row remained `owner_id=1`. |
+| C | Inspect A2 after `MODIFY` | MySQL 8.0.46 | no nulls | `fk_habits_owner` and `idx_habits_owner` survived without being dropped; invalid-owner count was `0`. |
+
+**Two conclusions follow from the measurements.** First, one statement works on both dialects:
+`ALTER TABLE habits MODIFY owner_id bigint NOT NULL`. H2's alternative also works on H2, but MySQL
+rejects it, so V18 does not need dialect-specific Flyway locations for this change. Second, a `NULL`
+row fails loudly on both dialects; unlike `ADD ... NOT NULL`, neither probe silently coerced it to
+`0`. The preflight null count remains an operational gate and the backfill remains outside Flyway,
+but the DDL itself is also fail-closed if the gate misses a row.
+
+The corrected V18 precondition order is: (1) prove the environment has the V17 nullable column,
+index and foreign key; (2) record the explicit owner mapping by unique API-key hash; (3) backfill and
+verify `COUNT(*) WHERE owner_id IS NULL = 0`; (4) run the shared `MODIFY` statement without dropping
+the FK or index. V18 is still unwritten after this measurement.
 
 Do not read the current green suite as evidence that these are safe. It is green precisely because
 `owner_id` is still nullable — the same reason a green run before step 4 could not detect the teardown

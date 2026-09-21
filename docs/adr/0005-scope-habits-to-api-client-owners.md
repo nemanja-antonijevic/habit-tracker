@@ -243,6 +243,20 @@ The guard covers construction, not hydration. `Habit` has no `ownerId` setter, a
 
 It is kept as a deliberate test-only helper rather than renamed in this step: no production path is affected, and the rename is cosmetic against a trap that nothing currently triggers.
 
-**Correction, measured 2026-09-04: this helper is not a precondition of V18.** The sentence here previously claimed it was "the one remaining fixture precondition", on the grounds that `owner_id NOT NULL` removes the option of an unowned habit and therefore forces every owner fixture to be revisited. Enumerating the call sites disproves it: all **nine** classes using `TestApiClientOwner` have zero `MySQLContainer` references, `HabitCompletionConcurrencyMySqlIT` provisions owners through `InternalApiClientFixture` (JPA, dialect neutral), and `ApiClientHashConstraintMySqlIT` creates no habits. **No test creates a habit on both dialects**, so `MERGE INTO` never executes against MySQL and the constraint cannot break it. V18's remaining precondition is the backfill alone — plus one unmeasured DDL step, since `ALTER TABLE habits MODIFY owner_id bigint NOT NULL` on a populated table has not been tested the way `ADD ... NOT NULL` was.
+**Correction, measured 2026-09-04: this helper is not a precondition of V18.** The sentence here previously claimed it was "the one remaining fixture precondition", on the grounds that `owner_id NOT NULL` removes the option of an unowned habit and therefore forces every owner fixture to be revisited. Enumerating the call sites disproves it: all **nine** classes using `TestApiClientOwner` have zero `MySQLContainer` references, `HabitCompletionConcurrencyMySqlIT` provisions owners through `InternalApiClientFixture` (JPA, dialect neutral), and `ApiClientHashConstraintMySqlIT` creates no habits. **No test creates a habit on both dialects**, so `MERGE INTO` never executes against MySQL and the constraint cannot break it.
+
+**DDL measured 2026-09-21:** `ALTER TABLE habits MODIFY owner_id bigint NOT NULL` is accepted by
+both H2 2.2.224 in the suite's MySQL mode and MySQL 8.0.46. With a `NULL` row present it fails loudly
+and leaves the row unchanged (H2 `90081-224`; MySQL `1138 (22004)`), rather than coercing the value to
+`0`. With no nulls it succeeds while `fk_habits_owner` and `idx_habits_owner` remain in place. H2's
+`ALTER COLUMN` spelling also succeeds, but MySQL rejects it with `1064 (42000)`, so `MODIFY` is the
+single portable statement and dialect-specific V18 migrations are unnecessary. Full probe outcomes
+and the corrected rollout order are recorded in the implementation notes.
+
+The existing `habits_data` volume exposed one earlier precondition: its read-only aggregate failed
+with MySQL `1054 (42S22)` because `owner_id` does not exist there yet. It is pre-V17, so an absent
+column must not be interpreted as zero null owners. V18's remaining preconditions are therefore
+environmental, in order: establish the V17 nullable schema, record the owner mapping by unique key
+hash, backfill, and verify zero nulls. The DDL shape itself is no longer unmeasured.
 
 Both items once deferred to V18 as fixture work are now closed: the constructor was implemented on 2026-09-03, and this one was withdrawn as never required. The error to avoid repeating is the shared one — each was derived from what the constraint would imply rather than from the call sites, and a green suite confirms neither.
