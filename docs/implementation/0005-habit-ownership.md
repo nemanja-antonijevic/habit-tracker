@@ -391,7 +391,8 @@ Both items originally deferred here are now closed — one implemented (`Habit(S
 
 The DDL itself was measured on 2026-09-21, before writing V18. The H2 probe used 2.2.224 with the
 suite's MySQL mode flags; the MySQL probe used a disposable `mysql:8.0` container resolving to
-8.0.46 with `STRICT_TRANS_TABLES`. Both schemas contained the V17 index and foreign key.
+8.0.46 with its default session mode. That mode contained `STRICT_TRANS_TABLES`, but it was not the
+single-flag mode `STRICT_TRANS_TABLES`. Both schemas contained the V17 index and foreign key.
 
 | Measurement | Statement | Dialect | Data | Observed outcome |
 |---|---|---|---|---|
@@ -400,20 +401,66 @@ suite's MySQL mode flags; the MySQL probe used a disposable `mysql:8.0` containe
 | B3 | `ALTER COLUMN owner_id bigint NOT NULL` | H2 MODE=MySQL | no nulls | Succeeded; `IS_NULLABLE=NO`; the FK and index remained. |
 | B4 | `ALTER COLUMN owner_id bigint NOT NULL` | MySQL 8.0.46 | no nulls | Rejected: `1064 (42000)`, syntax error near `bigint NOT NULL`. |
 | A1 | `MODIFY owner_id bigint NOT NULL` | MySQL 8.0.46 | orphan present | Rejected: `1138 (22004) Invalid use of NULL value`; the row remained `NULL` and the column remained nullable. |
-| A2 | `MODIFY owner_id bigint NOT NULL` | MySQL 8.0.46 | no nulls | Succeeded; the owned row remained `owner_id=1`. |
+| A2 | `MODIFY owner_id bigint NOT NULL` | MySQL 8.0.46 | no nulls | Succeeded; the owned row remained `owner_id=1`. A7 later reproduced this with `foreign_key_checks=1` recorded explicitly. |
 | C | Inspect A2 after `MODIFY` | MySQL 8.0.46 | no nulls | `fk_habits_owner` and `idx_habits_owner` survived without being dropped; invalid-owner count was `0`. |
 
-**Two conclusions follow from the measurements.** First, one statement works on both dialects:
-`ALTER TABLE habits MODIFY owner_id bigint NOT NULL`. H2's alternative also works on H2, but MySQL
-rejects it, so V18 does not need dialect-specific Flyway locations for this change. Second, a `NULL`
-row fails loudly on both dialects; unlike `ADD ... NOT NULL`, neither probe silently coerced it to
-`0`. The preflight null count remains an operational gate and the backfill remains outside Flyway,
-but the DDL itself is also fail-closed if the gate misses a row.
+The empty-mode branch was measured separately on 2026-09-22, using the same MySQL 8.0.46 fixture
+with only the session mode changed. Before the run the prediction was: `MODIFY` would attempt
+`NULL → 0`, the existing foreign key would reject that value with `1452`, and the failed DDL would
+leave the row as `NULL`. The predicted final state was right, but the mechanism was not:
 
-The corrected V18 precondition order is: (1) prove the environment has the V17 nullable column,
-index and foreign key; (2) record the explicit owner mapping by unique API-key hash; (3) backfill and
-verify `COUNT(*) WHERE owner_id IS NULL = 0`; (4) run the shared `MODIFY` statement without dropping
-the FK or index. V18 is still unwritten after this measurement.
+| Measurement | Statement | Dialect | `sql_mode` | Data | Observed outcome |
+|---|---|---|---|---|---|
+| A3 | `MODIFY owner_id bigint NOT NULL` | MySQL 8.0.46 | `''` | orphan present | Rejected: `1832 (HY000)`, `Cannot change column 'owner_id': used in a foreign key constraint 'fk_habits_owner'`. Immediate `SHOW WARNINGS` returned the same row as `Level=Error`, `Code=1832`; there was no coercion warning. |
+| A4 | Read row after A3 | MySQL 8.0.46 | `''` | orphan present | The owned row remained `1`; the orphan remained `NULL`; the column remained nullable. |
+| A5 | Inspect FK after A3 | MySQL 8.0.46 | `''` | orphan present | `fk_habits_owner` and `idx_habits_owner` remained declared; no nonexistent non-null owner was stored. |
+| A6 | `MODIFY owner_id bigint NOT NULL` control | MySQL 8.0.46 | `''` | no nulls | Rejected with the same `1832 (HY000)` while `foreign_key_checks=1`; immediate `SHOW WARNINGS` contained the same error. The valid row remained `owner_id=1`, the column remained nullable, and the FK/index remained declared. |
+| A7 | `MODIFY owner_id bigint NOT NULL` default-mode control | MySQL 8.0.46 | `ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION` | no nulls | Succeeded with `foreign_key_checks=1`; immediate `SHOW WARNINGS` was empty. The valid row remained `owner_id=1`, `IS_NULLABLE=NO`, and the FK/index remained declared. |
+
+The A6 prediction was that `1832` was data-independent because its message names the FK-bound
+column, not a row value. The control confirmed it. A3 therefore did **not** measure non-strict NULL
+coercion: MySQL refused to alter the FK column before inspecting either the orphan or the fully
+backfilled data. Under the empty mode V18 is a hard migration blocker even after a perfect backfill,
+not a tested safety net for missed nulls.
+
+A7 then repeated A2 with the variable A2 had not recorded: `foreign_key_checks=1` was captured both
+before fixture creation and immediately before the DDL. The `MODIFY` succeeded with no warnings.
+A6 and A7 therefore have the same MySQL version, no-null data, FK, index and
+`foreign_key_checks=1`; their recorded difference is the session `sql_mode`, and their outcomes are
+opposite (`1832` vs. success). A6 used the empty mode; A7 used the container's full six-flag default
+shown verbatim in the table. This establishes an empirical dependency on those two measured mode
+configurations. It does **not** isolate `STRICT_TRANS_TABLES` from the other five flags or claim an
+internal explanation for why MySQL routes the FK-bound ALTER differently. A single-flag
+`STRICT_TRANS_TABLES` session remains unmeasured.
+
+**Two conclusions follow from the measurements.** First, one statement works on both dialects in
+the measured configurations:
+`ALTER TABLE habits MODIFY owner_id bigint NOT NULL`. H2's alternative also works on H2, but MySQL
+rejects it, so V18 does not need dialect-specific Flyway locations for this change. Second, under the
+measured MySQL default configuration containing `STRICT_TRANS_TABLES`, a `NULL` row fails loudly;
+H2 rejects it too. Unlike `ADD ... NOT NULL`, neither probe silently coerced it to `0`. Under
+`sql_mode=''`, both
+the orphan fixture and the no-null control fail with `1832` before data validation. The unqualified
+claim that the statement itself is fail-closed is therefore withdrawn: the measured six-flag default
+supplies the NULL rejection and permits the fully backfilled ALTER, while the measured empty mode is
+a data-independent execution blocker. A7 confirms that this conclusion is not an unrecorded
+`foreign_key_checks=0` artefact from A2; it does not identify which flag causes the difference.
+
+`sql_mode` is a rollout precondition, not an ambient assumption. The corrected V18 preconditions
+are: (1) select, pin and verify a measured-good mode on the **application datasource connection that
+Flyway will use**; (2) prove the environment has the V17 nullable column, index and foreign key;
+(3) record the explicit owner mapping by unique API-key hash; (4) backfill; (5) verify
+`COUNT(*) WHERE owner_id IS NULL = 0`. Only then run the shared `MODIFY` statement without dropping
+the FK or index. The mode check is first because it is cheaper than mapping and updating legacy rows,
+and A6 proves that the empty mode cannot execute the migration even when the backfill is complete.
+The only measured-good MySQL value is A7's exact six-flag default. A narrower candidate, including
+the single-flag `STRICT_TRANS_TABLES` mode, must be measured before it is adopted for rollout.
+
+A manual DBA-session check is insufficient: Flyway runs on Spring's datasource connection. The mode
+must be pinned before that connection is opened — for example by server/container `sql_mode` or a
+Connector/J `sessionVariables` datasource setting — and then verified on that same datasource.
+Neither Docker Compose nor the datasource URL currently does this. Choosing and implementing the pin
+belongs to the V18 rollout; this task records the requirement only. V18 is still unwritten.
 
 Do not read the current green suite as evidence that these are safe. It is green precisely because
 `owner_id` is still nullable — the same reason a green run before step 4 could not detect the teardown
