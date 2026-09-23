@@ -1,8 +1,32 @@
 -- Performance fixture: 200 habits across 5 distinct schedules.
 -- Schedules must differ, otherwise the schedule-filtering path is one case measured 200 times.
 -- Run before seed-history.sql. Re-runnable: everything under the 'JFR Seed %' namespace is replaced.
+-- Provisions or reuses an INTERNAL owner for X-Api-Key: jfr-performance-key.
+-- Every seeded habit belongs to that client, so owner-scoped endpoints can read the fixture.
 
 START TRANSACTION;
+
+INSERT INTO api_clients (
+    api_key_hash,
+    tier,
+    name,
+    created_at,
+    active
+)
+VALUES (
+           SHA2('jfr-performance-key', 256),
+           'INTERNAL',
+           'JFR performance fixture',
+           NOW(6),
+           TRUE
+       )
+    ON DUPLICATE KEY UPDATE
+                         id = LAST_INSERT_ID(id),
+                         tier = 'INTERNAL',
+                         name = 'JFR performance fixture',
+                         active = TRUE;
+
+SET @jfr_owner_id = LAST_INSERT_ID();
 
 DELETE s
 FROM habit_completion_stats s
@@ -18,6 +42,7 @@ DELETE FROM habits
 WHERE name LIKE 'JFR Seed %';
 
 INSERT INTO habits (
+    owner_id,
     name,
     created_at,
     completion_count,
@@ -36,6 +61,7 @@ WITH RECURSIVE sequence(n) AS (
     WHERE n < 200
 )
 SELECT
+    @jfr_owner_id,
     CONCAT('JFR Seed ', LPAD(n, 3, '0')),
     TIMESTAMP('2024-08-01 12:00:00'),
     0,
