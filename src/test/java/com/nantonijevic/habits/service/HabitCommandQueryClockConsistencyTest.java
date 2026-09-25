@@ -63,6 +63,9 @@ class HabitCommandQueryClockConsistencyTest {
     @Mock
     private Clock clock;
 
+    @Mock
+    private HabitCompletionMetrics completionMetrics;
+
     @InjectMocks
     private HabitCommandService habitCommandService;
 

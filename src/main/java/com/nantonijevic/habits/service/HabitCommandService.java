@@ -39,25 +39,41 @@ public class HabitCommandService {
     private final ApplicationEventPublisher applicationEventPublisher;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
+    private final HabitCompletionMetrics completionMetrics;
 
     public HabitCommandService(HabitWriteRepository habitWriteRepository,
                                HabitMapper habitMapper,
                                HabitCompletionRepository completionRepository,
                                ApplicationEventPublisher applicationEventPublisher,
                                TransactionTemplate transactionTemplate,
-                               Clock clock) {
+                               Clock clock,
+                               HabitCompletionMetrics completionMetrics) {
         this.habitWriteRepository = habitWriteRepository;
         this.habitMapper = habitMapper;
         this.completionRepository = completionRepository;
         this.applicationEventPublisher = applicationEventPublisher;
         this.transactionTemplate = transactionTemplate;
         this.clock = clock;
+        this.completionMetrics = completionMetrics;
     }
 
-    public Habit complete(Long ownerId, Long habitId, LocalDate today) {
+    public Habit complete(
+        Long ownerId,
+        Long habitId,
+        LocalDate today
+    ) {
         try {
-            return executeCompleteAttempt(ownerId, habitId, today);
-        } catch (HabitVersionConflictException firstConflict) {
+            Habit habit = executeCompleteAttempt(
+                ownerId,
+                habitId,
+                today
+            );
+
+            completionMetrics.recordFirstAttempt();
+            return habit;
+        } catch (
+            HabitVersionConflictException firstConflict
+        ) {
             logger.info(
                 "Habit completion version conflict; retrying once, "
                     + "habitId: {}, date: {}, reason: {}",
@@ -67,8 +83,17 @@ public class HabitCommandService {
             );
 
             try {
-                return executeCompleteAttempt(ownerId, habitId, today);
-            } catch (HabitVersionConflictException retryConflict) {
+                Habit habit = executeCompleteAttempt(
+                    ownerId,
+                    habitId,
+                    today
+                );
+
+                completionMetrics.recordRetried();
+                return habit;
+            } catch (
+                HabitVersionConflictException retryConflict
+            ) {
                 logger.warn(
                     "Habit completion retry exhausted, "
                         + "habitId: {}, date: {}, reason: {}",
@@ -76,6 +101,9 @@ public class HabitCommandService {
                     today,
                     retryConflict.getMessage()
                 );
+
+                completionMetrics
+                    .recordConflictExhausted();
 
                 throw retryConflict;
             }

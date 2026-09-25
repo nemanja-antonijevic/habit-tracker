@@ -67,6 +67,9 @@ class HabitCommandServiceTest {
     @Mock
     private Clock clock;
 
+    @Mock
+    private HabitCompletionMetrics completionMetrics;
+
     @InjectMocks
     private HabitCommandService habitCommandService;
 
@@ -447,6 +450,18 @@ class HabitCommandServiceTest {
             .publishEvent(
                 any(DashboardChangedEvent.class)
             );
+        verify(completionMetrics)
+            .recordFirstAttempt();
+
+        verify(
+            completionMetrics,
+            never()
+        ).recordRetried();
+
+        verify(
+            completionMetrics,
+            never()
+        ).recordConflictExhausted();
     }
 
     @Test
@@ -1184,6 +1199,18 @@ class HabitCommandServiceTest {
                                 + "retry exhausted"
                         )
             );
+        verify(completionMetrics)
+            .recordRetried();
+
+        verify(
+            completionMetrics,
+            never()
+        ).recordFirstAttempt();
+
+        verify(
+            completionMetrics,
+            never()
+        ).recordConflictExhausted();
     }
 
     @Test
@@ -1311,6 +1338,18 @@ class HabitCommandServiceTest {
                     );
                 }
             );
+        verify(completionMetrics)
+            .recordConflictExhausted();
+
+        verify(
+            completionMetrics,
+            never()
+        ).recordFirstAttempt();
+
+        verify(
+            completionMetrics,
+            never()
+        ).recordRetried();
     }
 
     @Test
