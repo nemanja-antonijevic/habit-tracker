@@ -283,12 +283,19 @@ datasource consumers receive the exact A7 value, so the result cannot be inherit
 A manual DBA-session check remains insufficient, and any narrower candidate, including single-flag
 `STRICT_TRANS_TABLES`, still requires its own probe.
 
-The existing `habits_data` volume exposed one earlier precondition: its read-only aggregate failed
-with MySQL `1054 (42S22)` because `owner_id` does not exist there yet. It is pre-V17, so an absent
-column must not be interpreted as zero null owners. V18's remaining preconditions are therefore
-environmental, in fail-fast order: verify that the deployed Flyway datasource still receives the
-pinned exact A7 `sql_mode`, establish the V17 nullable schema, record the owner mapping by unique
-API-key hash, backfill, and verify zero nulls. The DDL shape itself is no longer unmeasured, and its
-measured mode boundary is now pinned in application configuration.
+The persistent `habits_data` volume was remeasured through the real Compose path on 2026-09-26. Its
+`flyway_schema_history` contains V17 with `success=1`, installed at `2026-09-24 08:45:27`, and V17 is
+the newest migration in the repository. `SHOW CREATE TABLE` returned the nullable
+`` `owner_id` bigint DEFAULT NULL `` column, `idx_habits_owner`, `fk_habits_owner ... ON DELETE
+RESTRICT`, and `` `active` tinyint(1) NOT NULL DEFAULT '1' `` on `api_clients`.
+
+The real Compose `app` container exposed the pinned datasource URL and started against that volume.
+MySQL `performance_schema.variables_by_thread` reported the exact six-flag A7 `SQL_MODE` for all ten
+active `habits` sessions from the application container. The live data count was `total=229` and
+`owner_id IS NULL=29`; the earlier prediction that most or all legacy rows would be null-owned was
+wrong. The V17 schema and live-datasource mode preconditions are therefore closed for this volume.
+The remaining rollout order is: record the owner mapping for those 29 rows by unique API-key hash,
+backfill, and verify zero nulls before V18 runs. The DDL shape itself is no longer unmeasured, and its
+measured mode boundary is pinned in application configuration.
 
 Both items once deferred to V18 as fixture work are now closed: the constructor was implemented on 2026-09-03, and this one was withdrawn as never required. The error to avoid repeating is the shared one — each was derived from what the constraint would imply rather than from the call sites, and a green suite confirms neither.

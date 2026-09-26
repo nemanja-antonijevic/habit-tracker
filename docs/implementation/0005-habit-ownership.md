@@ -360,14 +360,29 @@ unique `api_key_hash`, never by an assumed numeric ID. In the measured local env
 legacy rows map to the `Local dev` client. An environment whose legacy rows belong to more than one
 client needs a per-row mapping and cannot use the single-owner backfill.
 
-That 229-row statement is a historical environment measurement, not the current volume's schema
-state. On 2026-09-21 the prescribed read-only aggregate against `habits_data` failed with MySQL
-`1054 (42S22): Unknown column 'owner_id' in 'field list'`. No DDL was run against that volume. It is
-therefore still pre-V17, and `null_owners` / `distinct_owners` cannot be measured there until the
-expand migration has been applied deliberately. An absent column must not be recorded as zero null
-owners; schema state is now the first rollout precondition. The Step-1 record is therefore
-`total = not returned` (the earlier recorded total is 229), `null_owners = N/A`, and
-`distinct_owners = N/A` — not three zeroes.
+That 229-row statement began as a historical environment measurement rather than a fact about the
+current volume's schema. On 2026-09-21 the prescribed read-only aggregate against `habits_data`
+failed with MySQL `1054 (42S22): Unknown column 'owner_id' in 'field list'`; the volume was then
+pre-V17, so the absent column was correctly not recorded as zero null owners.
+
+The same persistent `habits_data` volume was measured again on 2026-09-26, after the real Compose
+application path had applied V17. The prediction was that V17 and its schema objects would now be
+present, that the Compose datasource would receive the pinned A7 mode, and that most or all legacy
+rows would still lack owners. The first two predictions were correct; the last was not. Only 29 of
+229 rows are null-owned.
+
+| Measurement | Question | Observed outcome |
+|---|---|---|
+| S1 | `flyway_schema_history` shows V17 success on live volume? | Yes: version `17`, description `add habit owner and client revocation`, checksum `359272809`, installed `2026-09-24 08:45:27`, `success=1`. V17 is also the newest migration in the repository. |
+| S2 | `owner_id`/`idx_habits_owner`/`fk_habits_owner` present on live volume? | Yes. `SHOW CREATE TABLE habits` returned `` `owner_id` bigint DEFAULT NULL ``, `` KEY `idx_habits_owner` (`owner_id`) ``, and `` CONSTRAINT `fk_habits_owner` FOREIGN KEY (`owner_id`) REFERENCES `api_clients` (`id`) ON DELETE RESTRICT ``. |
+| S3 | `active` column on `api_clients` present on live volume? | Yes. `SHOW CREATE TABLE api_clients` returned `` `active` tinyint(1) NOT NULL DEFAULT '1' ``. |
+| S4 | Live app datasource `@@SESSION.sql_mode` matches A7? | Yes. The real Compose `app` container exposed the pinned URL and started successfully. For all ten `habits` sessions from app host `172.19.0.5`, `performance_schema.variables_by_thread` returned `ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION`. |
+| S5 | `habits` row count / `owner_id IS NULL` count on live volume | `total=229`, `orphans=29`. |
+
+Precondition 2 is therefore closed for this volume: it has the V17 nullable column, owner index,
+foreign key and revocation column, and the real Compose datasource uses the pinned measured-good
+mode. The next rollout work is to record the owner mapping for the 29 null-owned rows before any
+backfill.
 
 One step-4 item is deferred here rather than to a separate cleanup, because `NOT NULL` forces it.
 The second is already closed:
@@ -385,9 +400,10 @@ The second is already closed:
   Unifying the helpers remains reasonable hygiene against the dialect trap, but it is not blocked by
   V18 and does not block it.
 
-**So V18's remaining operational precondition is the backfill, and nothing else in the test suite.**
-Both items originally deferred here are now closed — one implemented (`Habit(String, Instant)`,
-2026-09-03), one withdrawn as never required (above).
+**So V18's remaining operational work is the explicit owner mapping, backfill and zero-null
+verification; nothing else in the test suite blocks it.** Both fixture items originally deferred
+here are now closed — one implemented (`Habit(String, Instant)`, 2026-09-03), one withdrawn as never
+required (above).
 
 The DDL itself was measured on 2026-09-21, before writing V18. The H2 probe used 2.2.224 with the
 suite's MySQL mode flags; the MySQL probe used a disposable `mysql:8.0` container resolving to
