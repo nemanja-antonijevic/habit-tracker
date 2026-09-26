@@ -274,19 +274,21 @@ dependency on those two measured mode configurations without claiming an interna
 for the unexpected `1832`. It does not isolate `STRICT_TRANS_TABLES` from the other five default
 flags; the single-flag `STRICT_TRANS_TABLES` mode remains unmeasured.
 
-Because the application and Docker Compose do not pin `sql_mode`, a measured-good mode must be
-pinned and verified on the **application datasource connection used by Flyway**, before any backfill
-work begins. A manual DBA-session check does not constrain Flyway's connection. The rollout must use
-a server/container setting or a Connector/J datasource session setting, then verify the resulting
-mode on that same datasource. The only measured-good MySQL value is the exact six-flag A7 value
-above; any narrower candidate, including single-flag `STRICT_TRANS_TABLES`, requires its own probe.
-Choosing the concrete pin belongs to the V18 rollout.
+As of 2026-09-26, the application and Docker Compose pin the exact measured-good six-flag A7 value
+through Connector/J `sessionVariables` on the **application datasource connection used by Flyway**.
+`FlywaySqlModeMySqlIT` starts MySQL with an empty global `sql_mode`, captures the global and session
+values directly from Flyway's `Context.getConnection()` before migration, and verifies the session
+value again through the application `JdbcTemplate`. The global mode remains empty while both
+datasource consumers receive the exact A7 value, so the result cannot be inherited from the server.
+A manual DBA-session check remains insufficient, and any narrower candidate, including single-flag
+`STRICT_TRANS_TABLES`, still requires its own probe.
 
 The existing `habits_data` volume exposed one earlier precondition: its read-only aggregate failed
 with MySQL `1054 (42S22)` because `owner_id` does not exist there yet. It is pre-V17, so an absent
 column must not be interpreted as zero null owners. V18's remaining preconditions are therefore
-environmental, in fail-fast order: select, pin and verify a measured-good `sql_mode` on Flyway's
-datasource, establish the V17 nullable schema, record the owner mapping by unique key hash, backfill, and verify
-zero nulls. The DDL shape itself is no longer unmeasured, but its mode boundary is now explicit.
+environmental, in fail-fast order: verify that the deployed Flyway datasource still receives the
+pinned exact A7 `sql_mode`, establish the V17 nullable schema, record the owner mapping by unique
+API-key hash, backfill, and verify zero nulls. The DDL shape itself is no longer unmeasured, and its
+measured mode boundary is now pinned in application configuration.
 
 Both items once deferred to V18 as fixture work are now closed: the constructor was implemented on 2026-09-03, and this one was withdrawn as never required. The error to avoid repeating is the shared one — each was derived from what the constraint would imply rather than from the call sites, and a green suite confirms neither.

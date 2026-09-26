@@ -456,11 +456,14 @@ and A6 proves that the empty mode cannot execute the migration even when the bac
 The only measured-good MySQL value is A7's exact six-flag default. A narrower candidate, including
 the single-flag `STRICT_TRANS_TABLES` mode, must be measured before it is adopted for rollout.
 
-A manual DBA-session check is insufficient: Flyway runs on Spring's datasource connection. The mode
-must be pinned before that connection is opened — for example by server/container `sql_mode` or a
-Connector/J `sessionVariables` datasource setting — and then verified on that same datasource.
-Neither Docker Compose nor the datasource URL currently does this. Choosing and implementing the pin
-belongs to the V18 rollout; this task records the requirement only. V18 is still unwritten.
+A manual DBA-session check is insufficient: Flyway runs on Spring's datasource connection. As of
+2026-09-26, the exact measured-good A7 value is pinned through Connector/J `sessionVariables` in
+both the default datasource URL and the Docker Compose application override, before Flyway opens its
+connection. `FlywaySqlModeMySqlIT` starts MySQL with an empty global `sql_mode`, captures
+`@@GLOBAL.sql_mode` and `@@SESSION.sql_mode` directly from Flyway's `Context.getConnection()` before
+migration, and then reads the session value again through the application `JdbcTemplate`. The test
+proves that the global mode remains empty while both datasource consumers receive the exact six-flag
+A7 value. V18 is still unwritten.
 
 Do not read the current green suite as evidence that these are safe. It is green precisely because
 `owner_id` is still nullable — the same reason a green run before step 4 could not detect the teardown
