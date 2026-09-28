@@ -7,10 +7,13 @@ import ch.qos.logback.core.read.ListAppender;
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.domain.HabitCompletion;
 import com.nantonijevic.habits.domain.HabitNotFoundException;
+import com.nantonijevic.habits.domain.HabitSkip;
 import com.nantonijevic.habits.domain.HabitVersionConflictException;
+import com.nantonijevic.habits.domain.InvalidHabitStateException;
 import com.nantonijevic.habits.event.DashboardChangedEvent;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitMapper;
+import com.nantonijevic.habits.repository.HabitSkipRepository;
 import com.nantonijevic.habits.repository.HabitWriteRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +35,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -69,6 +73,9 @@ class HabitCommandServiceTest {
 
     @Mock
     private HabitCompletionMetrics completionMetrics;
+
+    @Mock
+    private HabitSkipRepository skipRepository;
 
     @InjectMocks
     private HabitCommandService habitCommandService;
@@ -527,6 +534,128 @@ class HabitCommandServiceTest {
             clock,
             atLeastOnce()
         ).getZone();
+    }
+
+    @Test
+    void completeContinuesStreakAcrossStoredSkip() {
+        Long habitId = 42L;
+
+        LocalDate monday =
+            LocalDate.of(2026, 7, 6);
+        LocalDate skippedWednesday =
+            LocalDate.of(2026, 7, 8);
+        LocalDate friday =
+            LocalDate.of(2026, 7, 10);
+
+        Habit habit =
+            new Habit(
+                OWNER_ID,
+                "Workout",
+                FIXED
+            );
+        habit.setScheduledDays(EnumSet.of(
+            DayOfWeek.MONDAY,
+            DayOfWeek.WEDNESDAY,
+            DayOfWeek.FRIDAY
+        ));
+        habit.complete(
+            monday,
+            TEST_ZONE
+        );
+        habit.synchronizePersistenceVersion(1L);
+
+        when(
+            habitMapper.findById(
+                OWNER_ID,
+                habitId
+            )
+        )
+            .thenReturn(habit);
+        when(
+            skipRepository
+                .findByHabitIdAndSkippedOnBetween(
+                    habitId,
+                    monday,
+                    friday
+                )
+        )
+            .thenReturn(
+                List.of(
+                    new HabitSkip(
+                        habitId,
+                        skippedWednesday
+                    )
+                )
+            );
+        when(
+            habitWriteRepository.save(
+                same(habit)
+            )
+        )
+            .thenReturn(habit);
+
+        Habit completed =
+            habitCommandService.complete(
+                OWNER_ID,
+                habitId,
+                friday
+            );
+
+        assertThat(completed.getCurrentStreak())
+            .isEqualTo(2);
+        assertThat(completed.getCompletionCount())
+            .isEqualTo(2);
+    }
+
+    @Test
+    void completeRejectsHabitSkippedToday() {
+        Long habitId = 42L;
+        LocalDate today =
+            LocalDate.of(2026, 7, 6);
+
+        Habit habit =
+            new Habit(
+                OWNER_ID,
+                "Workout",
+                FIXED
+            );
+
+        when(
+            habitMapper.findById(
+                OWNER_ID,
+                habitId
+            )
+        )
+            .thenReturn(habit);
+        when(
+            skipRepository
+                .existsByHabitIdAndSkippedOn(
+                    habitId,
+                    today
+                )
+        )
+            .thenReturn(true);
+
+        assertThatThrownBy(
+            () -> habitCommandService.complete(
+                OWNER_ID,
+                habitId,
+                today
+            )
+        )
+            .isInstanceOf(
+                InvalidHabitStateException.class
+            )
+            .hasMessage(
+                "Cannot complete: habit was skipped today"
+            );
+
+        verify(
+            habitWriteRepository,
+            never()
+        )
+            .save(any(Habit.class));
+        verifyNoInteractions(completionRepository);
     }
 
     @Test
@@ -1385,5 +1514,100 @@ class HabitCommandServiceTest {
             completionRepository,
             applicationEventPublisher
         );
+    }
+
+    @Test
+    void uncompleteReconstructsStreakAcrossStoredSkip() {
+        Long habitId = 42L;
+
+        LocalDate day1 =
+            LocalDate.of(2026, 7, 1);
+        LocalDate skippedDay =
+            LocalDate.of(2026, 7, 2);
+        LocalDate day3 =
+            LocalDate.of(2026, 7, 3);
+        LocalDate today =
+            LocalDate.of(2026, 7, 4);
+
+        Habit habit =
+            new Habit(OWNER_ID, "Read", FIXED);
+
+        habit.complete(day1, TEST_ZONE);
+        habit.complete(
+            day3,
+            TEST_ZONE,
+            Set.of(skippedDay)
+        );
+        habit.complete(today, TEST_ZONE);
+
+        when(
+            habitMapper.findById(
+                OWNER_ID,
+                habitId
+            )
+        ).thenReturn(habit);
+
+        when(
+            completionRepository
+                .findByHabitIdOrderByCompletedOnDesc(
+                    habitId
+                )
+        ).thenReturn(
+            List.of(
+                new HabitCompletion(
+                    habitId,
+                    day3
+                ),
+                new HabitCompletion(
+                    habitId,
+                    day1
+                )
+            )
+        );
+
+        when(
+            skipRepository
+                .findByHabitIdAndSkippedOnBetween(
+                    habitId,
+                    day1,
+                    today
+                )
+        ).thenReturn(
+            List.of(
+                new HabitSkip(
+                    habitId,
+                    skippedDay
+                )
+            )
+        );
+
+        when(
+            habitWriteRepository.save(
+                same(habit)
+            )
+        ).thenReturn(habit);
+
+        Habit result =
+            habitCommandService.uncomplete(
+                OWNER_ID,
+                habitId,
+                today
+            );
+
+        assertThat(result.getCompletionCount())
+            .isEqualTo(2);
+
+        assertThat(result.getCurrentStreak())
+            .isEqualTo(2);
+
+        assertThat(result.getLongestStreak())
+            .isEqualTo(2);
+
+        verify(skipRepository)
+            .findByHabitIdAndSkippedOnBetween(
+                habitId,
+                day1,
+                today
+            );
     }
 }

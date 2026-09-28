@@ -4,6 +4,7 @@ import com.nantonijevic.habits.client.InvalidApiKeyException;
 import com.nantonijevic.habits.domain.HabitNotFoundException;
 import com.nantonijevic.habits.domain.HabitVersionConflictException;
 import com.nantonijevic.habits.domain.InvalidHabitStateException;
+import com.nantonijevic.habits.domain.HabitSkipAlreadyUsedException;
 import com.nantonijevic.habits.dto.ErrorResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -33,6 +34,18 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.CONFLICT)
     public ErrorResponse handle(HabitVersionConflictException e) {
         return new ErrorResponse(e.getMessage());
+    }
+
+    @ExceptionHandler(
+        HabitSkipAlreadyUsedException.class
+    )
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ErrorResponse handle(
+        HabitSkipAlreadyUsedException exception
+    ) {
+        return new ErrorResponse(
+            exception.getMessage()
+        );
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

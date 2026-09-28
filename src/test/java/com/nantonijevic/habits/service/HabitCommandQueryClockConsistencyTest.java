@@ -5,6 +5,7 @@ import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
 import com.nantonijevic.habits.repository.HabitMapper;
 import com.nantonijevic.habits.repository.HabitSearchRepository;
+import com.nantonijevic.habits.repository.HabitSkipRepository;
 import com.nantonijevic.habits.repository.HabitWriteRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -65,6 +66,9 @@ class HabitCommandQueryClockConsistencyTest {
 
     @Mock
     private HabitCompletionMetrics completionMetrics;
+
+    @Mock
+    private HabitSkipRepository skipRepository;
 
     @InjectMocks
     private HabitCommandService habitCommandService;

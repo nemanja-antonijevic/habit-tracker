@@ -4,8 +4,10 @@ import com.nantonijevic.habits.client.ClientContext;
 import com.nantonijevic.habits.client.ClientTier;
 import com.nantonijevic.habits.client.HabitResponseTransformer;
 import com.nantonijevic.habits.domain.Habit;
+import com.nantonijevic.habits.domain.HabitSkip;
 import com.nantonijevic.habits.service.HabitCommandService;
 import com.nantonijevic.habits.service.HabitQueryService;
+import com.nantonijevic.habits.service.HabitSkipService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -37,6 +39,9 @@ class HabitControllerTest {
 
     @Mock
     private HabitResponseTransformer habitResponseTransformer;
+
+    @Mock
+    private HabitSkipService habitSkipService;
 
     @Test
     void completeUsesInjectedClockForBusinessDate() {
@@ -70,7 +75,8 @@ class HabitControllerTest {
                 habitCommandService,
                 habitQueryService,
                 clock,
-                habitResponseTransformer
+                habitResponseTransformer,
+                habitSkipService
             );
 
         controller.complete(
@@ -84,5 +90,55 @@ class HabitControllerTest {
                 42L,
                 expectedBusinessDate
             );
+    }
+
+    @Test
+    void skipUsesInjectedClockForBusinessDate() {
+        Clock clock =
+            Clock.fixed(
+                Instant.parse(
+                    "2040-01-15T12:00:00Z"
+                ),
+                ZoneId.of(
+                    "Europe/Belgrade"
+                )
+            );
+
+        LocalDate expectedBusinessDate =
+            LocalDate.now(clock);
+
+        when(
+            habitSkipService.skip(
+                OWNER_ID,
+                42L,
+                expectedBusinessDate
+            )
+        )
+            .thenReturn(
+                new HabitSkip(
+                    42L,
+                    expectedBusinessDate
+                )
+            );
+
+        HabitController controller =
+            new HabitController(
+                habitCommandService,
+                habitQueryService,
+                clock,
+                habitResponseTransformer,
+                habitSkipService
+            );
+
+        controller.skip(
+            42L,
+            CLIENT_CONTEXT
+        );
+
+        verify(habitSkipService).skip(
+            OWNER_ID,
+            42L,
+            expectedBusinessDate
+        );
     }
 }

@@ -1,18 +1,23 @@
 package com.nantonijevic.habits.service;
 
 import com.nantonijevic.habits.domain.Habit;
+import com.nantonijevic.habits.domain.HabitCompletionStat;
 import com.nantonijevic.habits.domain.HabitNotFoundException;
+import com.nantonijevic.habits.domain.HabitSkip;
 import com.nantonijevic.habits.dto.HabitCompletionRateResponse;
+import com.nantonijevic.habits.dto.HabitStatsView;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
 import com.nantonijevic.habits.repository.HabitMapper;
 import com.nantonijevic.habits.repository.HabitSearchRepository;
+import com.nantonijevic.habits.repository.HabitSkipRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Clock;
@@ -22,6 +27,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -56,6 +62,9 @@ class HabitQueryServiceTest {
 
     @Mock
     private Clock clock;
+
+    @Mock
+    private HabitSkipRepository skipRepository;
 
     @InjectMocks
     private HabitQueryService habitQueryService;
@@ -553,5 +562,243 @@ class HabitQueryServiceTest {
         verifyNoInteractions(
             completionStatRepository
         );
+    }
+
+    @Test
+    void dashboardKeepsStreakAliveAcrossSkippedScheduledDay() {
+        Long habitId = 42L;
+        LocalDate lastCompletedOn =
+            LocalDate.of(2026, 1, 13);
+        LocalDate skippedOn =
+            LocalDate.of(2026, 1, 14);
+        LocalDate today =
+            LocalDate.of(2026, 1, 15);
+
+        Habit habit =
+            new Habit(OWNER_ID, "Read", FIXED);
+
+        ReflectionTestUtils.setField(
+            habit,
+            "id",
+            habitId
+        );
+
+        HabitCompletionStat latestStat =
+            new HabitCompletionStat(
+                habitId,
+                lastCompletedOn,
+                4,
+                4
+            );
+
+        when(habitMapper.findActive(OWNER_ID))
+            .thenReturn(List.of(habit));
+
+        when(
+            completionStatRepository
+                .findLatestByHabitIds(
+                    List.of(habitId)
+                )
+        ).thenReturn(List.of(latestStat));
+
+        when(
+            skipRepository
+                .findByHabitIdInAndSkippedOnBetween(
+                    List.of(habitId),
+                    lastCompletedOn,
+                    today
+                )
+        ).thenReturn(
+            List.of(
+                new HabitSkip(
+                    habitId,
+                    skippedOn
+                )
+            )
+        );
+
+        var dashboard =
+            habitQueryService.getDashboardStats(
+                OWNER_ID,
+                today
+            );
+
+        assertThat(dashboard.activeStreaks())
+            .isEqualTo(1);
+
+        assertThat(
+            dashboard.longestActiveStreak()
+        ).isEqualTo(4);
+
+        verify(skipRepository)
+            .findByHabitIdInAndSkippedOnBetween(
+                List.of(habitId),
+                lastCompletedOn,
+                today
+            );
+    }
+
+    @Test
+    void statsProjectionKeepsStreakAliveWithoutCountingSkipAsCompletion() {
+        Long habitId = 42L;
+        LocalDate lastCompletedOn =
+            LocalDate.of(2026, 1, 13);
+        LocalDate skippedOn =
+            LocalDate.of(2026, 1, 14);
+        LocalDate today =
+            LocalDate.of(2026, 1, 15);
+
+        Habit habit =
+            new Habit(OWNER_ID, "Read", FIXED);
+
+        HabitCompletionStat latestStat =
+            new HabitCompletionStat(
+                habitId,
+                lastCompletedOn,
+                4,
+                4
+            );
+
+        when(
+            habitMapper.findById(
+                OWNER_ID,
+                habitId
+            )
+        ).thenReturn(habit);
+
+        when(
+            completionStatRepository
+                .findFirstByHabitIdOrderByCompletedOnDesc(
+                    habitId
+                )
+        ).thenReturn(Optional.of(latestStat));
+
+        when(
+            skipRepository
+                .findByHabitIdAndSkippedOnBetween(
+                    habitId,
+                    lastCompletedOn,
+                    today
+                )
+        ).thenReturn(
+            List.of(
+                new HabitSkip(
+                    habitId,
+                    skippedOn
+                )
+            )
+        );
+
+        when(
+            completionStatRepository
+                .findStatsByHabitId(habitId)
+        ).thenReturn(
+            new HabitStatsView(
+                4,
+                4,
+                lastCompletedOn,
+                4
+            )
+        );
+
+        HabitStatsView stats =
+            habitQueryService.getStatsProjection(
+                OWNER_ID,
+                habitId,
+                today
+            );
+
+        assertThat(stats.currentStreak())
+            .isEqualTo(4);
+
+        assertThat(stats.completionCount())
+            .isEqualTo(4);
+
+        assertThat(stats.lastCompletedOn())
+            .isEqualTo(lastCompletedOn);
+    }
+
+    @Test
+    void skippedHabitIsExcludedFromDueTodayListAndCount() {
+        Long habitId = 42L;
+        LocalDate today =
+            LocalDate.of(2026, 1, 15);
+
+        Habit habit =
+            new Habit(OWNER_ID, "Read", FIXED);
+
+        ReflectionTestUtils.setField(
+            habit,
+            "id",
+            habitId
+        );
+
+        when(habitMapper.findActive(OWNER_ID))
+            .thenReturn(List.of(habit));
+
+        when(
+            skipRepository
+                .findByHabitIdInAndSkippedOn(
+                    List.of(habitId),
+                    today
+                )
+        ).thenReturn(
+            List.of(
+                new HabitSkip(
+                    habitId,
+                    today
+                )
+            )
+        );
+
+        when(
+            skipRepository
+                .findByHabitIdInAndSkippedOnBetween(
+                    List.of(habitId),
+                    today,
+                    today
+                )
+        ).thenReturn(
+            List.of(
+                new HabitSkip(
+                    habitId,
+                    today
+                )
+            )
+        );
+
+        var page =
+            habitQueryService.dueToday(
+                OWNER_ID,
+                today,
+                PageRequest.of(0, 20)
+            );
+
+        long count =
+            habitQueryService.countDueToday(
+                OWNER_ID,
+                today
+            );
+
+        var dashboard =
+            habitQueryService.getDashboardStats(
+                OWNER_ID,
+                today
+            );
+
+        assertThat(page.getContent())
+            .isEmpty();
+
+        assertThat(page.getTotalElements())
+            .isZero();
+
+        assertThat(count)
+            .isZero();
+
+        assertThat(dashboard.dueToday())
+            .isZero();
+
+        assertThat(dashboard.completedToday())
+            .isZero();
     }
 }

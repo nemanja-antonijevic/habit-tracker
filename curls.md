@@ -134,6 +134,23 @@ curl -s -X POST http://localhost:8080/habits/bulk-complete \
   -d '{"habitIds": [1, 2, 999]}'
 ```
 
+## Skip (one streak-preserving skip per month)
+
+```bash
+# Skip today for this habit — forgives the streak without a completion
+# Must be scheduled for today, active, and not already completed today
+curl -s -X POST http://localhost:8080/habits/1/skip -H "$KEY"
+
+# A second skip in the same calendar month -> 409, even for a different date
+curl -s -i -X POST http://localhost:8080/habits/1/skip -H "$KEY"
+
+# Skipping an already-completed day -> 400 (a day is completed or skipped, never both)
+curl -s -X POST http://localhost:8080/habits/1/complete -H "$KEY"
+curl -s -i -X POST http://localhost:8080/habits/1/skip -H "$KEY"
+
+# Symmetrically: completing a day already skipped -> 400
+```
+
 ## Archive
 
 ```bash

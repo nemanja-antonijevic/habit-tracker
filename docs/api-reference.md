@@ -57,6 +57,7 @@ Filtering applies to all endpoints that return `HabitResponse`, including pagina
 | 14 | `GET` | `/habits/due-today/count` | Number of habits due today | Write (direct read) |
 | 15 | `GET` | `/habits/stats` | Cross-habit dashboard summary over all active habits | Write + read model (Kafka projection) |
 | 16 | `GET` | `/habits/{id}/completion-rate` | Completion rate over a date window | Read model (Kafka projection) |
+| 17 | `POST` | `/habits/{id}/skip` | Forgive one scheduled day this calendar month without breaking the streak | Write + event |
 
 ## Data model
 
@@ -70,7 +71,7 @@ Standard habit representation. Returned directly or inside a page/list by endpoi
 | `name` | `string` | Name |
 | `scheduledDays` | `string[]` | Days of the week the habit is due, as `DayOfWeek` names (`"MONDAY"` … `"SUNDAY"`). A habit with all 7 days behaves like a daily habit. |
 | `completionCount` | `int` | Total number of completed days |
-| `currentStreak` | `int` | Current run of consecutive scheduled days, corrected at read time: the stored streak if the last completion was today or the previous scheduled day, otherwise `0` |
+| `currentStreak` | `int` | Current run of consecutive scheduled days, corrected at read time: the stored streak if the last completion was today, the previous scheduled day, or reachable by walking back through scheduled days that were skipped (see [endpoint 17](#17-skip-a-scheduled-day)), otherwise `0` |
 | `archived` | `boolean` | Whether the habit is archived (soft delete) |
 | `createdAt` | `string` (ISO-8601 instant) | Creation time |
 
@@ -105,6 +106,14 @@ Completion rate over a date window. Returned by endpoint 16.
 | `completed` | `long` | Of those, how many were actually completed |
 | `rate` | `number` (0..1, scale 4) \| `null` | `completed / scheduled`, rounded `HALF_UP` to 4 decimals; `null` when `scheduled` is `0` (rate is undefined, not `0`) |
 
+### HabitSkipResponse
+
+One recorded skip. Returned by [endpoint 17](#17-skip-a-scheduled-day).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `skippedOn` | `string` (ISO-8601 date) | The scheduled date that was forgiven |
+
 ### ErrorResponse
 
 Body of every error.
@@ -123,7 +132,7 @@ Body of every error.
 | `400 Bad Request` | Validation failed, malformed JSON, or an illegal state transition (`InvalidHabitStateException`) |
 | `401 Unauthorized` | `X-Api-Key` missing, unknown, or belonging to a revoked client (`InvalidApiKeyException`). Raised by the interceptor before validation, so it takes precedence over `400` |
 | `404 Not Found` | Habit does not exist, or is owned by another client (`HabitNotFoundException`) — the two cases are deliberately indistinguishable |
-| `409 Conflict` | Version mismatch on update; on `complete`, only when the single automatic retry loses the optimistic-lock race again (`HabitVersionConflictException`) |
+| `409 Conflict` | Version mismatch on update; on `complete`, only when the single automatic retry loses the optimistic-lock race again (`HabitVersionConflictException`); on `skip`, a skip already exists for that habit in the current calendar month (`HabitSkipAlreadyUsedException`) |
 
 `GlobalExceptionHandler` (`@RestControllerAdvice`) centralizes the exception-to-status mapping.
 
@@ -280,14 +289,16 @@ A repeated `complete` on the same day is a no-op — no duplicate row, no new ev
 
 Concurrent same-day completions converge to the same result regardless of timing: the request that loses the optimistic-lock race retries once against the fresh state (in a new transaction), so both callers receive `200` and all side effects (completion row, Kafka event, version bump) apply exactly once. `409` remains possible only when that single retry loses another optimistic-lock race.
 
-**The habit can only be completed on a scheduled day.** If today is not in the habit's `scheduledDays`, the call is rejected with `400`. The streak counts consecutive *scheduled* days: completing on Friday and then Monday keeps the streak alive for a Mon/Wed/Fri habit, because Saturday and Sunday are not scheduled.
+**The habit can only be completed on a scheduled day.** If today is not in the habit's `scheduledDays`, the call is rejected with `400`. The streak counts consecutive *scheduled* days: completing on Friday and then Monday keeps the streak alive for a Mon/Wed/Fri habit, because Saturday and Sunday are not scheduled. It also stays alive across one scheduled day forgiven via [endpoint 17](#17-skip-a-scheduled-day) between the two completions.
+
+**Cannot complete a day already skipped.** If today was already recorded as skipped for this habit, `complete` is rejected with `400` — a day is either completed or skipped, never both.
 
 **Response:** `200 OK`, `HabitResponse`.
 
 | Status | Condition |
 |--------|-----------|
 | `200` | Marked (or a no-op if already marked today) |
-| `400` | Habit is archived, or today is not a scheduled day |
+| `400` | Habit is archived, today is not a scheduled day, or today was already skipped |
 | `404` | Does not exist, or is owned by another client |
 | `409` | The single automatic retry lost another optimistic-lock race (rare) |
 
@@ -297,7 +308,7 @@ Concurrent same-day completions converge to the same result regardless of timing
 POST /habits/{id}/uncomplete
 ```
 
-No body. Deletes today's history row, then recomputes `completionCount`, `currentStreak`, and `longestStreak` from the remaining completion history (walking consecutive scheduled days, so a gap breaks the run), and emits `HabitUncompletedEvent`. `currentStreak` is gated to the live window — if the latest remaining completion is neither today nor the previous scheduled day it becomes `0`, while `longestStreak` still reflects the best past run.
+No body. Deletes today's history row, then recomputes `completionCount`, `currentStreak`, and `longestStreak` from the remaining completion history (walking consecutive scheduled days, so a gap breaks the run *unless the missed day was skipped* via [endpoint 17](#17-skip-a-scheduled-day)), and emits `HabitUncompletedEvent`. `currentStreak` is gated to the live window — if the latest remaining completion is not reachable from today (directly, via the previous scheduled day, or across a skipped day) it becomes `0`, while `longestStreak` still reflects the best past run, itself reconstructed with the same skip-forgiveness.
 
 **Response:** `200 OK`, `HabitResponse`.
 
@@ -410,7 +421,7 @@ Read from the read model `habit_completion_stats` (Kafka projection).
 
 Behavior:
 - **Eventual consistency** — the read model is filled asynchronously over Kafka. A call right after `complete` may return the old state until the consumer processes the event.
-- **`currentStreak` is corrected at read time against the schedule** — the read model stores the streak from the last completion. If the last completion was today or the previous scheduled day, it returns the stored value; otherwise `0` (the streak expired before an event arrived to reset it). For a daily habit (all 7 days) the previous scheduled day is simply yesterday.
+- **`currentStreak` is corrected at read time against the schedule** — the read model stores the streak from the last completion. If the last completion is reachable from today (today itself, the previous scheduled day, or across one or more scheduled days forgiven via [endpoint 17](#17-skip-a-scheduled-day)), it returns the stored value; otherwise `0` (the streak expired before an event arrived to reset it). For a daily habit (all 7 days) the previous scheduled day is simply yesterday.
 
 ## 12. Habits due today
 
@@ -428,10 +439,11 @@ Query parameters:
 | `size` | `int` | `20` | Page size |
 | `sort` | `string` | _(unspecified)_ | `field,asc\|desc` Spring `Pageable` sort |
 
-A habit is included only when **all three** hold:
+A habit is included only when **all four** hold:
 - it is active (archived habits are excluded);
 - today's `DayOfWeek` is in its `scheduledDays`;
-- it has not been completed today.
+- it has not been completed today;
+- it has not been skipped today (see [endpoint 17](#17-skip-a-scheduled-day)).
 
 Filtering runs in memory over the active habits (the schedule is a converted column, not queryable in SQL), then the result is paginated. This is fine at personal scale; it is not intended for large data sets.
 
@@ -513,10 +525,11 @@ GET /habits/due-today/count
 
 Returns just the **count** of habits due today, without the habit payloads. "Due today" is defined exactly as for [endpoint 12](#12-habits-due-today) — the same predicate is shared in `HabitQueryService` so the two can never disagree. "Today" is resolved server-side from the system clock; there is no date query parameter and no pagination.
 
-A habit is counted only when **all three** hold:
+A habit is counted only when **all four** hold:
 - it is active (archived habits are excluded);
 - today's `DayOfWeek` is in its `scheduledDays`;
-- it has not been completed today.
+- it has not been completed today;
+- it has not been skipped today (see [endpoint 17](#17-skip-a-scheduled-day)).
 
 Like endpoint 12, the count is computed in memory over the active habits (the schedule is a converted column, not queryable in SQL). Fine at personal scale; not intended for large data sets.
 
@@ -550,7 +563,7 @@ Returns a single aggregate summary across **all active habits** — a dashboard 
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `dueToday` | `long` | Active habits scheduled for today |
+| `dueToday` | `long` | Active habits scheduled for today, excluding any skipped today (see [endpoint 17](#17-skip-a-scheduled-day)) |
 | `completedToday` | `long` | Of those due today, how many are already completed |
 | `activeStreaks` | `long` | Active habits whose streak is still alive today |
 | `longestActiveStreak` | `int` | Largest live streak among active habits; `0` when none is alive |
@@ -562,7 +575,7 @@ Returns a single aggregate summary across **all active habits** — a dashboard 
 
 Behavior:
 - **Two data sources, by design.** `dueToday` / `completedToday` / `totalHabits` come from the write side (direct read of active habits), so they are immediately consistent. `activeStreaks` / `longestActiveStreak` come from the read model `habit_completion_stats` (Kafka projection), so they are **eventually consistent** — in the short window after a `complete` before the consumer processes the event, a habit can count toward `completedToday` while its streak has not yet landed in the read model.
-- **Streak liveness is corrected at read time against the schedule** — same rule as [endpoint 11](#11-habit-stats): a stored streak counts only if the last completion was today or the previous scheduled day, otherwise it is treated as `0`. The rule lives in one place (`Habit.isStreakAliveGiven`) shared by both endpoints so the two can never disagree.
+- **Streak liveness is corrected at read time against the schedule** — same rule as [endpoint 11](#11-habit-stats): a stored streak counts only if the last completion is reachable from today (today, the previous scheduled day, or across days forgiven via [endpoint 17](#17-skip-a-scheduled-day)), otherwise it is treated as `0`. The rule lives in one place (`Habit.isStreakAliveGiven`) shared by both endpoints so the two can never disagree.
 - **No N+1.** The summary is computed with exactly two queries regardless of habit count: one for the active habits, one batch query for their latest completion stats.
 - **Cached in Redis (cache-aside), keyed by date.** The response is cached under `dashboard-stats::<today>` with a 5-minute TTL. The cache is invalidated (whole `dashboard-stats` region cleared) *after commit* on any write that can affect the summary — `create`, `update`, `archive`, `unarchive`, `delete`, `complete`, `uncomplete`, `bulkComplete` (once per completed item, after that item's own commit) — and again after the Kafka consumer updates the read model for `complete` / `uncomplete`. Because invalidation fires only after the transaction commits, a concurrent read cannot repopulate the cache with pre-commit state. The TTL is a safety net (missed invalidation, stalled consumer, manual data change), not the primary mechanism; it bounds how long a stale entry can live, but does not by itself close the eventual-consistency window described above.
 
@@ -603,3 +616,30 @@ Behavior:
 ### Known limitation — schedule history
 
 The rate is computed against the habit's **current** `scheduledDays` for the whole window. There is no schedule-change history, so if the schedule changed within the window the older portion is measured against today's schedule. A completion on a day that is no longer scheduled does not count toward `completed`. Historically accurate rates across schedule changes would require a separate schedule-history model, which is out of scope.
+
+## 17. Skip a scheduled day
+
+```
+POST /habits/{id}/skip
+```
+
+No body. Records today (`LocalDate.now()`, server clock) as a forgiven miss for this habit, so the streak survives without a completion. At most one skip per habit per calendar month is allowed; the month is derived from the skipped date, not from when the call is made.
+
+**The habit must be scheduled for today, active, and not already completed today.** Skipping a day that is not in `scheduledDays`, an archived habit, or a day already completed all return `400`. Symmetrically, [endpoint 6](#6-mark-as-done) rejects completing a day already skipped — a day is either completed or skipped, never both.
+
+**At most one skip per calendar month.** A second skip attempt in the same month — even for a different date — returns `409`. The check runs twice: once against existing data before the insert (fast, common-case path) and once more via the database's `UNIQUE (habit_id, month_start)` constraint (`habit_skips` table), which is what actually closes the race if two skip requests for the same month land concurrently.
+
+Skipping does not affect `completionCount`, does not appear in [history](#10-completion-history) or feed [completion rate](#16-completion-rate-over-a-window), and does not set `completedToday` in the [dashboard](#15-cross-habit-dashboard-stats). It removes the habit from [due-today](#12-habits-due-today) and its [count](#14-count-of-habits-due-today) for that day, and lets `currentStreak` survive the gap once a later completion is recorded (see [endpoint 6](#6-mark-as-done) and [endpoint 7](#7-undo-todays-completion)).
+
+**Response:** `201 Created`, `HabitSkipResponse`.
+
+```json
+{ "skippedOn": "2026-07-08" }
+```
+
+| Status | Condition |
+|--------|-----------|
+| `201` | Skip recorded |
+| `400` | Habit is archived, today is not a scheduled day, or today was already completed |
+| `404` | Does not exist, or is owned by another client |
+| `409` | A skip already exists for this habit in the current calendar month |

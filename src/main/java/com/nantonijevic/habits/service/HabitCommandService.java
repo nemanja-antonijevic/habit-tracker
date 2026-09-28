@@ -3,13 +3,16 @@ package com.nantonijevic.habits.service;
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.domain.HabitCompletion;
 import com.nantonijevic.habits.domain.HabitNotFoundException;
+import com.nantonijevic.habits.domain.HabitSkip;
 import com.nantonijevic.habits.domain.HabitVersionConflictException;
+import com.nantonijevic.habits.domain.InvalidHabitStateException;
 import com.nantonijevic.habits.dto.BulkCompleteResponse;
 import com.nantonijevic.habits.event.DashboardChangedEvent;
 import com.nantonijevic.habits.event.HabitCompletedEvent;
 import com.nantonijevic.habits.event.HabitUncompletedEvent;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitMapper;
+import com.nantonijevic.habits.repository.HabitSkipRepository;
 import com.nantonijevic.habits.repository.HabitWriteRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +39,7 @@ public class HabitCommandService {
     private final HabitWriteRepository habitWriteRepository;
     private final HabitMapper habitMapper;
     private final HabitCompletionRepository completionRepository;
+    private final HabitSkipRepository skipRepository;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
@@ -44,6 +48,7 @@ public class HabitCommandService {
     public HabitCommandService(HabitWriteRepository habitWriteRepository,
                                HabitMapper habitMapper,
                                HabitCompletionRepository completionRepository,
+                               HabitSkipRepository skipRepository,
                                ApplicationEventPublisher applicationEventPublisher,
                                TransactionTemplate transactionTemplate,
                                Clock clock,
@@ -51,6 +56,7 @@ public class HabitCommandService {
         this.habitWriteRepository = habitWriteRepository;
         this.habitMapper = habitMapper;
         this.completionRepository = completionRepository;
+        this.skipRepository = skipRepository;
         this.applicationEventPublisher = applicationEventPublisher;
         this.transactionTemplate = transactionTemplate;
         this.clock = clock;
@@ -144,9 +150,26 @@ public class HabitCommandService {
     }
 
     private boolean completeExistingHabit(Habit habit, Long habitId, LocalDate today) {
+        if (skipRepository.existsByHabitIdAndSkippedOn(
+            habitId,
+            today
+        )) {
+            throw new InvalidHabitStateException(
+                "Cannot complete: habit was skipped today"
+            );
+        }
+
+        Set<LocalDate> skippedDates =
+            skippedDatesBetween(
+                habit,
+                habitId,
+                today
+            );
+
         boolean reallyCompleted = habit.complete(
             today,
-            clock.getZone()
+            clock.getZone(),
+            skippedDates
         );
 
         if (reallyCompleted) {
@@ -167,6 +190,47 @@ public class HabitCommandService {
         }
 
         return reallyCompleted;
+    }
+
+    private Set<LocalDate> skippedDatesBetween(
+        Habit habit,
+        Long habitId,
+        LocalDate today
+    ) {
+        if (habit.getLastCompletedAt() == null) {
+            return Set.of();
+        }
+
+        LocalDate lastCompletedOn =
+            LocalDate.ofInstant(
+                habit.getLastCompletedAt(),
+                clock.getZone()
+            );
+
+        return skippedDatesBetween(
+            habitId,
+            lastCompletedOn,
+            today
+        );
+    }
+
+    private Set<LocalDate> skippedDatesBetween(
+        Long habitId,
+        LocalDate from,
+        LocalDate to
+    ) {
+        return skipRepository
+            .findByHabitIdAndSkippedOnBetween(
+                habitId,
+                from,
+                to
+            )
+            .stream()
+            .map(HabitSkip::skippedOn)
+            .collect(
+                java.util.stream.Collectors
+                    .toUnmodifiableSet()
+            );
     }
 
     // Intentionally not @Transactional: every item attempt owns its transaction.
@@ -320,10 +384,23 @@ public class HabitCommandService {
             .map(HabitCompletion::getCompletedOn)
             .toList();
 
+        Set<LocalDate> skippedDates =
+            remainingCompletionDates.isEmpty()
+                ? Set.of()
+                : skippedDatesBetween(
+                habitId,
+                remainingCompletionDates
+                    .stream()
+                    .min(LocalDate::compareTo)
+                    .orElseThrow(),
+                today
+            );
+
         habit.decrementCompletionCount(
             today,
             remainingCompletionDates,
-            clock.getZone()
+            clock.getZone(),
+            skippedDates
         );
 
         applicationEventPublisher.publishEvent(

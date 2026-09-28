@@ -12,11 +12,13 @@ import com.nantonijevic.habits.dto.HabitCompletionRateResponse;
 import com.nantonijevic.habits.dto.HabitCompletionResponse;
 import com.nantonijevic.habits.dto.HabitDashboardResponse;
 import com.nantonijevic.habits.dto.HabitResponse;
+import com.nantonijevic.habits.dto.HabitSkipResponse;
 import com.nantonijevic.habits.dto.HabitStatsResponse;
 import com.nantonijevic.habits.dto.HabitStatsView;
 import com.nantonijevic.habits.dto.UpdateHabitRequest;
 import com.nantonijevic.habits.service.HabitCommandService;
 import com.nantonijevic.habits.service.HabitQueryService;
+import com.nantonijevic.habits.service.HabitSkipService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -49,17 +51,19 @@ public class HabitController {
 
     private final HabitResponseTransformer habitResponseTransformer;
 
+    private final HabitSkipService habitSkipService;
+
     public HabitController(
         HabitCommandService habitCommandService,
         HabitQueryService habitQueryService,
         Clock clock,
-        HabitResponseTransformer habitResponseTransformer
+        HabitResponseTransformer habitResponseTransformer, HabitSkipService habitSkipService
     ) {
         this.habitCommandService = habitCommandService;
         this.habitQueryService = habitQueryService;
         this.clock = clock;
-        this.habitResponseTransformer =
-            habitResponseTransformer;
+        this.habitResponseTransformer = habitResponseTransformer;
+        this.habitSkipService = habitSkipService;
     }
 
     @PostMapping
@@ -208,6 +212,23 @@ public class HabitController {
                 clock.getZone()
             ),
             context.tier()
+        );
+    }
+
+    @PostMapping("/{id}/skip")
+    @ResponseStatus(HttpStatus.CREATED)
+    public HabitSkipResponse skip(
+        @PathVariable Long id,
+        @ResolvedClientTier ClientContext context
+    ) {
+        LocalDate today = LocalDate.now(clock);
+
+        return HabitSkipResponse.from(
+            habitSkipService.skip(
+                context.clientId(),
+                id,
+                today
+            )
         );
     }
 

@@ -5,6 +5,7 @@ import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.domain.HabitCompletion;
 import com.nantonijevic.habits.domain.HabitCompletionStat;
 import com.nantonijevic.habits.domain.HabitNotFoundException;
+import com.nantonijevic.habits.domain.HabitSkip;
 import com.nantonijevic.habits.dto.HabitCompletionRateResponse;
 import com.nantonijevic.habits.dto.HabitDashboardResponse;
 import com.nantonijevic.habits.dto.HabitStatsView;
@@ -13,6 +14,7 @@ import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
 import com.nantonijevic.habits.repository.HabitMapper;
 import com.nantonijevic.habits.repository.HabitSearchRepository;
+import com.nantonijevic.habits.repository.HabitSkipRepository;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -42,19 +44,22 @@ public class HabitQueryService {
     private final HabitCompletionRepository completionRepository;
     private final HabitCompletionStatRepository completionStatRepository;
     private final Clock clock;
+    private final HabitSkipRepository skipRepository;
 
     public HabitQueryService(
         HabitSearchRepository habitSearchRepository,
         HabitMapper habitMapper,
         HabitCompletionRepository completionRepository,
         HabitCompletionStatRepository completionStatRepository,
-        Clock clock
+        Clock clock,
+        HabitSkipRepository skipRepository
     ) {
         this.habitSearchRepository = habitSearchRepository;
         this.habitMapper = habitMapper;
         this.completionRepository = completionRepository;
         this.completionStatRepository = completionStatRepository;
         this.clock = clock;
+        this.skipRepository = skipRepository;
     }
 
     public Habit getById(Long ownerId, Long habitId) {
@@ -128,13 +133,25 @@ public class HabitQueryService {
         LocalDate today,
         Pageable pageable
     ) {
-        // scheduled_days je CSV-serijalizovana kolona, pa filtriranje po danu ne
-        // radimo u SQL WHERE — učitavamo aktivne habite i filtriramo u memoriji.
-        // Prihvatljivo za ličnu skalu (desetine habita); nije za velike skupove.
-        List<Habit> filtered = habitMapper.findActive(ownerId)
-            .stream()
-            .filter(habit -> isDueToday(habit, today))
-            .toList();
+        List<Habit> activeHabits =
+            habitMapper.findActive(ownerId);
+
+        Set<Long> skippedHabitIds =
+            skippedHabitIds(
+                activeHabits,
+                today
+            );
+
+        List<Habit> filtered =
+            activeHabits.stream()
+                .filter(
+                    habit ->
+                        isDueToday(habit, today)
+                            && !skippedHabitIds.contains(
+                            habit.getId()
+                        )
+                )
+                .toList();
 
         int start = (int) pageable.getOffset();
         int end = Math.min(
@@ -155,10 +172,27 @@ public class HabitQueryService {
     }
 
     @Transactional(readOnly = true)
-    public long countDueToday(Long ownerId, LocalDate today) {
-        return habitMapper.findActive(ownerId)
-            .stream()
-            .filter(habit -> isDueToday(habit, today))
+    public long countDueToday(
+        Long ownerId,
+        LocalDate today
+    ) {
+        List<Habit> activeHabits =
+            habitMapper.findActive(ownerId);
+
+        Set<Long> skippedHabitIds =
+            skippedHabitIds(
+                activeHabits,
+                today
+            );
+
+        return activeHabits.stream()
+            .filter(
+                habit ->
+                    isDueToday(habit, today)
+                        && !skippedHabitIds.contains(
+                        habit.getId()
+                    )
+            )
             .count();
     }
 
@@ -255,10 +289,26 @@ public class HabitQueryService {
                 )
                 .orElse(null);
 
+        Set<LocalDate> skippedDates =
+            latestStat == null
+                ? Set.of()
+                : skipRepository
+                .findByHabitIdAndSkippedOnBetween(
+                    habitId,
+                    latestStat.getCompletedOn(),
+                    today
+                )
+                .stream()
+                .map(HabitSkip::skippedOn)
+                .collect(
+                    Collectors.toUnmodifiableSet()
+                );
+
         int currentStreak = currentStreak(
             habit,
             latestStat,
-            today
+            today,
+            skippedDates
         );
 
         HabitStatsView aggregate =
@@ -313,13 +363,50 @@ public class HabitQueryService {
                     )
                 );
 
+        LocalDate earliestRelevantDate =
+            latestStatsByHabitId.values()
+                .stream()
+                .map(HabitCompletionStat::getCompletedOn)
+                .min(LocalDate::compareTo)
+                .orElse(today);
+
+        Map<Long, Set<LocalDate>> skippedDatesByHabitId =
+            activeHabitIds.isEmpty()
+                ? Map.of()
+                : skipRepository
+                .findByHabitIdInAndSkippedOnBetween(
+                    activeHabitIds,
+                    earliestRelevantDate,
+                    today
+                )
+                .stream()
+                .collect(
+                    Collectors.groupingBy(
+                        HabitSkip::habitId,
+                        Collectors.mapping(
+                            HabitSkip::skippedOn,
+                            Collectors.toUnmodifiableSet()
+                        )
+                    )
+                );
+
         long dueToday = 0;
         long completedToday = 0;
         long activeStreaks = 0;
         int longestActiveStreak = 0;
 
         for (Habit habit : activeHabits) {
-            if (habit.isScheduledFor(today)) {
+            Set<LocalDate> habitSkippedDates =
+                skippedDatesByHabitId.getOrDefault(
+                    habit.getId(),
+                    Set.of()
+                );
+
+            boolean skippedToday =
+                habitSkippedDates.contains(today);
+
+            if (habit.isScheduledFor(today)
+                && !skippedToday) {
                 dueToday++;
 
                 if (habit.wasCompletedOn(
@@ -335,7 +422,8 @@ public class HabitQueryService {
                 latestStatsByHabitId.get(
                     habit.getId()
                 ),
-                today
+                today,
+                habitSkippedDates
             );
 
             if (currentStreak > 0) {
@@ -355,6 +443,31 @@ public class HabitQueryService {
             longestActiveStreak,
             activeHabits.size()
         );
+    }
+
+    private Set<Long> skippedHabitIds(
+        List<Habit> habits,
+        LocalDate today
+    ) {
+        if (habits.isEmpty()) {
+            return Set.of();
+        }
+
+        List<Long> habitIds =
+            habits.stream()
+                .map(Habit::getId)
+                .toList();
+
+        return skipRepository
+            .findByHabitIdInAndSkippedOn(
+                habitIds,
+                today
+            )
+            .stream()
+            .map(HabitSkip::habitId)
+            .collect(
+                Collectors.toUnmodifiableSet()
+            );
     }
 
     private boolean isDueToday(
@@ -396,7 +509,8 @@ public class HabitQueryService {
     private int currentStreak(
         Habit habit,
         HabitCompletionStat latestStat,
-        LocalDate today
+        LocalDate today,
+        Set<LocalDate> skippedDates
     ) {
         if (latestStat == null) {
             return 0;
@@ -405,7 +519,8 @@ public class HabitQueryService {
         boolean streakIsAlive =
             habit.isStreakAliveGiven(
                 latestStat.getCompletedOn(),
-                today
+                today,
+                skippedDates
             );
 
         return streakIsAlive

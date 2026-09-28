@@ -7,6 +7,7 @@ import java.time.ZoneId;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 public class Habit {
 
@@ -131,7 +132,28 @@ public class Habit {
         List<LocalDate> remainingCompletionDates,
         ZoneId zone
     ) {
-        Objects.requireNonNull(zone, "zone must not be null");
+        decrementCompletionCount(
+            today,
+            remainingCompletionDates,
+            zone,
+            Set.of()
+        );
+    }
+
+    public void decrementCompletionCount(
+        LocalDate today,
+        List<LocalDate> remainingCompletionDates,
+        ZoneId zone,
+        Set<LocalDate> skippedDates
+    ) {
+        Objects.requireNonNull(
+            zone,
+            "zone must not be null"
+        );
+        Objects.requireNonNull(
+            skippedDates,
+            "skippedDates must not be null"
+        );
 
         if (this.archived) {
             throw new InvalidHabitStateException("Cannot uncomplete: archived");
@@ -166,7 +188,11 @@ public class Habit {
 
         for (LocalDate completedDate : completedDatesAsc) {
             if (previousDate != null
-                    && previousScheduledDateBefore(completedDate).isEqual(previousDate)) {
+                && isStreakAliveGiven(
+                previousDate,
+                completedDate,
+                skippedDates
+            )) {
                 currentRun++;
             } else {
                 currentRun = 1;
@@ -178,16 +204,42 @@ public class Habit {
 
         LocalDate latestCompletedDate = completedDatesAsc.getLast();
 
-        boolean currentStreakIsAlive = latestCompletedDate.isEqual(today)
-                || latestCompletedDate.isEqual(previousScheduledDateBefore(today));
+        boolean currentStreakIsAlive =
+            isStreakAliveGiven(
+                latestCompletedDate,
+                today,
+                skippedDates
+            );
 
         this.lastCompletedAt = latestCompletedDate.atStartOfDay(zone).toInstant();
         this.currentStreak = currentStreakIsAlive ? currentRun : 0;
         this.longestStreak = longest;
     }
 
-    public boolean complete(LocalDate today, ZoneId zone) {
-        Objects.requireNonNull(zone, "zone must not be null");
+    public boolean complete(
+        LocalDate today,
+        ZoneId zone
+    ) {
+        return complete(
+            today,
+            zone,
+            Set.of()
+        );
+    }
+
+    public boolean complete(
+        LocalDate today,
+        ZoneId zone,
+        Set<LocalDate> skippedDates
+    ) {
+        Objects.requireNonNull(
+            zone,
+            "zone must not be null"
+        );
+        Objects.requireNonNull(
+            skippedDates,
+            "skippedDates must not be null"
+        );
 
         if (!isScheduledFor(today)) {
             throw new InvalidHabitStateException(
@@ -211,7 +263,11 @@ public class Habit {
                 return false;
             }
 
-            if (lastDate.isEqual(previousScheduledDateBefore(today))) {
+            if (isStreakAliveGiven(
+                lastDate,
+                today,
+                skippedDates
+            )) {
                 currentStreak++;
             } else {
                 currentStreak = 1;
@@ -257,6 +313,38 @@ public class Habit {
         return 0;
     }
 
+    public void validateSkipOn(
+        LocalDate date,
+        ZoneId zone
+    ) {
+        Objects.requireNonNull(
+            date,
+            "date must not be null"
+        );
+        Objects.requireNonNull(
+            zone,
+            "zone must not be null"
+        );
+
+        if (archived) {
+            throw new InvalidHabitStateException(
+                "Cannot skip: archived"
+            );
+        }
+
+        if (!isScheduledFor(date)) {
+            throw new InvalidHabitStateException(
+                "Habit is not scheduled for skip date."
+            );
+        }
+
+        if (wasCompletedOn(date, zone)) {
+            throw new InvalidHabitStateException(
+                "Cannot skip: already completed"
+            );
+        }
+    }
+
     public void archive() {
         this.archived = true;
     }
@@ -283,10 +371,48 @@ public class Habit {
         LocalDate lastCompletedOn,
         LocalDate today
     ) {
-        return lastCompletedOn.equals(today)
-            || lastCompletedOn.equals(
-            previousScheduledDateBefore(today)
+        return isStreakAliveGiven(
+            lastCompletedOn,
+            today,
+            Set.of()
         );
+    }
+
+    public boolean isStreakAliveGiven(
+        LocalDate lastCompletedOn,
+        LocalDate today,
+        Set<LocalDate> skippedDates
+    ) {
+        Objects.requireNonNull(
+            lastCompletedOn,
+            "lastCompletedOn must not be null"
+        );
+        Objects.requireNonNull(
+            today,
+            "today must not be null"
+        );
+        Objects.requireNonNull(
+            skippedDates,
+            "skippedDates must not be null"
+        );
+
+        if (lastCompletedOn.equals(today)) {
+            return true;
+        }
+
+        LocalDate scheduledDate =
+            previousScheduledDateBefore(today);
+
+        while (scheduledDate.isAfter(lastCompletedOn)) {
+            if (!skippedDates.contains(scheduledDate)) {
+                return false;
+            }
+
+            scheduledDate =
+                previousScheduledDateBefore(scheduledDate);
+        }
+
+        return scheduledDate.equals(lastCompletedOn);
     }
 
     private void requireNonEmptySchedule(EnumSet<DayOfWeek> scheduledDays) {
