@@ -299,3 +299,23 @@ backfill, and verify zero nulls before V18 runs. The DDL shape itself is no long
 measured mode boundary is pinned in application configuration.
 
 Both items once deferred to V18 as fixture work are now closed: the constructor was implemented on 2026-09-03, and this one was withdrawn as never required. The error to avoid repeating is the shared one — each was derived from what the constraint would imply rather than from the call sites, and a green suite confirms neither.
+
+**Correction, measured 2026-09-28: the 200 owned rows are not legacy rows, and step 5's "all 229"
+statement no longer describes this volume.** `SELECT owner_id, COUNT(*) ... GROUP BY owner_id` on the
+live volume shows every one of the 200 owned rows sharing a single `created_at =
+2024-08-01 12:00:00.000000` and owner id `3`, name `JFR performance fixture` — the performance seed
+from the Tip D latency investigation (`scripts/perf/seed-habits.sql`, 200 `JFR Seed NNN` rows).
+Commit `fbc3017` (2026-09-23) gave that script its own client provision step specifically so the
+owner-scoped read path could see the fixture; it was never part of this ADR's legacy population and
+carries no relationship to the `Local dev` client.
+
+The actual legacy population subject to steps 4–6 is the 29 null-owned rows, `created_at` between
+2026-06-11 and 2026-08-04. Both dates precede `api_clients` row `id=1` ("Local dev"), which was
+provisioned 2026-08-22 — before the `Local dev` client existed at all, so these rows cannot have been
+created "as" it; they are simply older than the `owner_id` column (added by V17, 2026-08-29) and than
+every client ID this environment has ever recorded. Step 5's original justification, "the current
+local database's one provisioned client," is also no longer accurate on its own terms: the volume now
+holds two clients, one of them a fixture. The backfill target is unchanged — `Local dev` remains the
+only non-fixture client this environment has ever provisioned, and no other credential is recorded for
+that window — but the count is **29 legacy rows**, not 229, and the reasoning is "only real client this
+environment ever had," not "only client present today."

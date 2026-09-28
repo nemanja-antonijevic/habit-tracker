@@ -384,6 +384,14 @@ foreign key and revocation column, and the real Compose datasource uses the pinn
 mode. The next rollout work is to record the owner mapping for the 29 null-owned rows before any
 backfill.
 
+**Correction, measured 2026-09-28: the 200 owned rows in S5's `total=229` are the JFR performance
+fixture, not legacy data.** They all share `created_at = 2024-08-01 12:00:00.000000` and `owner_id=3`
+("JFR performance fixture", provisioned by `scripts/perf/seed-habits.sql` via commit `fbc3017`,
+2026-09-23) — unrelated to ADR 0005's legacy population. The 29 null-owned rows (`created_at`
+2026-06-11 to 2026-08-04) are the entire legacy backfill population; both S5's 29 and the mapping
+target (`Local dev`, id `1`) were already correct, but the ADR's "all 229 legacy rows" framing was not
+— see the ADR's 2026-09-28 correction for the full reasoning.
+
 One step-4 item is deferred here rather than to a separate cleanup, because `NOT NULL` forces it.
 The second is already closed:
 
