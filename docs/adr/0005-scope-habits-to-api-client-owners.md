@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-08-29
 - Supersedes: [ADR 0004](0004-accept-stale-client-tier-bounded-by-ttl.md), as of 2026-09-01
-- Implementation: [notes and step order](../implementation/0005-habit-ownership.md); steps 1–4 implemented (V17, authenticated test suite, authentication boundary, owner scoping in SQL), V18 and backfill deferred
+- Implementation: [notes and step order](../implementation/0005-habit-ownership.md); all steps complete as of 2026-09-29 — V17, authenticated test suite, authentication boundary, owner scoping in SQL, backfill and V18 (`NOT NULL`)
 
 ## Context
 
@@ -319,3 +319,37 @@ holds two clients, one of them a fixture. The backfill target is unchanged — `
 only non-fixture client this environment has ever provisioned, and no other credential is recorded for
 that window — but the count is **29 legacy rows**, not 229, and the reasoning is "only real client this
 environment ever had," not "only client present today."
+
+**Backfill executed 2026-09-29:** `scripts/ops/backfill-local-dev-habit-owners.sql`, a one-time
+operational script outside Flyway, re-verified the `Local dev` mapping (id `1`, hash
+`60a2286a5007c8e4c2664246e14f73936f55b0b96b4652933d90e21b2fa068b8`) and the exact 29-row null-owned
+set (IDs `1–13, 214, 218–232`) inside a transaction, updated all 29 to `owner_id = 1`, then verified
+`COUNT(*) WHERE owner_id IS NULL = 0` before committing — any mismatch at either check rolls back and
+signals. Measured result: `owner_matches=1`, `null_owned_before=29`, `updated_rows=29`,
+`null_owned_after=0`. Independent post-verification on the live volume confirmed `total=229`,
+`orphans=0`, 29 rows owned by `Local dev`, and 0 invalid owner FK references. Step 5 is closed.
+
+**V18 applied 2026-09-29.** `V18__make_habit_owner_not_null.sql` runs the single measured statement,
+`ALTER TABLE habits MODIFY owner_id bigint NOT NULL`, under the already-pinned A7 `sql_mode`, with no
+dialect branching. Before writing it, every direct `habits` write path was enumerated: all raw
+`INSERT INTO habits` call sites specify `owner_id`, the MyBatis insert passes `ownerId`, the
+performance fixture uses a provisioned owner, and no fixture or migration writes a null owner —
+so the constraint had nothing left to reject.
+
+Full suite before the real volume: surefire 269/0/0/0, failsafe 14/0/0/0, `FlywaySqlModeMySqlIT`
+1/0/0/0 under the pinned A7 mode, `mvn verify` BUILD SUCCESS. One test-environment drift was found and
+fixed during this run: `DayOfWeekSetTypeHandlerIntegrationTest`, the suite's only `@MybatisTest`, had
+Spring Boot silently replace the declared `MODE=MySQL` H2 datasource with a plain embedded one,
+so `MODIFY` failed there on syntax while the same Flyway chain passed under the configured H2 MySQL
+mode and on real MySQL 8. Root cause, not a migration workaround:
+`@AutoConfigureTestDatabase(replace = NONE)` makes the slice test use the declared datasource like the
+rest of the suite. V18 itself stayed undialected.
+
+The real Compose volume was one migration further behind than expected: V17.1 (`create habit skips
+table`, committed 2026-09-28 with the monthly-skip feature) had not yet been applied either. Both
+pending migrations ran in normal Flyway order — V17.1 then V18 — with explicit approval. Post-run
+verification on the live volume: both `success=1`, 0 failed migrations, 0 null-owned habits, `owner_id`
+`bigint NOT NULL`, `fk_habits_owner` intact, 0 invalid owner references, `habit_skips` table present.
+
+ADR 0005 is now fully implemented: authentication boundary, owner-scoped SQL, backfill and `NOT NULL`
+are all live on the real local volume. Nothing remains deferred.

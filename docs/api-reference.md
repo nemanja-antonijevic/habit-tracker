@@ -17,7 +17,7 @@ There is no anonymous access. A client with tier `PUBLIC` is a provisioned ident
 
 `X-Api-Key` also determines which data the caller sees. Every habit belongs to the API client that created it, and every read, write and delete is scoped to that owner, so a client can only reach its own habits. Requesting a habit owned by another client returns `404 Not Found`, identical to requesting an ID that does not exist — the two cases are deliberately indistinguishable, so no response reveals whether another owner's habit exists. See [ADR 0005](adr/0005-scope-habits-to-api-client-owners.md).
 
-Habits created before ownership existed have no owner and are unreachable through the API until they are assigned. Making `owner_id` non-null is deferred.
+`owner_id` is `NOT NULL`: every habit row has an owner, including legacy rows created before ownership existed, which were backfilled to the `Local dev` client before this constraint was added. See [ADR 0005](adr/0005-scope-habits-to-api-client-owners.md).
 
 Keys are provisioned directly in `api_clients`, but only their lowercase SHA-256 hashes are stored. SHA-256 is intentionally deterministic so the high-entropy API key can be resolved through a unique indexed lookup; unlike a user password, it is not verified by scanning salted password hashes. No credential is seeded by Flyway, so a fresh database rejects every request to `/habits` until a key is provisioned. Secure provisioning, rotation, and rate limiting are deferred backlog work.
 

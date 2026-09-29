@@ -4,9 +4,10 @@ Companion to [ADR 0005](../adr/0005-scope-habits-to-api-client-owners.md). The A
 decision; this file records the ordering constraints and the traps found while reviewing it, so they
 are not rediscovered during implementation.
 
-Status: steps 1–4 complete (V17 applied, test suite authenticated, authentication boundary in place,
-owner scoping in SQL). Habits are scoped to the authenticated API client. V18 `NOT NULL`, the
-per-environment backfill and an authentication cache remain deferred.
+Status: all steps complete as of 2026-09-29 — V17 applied, test suite authenticated, authentication
+boundary in place, owner scoping in SQL, per-environment backfill and V18 `NOT NULL` both applied to
+the real local volume. Only an authentication cache remains deferred (see ADR 0005's superseded-cache
+discussion; it was never a precondition of V18).
 
 ## Step order
 
@@ -412,6 +413,37 @@ The second is already closed:
 verification; nothing else in the test suite blocks it.** Both fixture items originally deferred
 here are now closed — one implemented (`Habit(String, Instant)`, 2026-09-03), one withdrawn as never
 required (above).
+
+**Owner mapping, backfill and zero-null verification executed 2026-09-29.**
+`scripts/ops/backfill-local-dev-habit-owners.sql` re-checked the `Local dev` mapping and the exact
+29-row null-owned set inside a transaction before writing, updated only the 29 explicitly measured
+IDs, and required a post-update null count of `0` before committing — a fail-closed rollback on any
+mismatch. Measured: `owner_matches=1`, `null_owned_before=29`, `updated_rows=29`,
+`null_owned_after=0`; independent post-verification confirmed `total=229`, `orphans=0`, and `0`
+invalid owner FK references. The helper procedure is dropped after a successful run only — a rerun
+after an aborted run would hit `CREATE PROCEDURE ... already exists` instead of the intended
+precondition message, but no rerun occurred and none is needed.
+
+**V18 written and applied 2026-09-29.** `V18__make_habit_owner_not_null.sql` is the single measured
+statement, undialected. Before writing it, every direct `habits` write path was enumerated rather than
+assumed safe: all raw `INSERT INTO habits` sites specify `owner_id`, the MyBatis insert passes
+`ownerId`, the performance fixture provisions its owner, and no fixture writes a null owner.
+
+Measured before the real volume: surefire 269/0/0/0, failsafe 14/0/0/0, `FlywaySqlModeMySqlIT`
+1/0/0/0, `mvn verify` BUILD SUCCESS. One drift was found and fixed on the way: the suite's only
+`@MybatisTest`, `DayOfWeekSetTypeHandlerIntegrationTest`, had its declared `MODE=MySQL` H2 datasource
+silently replaced by Spring Boot's default embedded one, so `MODIFY` failed there on syntax alone
+while the same chain passed under the configured H2 mode and on MySQL 8. Fixed with
+`@AutoConfigureTestDatabase(replace = NONE)` — the slice test now uses the declared datasource like
+every other test class. V18 itself was not branched or weakened for this.
+
+The real volume was one migration further behind than assumed: V17.1 (`create habit skips table`) had
+not yet been applied either. Both pending migrations ran in normal order — V17.1 then V18 — with
+explicit approval; the application JAR used the already-pinned datasource. Post-run: 19 validated
+migrations, both new versions `success=1`, 0 failed migrations, 0 null-owned habits, `owner_id bigint
+NOT NULL`, `fk_habits_owner` intact, `habit_skips` present.
+
+ADR 0005 has no deferred schema or rollout work left.
 
 The DDL itself was measured on 2026-09-21, before writing V18. The H2 probe used 2.2.224 with the
 suite's MySQL mode flags; the MySQL probe used a disposable `mysql:8.0` container resolving to
