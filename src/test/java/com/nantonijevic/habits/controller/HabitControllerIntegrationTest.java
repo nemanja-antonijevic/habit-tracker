@@ -66,6 +66,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         DELETE,
         UPDATE,
         COMPLETE,
+        GET_SKIP,
+        DELETE_SKIP,
         ARCHIVE,
         UNARCHIVE,
         STATS,
@@ -1151,6 +1153,18 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                         foreignHabit.getId()
                     );
 
+                case GET_SKIP ->
+                    get(
+                        "/habits/{id}/skip",
+                        foreignHabit.getId()
+                    );
+
+                case DELETE_SKIP ->
+                    delete(
+                        "/habits/{id}/skip",
+                        foreignHabit.getId()
+                    );
+
                 case ARCHIVE ->
                     post(
                         "/habits/{id}/archive",
@@ -1445,5 +1459,81 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                 .param("from", "2026-07-01")
                 .param("to", "2026-07-31"))
             .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void currentMonthSkipCanBeReadRemovedAndUsedAgain()
+        throws Exception {
+
+        LocalDate today =
+            LocalDate.now(APPLICATION_ZONE);
+
+        Habit habit = repository.save(
+            new Habit(
+                ownerId,
+                "Undo monthly skip",
+                FIXED
+            )
+        );
+
+        perform(
+            post(
+                "/habits/{id}/skip",
+                habit.getId()
+            )
+        )
+            .andExpect(status().isCreated())
+            .andExpect(
+                jsonPath("$.skippedOn")
+                    .value(today.toString())
+            );
+
+        perform(
+            get(
+                "/habits/{id}/skip",
+                habit.getId()
+            )
+        )
+            .andExpect(status().isOk())
+            .andExpect(
+                jsonPath("$.skippedOn")
+                    .value(today.toString())
+            );
+
+        perform(
+            delete(
+                "/habits/{id}/skip",
+                habit.getId()
+            )
+        )
+            .andExpect(status().isNoContent());
+
+        perform(
+            get(
+                "/habits/{id}/skip",
+                habit.getId()
+            )
+        )
+            .andExpect(status().isNotFound());
+
+        perform(
+            delete(
+                "/habits/{id}/skip",
+                habit.getId()
+            )
+        )
+            .andExpect(status().isNotFound());
+
+        perform(
+            post(
+                "/habits/{id}/skip",
+                habit.getId()
+            )
+        )
+            .andExpect(status().isCreated())
+            .andExpect(
+                jsonPath("$.skippedOn")
+                    .value(today.toString())
+            );
     }
 }

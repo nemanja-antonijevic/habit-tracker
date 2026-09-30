@@ -93,6 +93,93 @@ class HabitControllerTest {
     }
 
     @Test
+    void getCurrentMonthSkipUsesInjectedClockForBusinessDate() {
+        Clock clock =
+            Clock.fixed(
+                Instant.parse(
+                    "2040-01-15T12:00:00Z"
+                ),
+                ZoneId.of(
+                    "Europe/Belgrade"
+                )
+            );
+
+        LocalDate expectedBusinessDate =
+            LocalDate.now(clock);
+
+        when(
+            habitSkipService.getCurrentMonthSkip(
+                OWNER_ID,
+                42L,
+                expectedBusinessDate
+            )
+        ).thenReturn(
+            new HabitSkip(
+                42L,
+                expectedBusinessDate
+            )
+        );
+
+        HabitController controller =
+            new HabitController(
+                habitCommandService,
+                habitQueryService,
+                clock,
+                habitResponseTransformer,
+                habitSkipService
+            );
+
+        controller.getCurrentMonthSkip(
+            42L,
+            CLIENT_CONTEXT
+        );
+
+        verify(habitSkipService)
+            .getCurrentMonthSkip(
+                OWNER_ID,
+                42L,
+                expectedBusinessDate
+            );
+    }
+
+    @Test
+    void removeCurrentMonthSkipUsesInjectedClockForBusinessDate() {
+        Clock clock =
+            Clock.fixed(
+                Instant.parse(
+                    "2040-01-15T12:00:00Z"
+                ),
+                ZoneId.of(
+                    "Europe/Belgrade"
+                )
+            );
+
+        LocalDate expectedBusinessDate =
+            LocalDate.now(clock);
+
+        HabitController controller =
+            new HabitController(
+                habitCommandService,
+                habitQueryService,
+                clock,
+                habitResponseTransformer,
+                habitSkipService
+            );
+
+        controller.removeCurrentMonthSkip(
+            42L,
+            CLIENT_CONTEXT
+        );
+
+        verify(habitSkipService)
+            .removeCurrentMonthSkip(
+                OWNER_ID,
+                42L,
+                expectedBusinessDate
+            );
+    }
+
+    @Test
     void skipUsesInjectedClockForBusinessDate() {
         Clock clock =
             Clock.fixed(

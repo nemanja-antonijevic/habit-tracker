@@ -215,6 +215,37 @@ public class HabitController {
         );
     }
 
+    @GetMapping("/{id}/skip")
+    public HabitSkipResponse getCurrentMonthSkip(
+        @PathVariable Long id,
+        @ResolvedClientTier ClientContext context
+    ) {
+        LocalDate today = LocalDate.now(clock);
+
+        return HabitSkipResponse.from(
+            habitSkipService.getCurrentMonthSkip(
+                context.clientId(),
+                id,
+                today
+            )
+        );
+    }
+
+    @DeleteMapping("/{id}/skip")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void removeCurrentMonthSkip(
+        @PathVariable Long id,
+        @ResolvedClientTier ClientContext context
+    ) {
+        LocalDate today = LocalDate.now(clock);
+
+        habitSkipService.removeCurrentMonthSkip(
+            context.clientId(),
+            id,
+            today
+        );
+    }
+
     @PostMapping("/{id}/skip")
     @ResponseStatus(HttpStatus.CREATED)
     public HabitSkipResponse skip(

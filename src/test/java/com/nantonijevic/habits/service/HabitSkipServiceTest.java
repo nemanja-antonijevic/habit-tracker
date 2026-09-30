@@ -1,10 +1,14 @@
 package com.nantonijevic.habits.service;
 
 import com.nantonijevic.habits.domain.Habit;
+import com.nantonijevic.habits.domain.HabitCompletion;
 import com.nantonijevic.habits.domain.HabitNotFoundException;
 import com.nantonijevic.habits.domain.HabitSkip;
 import com.nantonijevic.habits.domain.HabitSkipAlreadyUsedException;
+import com.nantonijevic.habits.domain.HabitSkipInUseException;
+import com.nantonijevic.habits.domain.HabitSkipNotFoundException;
 import com.nantonijevic.habits.event.DashboardChangedEvent;
+import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitMapper;
 import com.nantonijevic.habits.repository.HabitSkipRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +23,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -58,6 +63,10 @@ class HabitSkipServiceTest {
     private ApplicationEventPublisher
         eventPublisher;
 
+    @Mock
+    private HabitCompletionRepository
+        completionRepository;
+
     private HabitSkipService service;
 
     @BeforeEach
@@ -65,6 +74,7 @@ class HabitSkipServiceTest {
         service = new HabitSkipService(
             habitMapper,
             skipRepository,
+            completionRepository,
             eventPublisher,
             CLOCK
         );
@@ -236,6 +246,446 @@ class HabitSkipServiceTest {
             .hasMessageContaining("2026-07");
 
         verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void returnsCurrentMonthSkipForOwnedHabit() {
+        HabitSkip existingSkip =
+            new HabitSkip(
+                HABIT_ID,
+                SKIPPED_ON
+            );
+
+        when(
+            habitMapper.findById(
+                OWNER_ID,
+                HABIT_ID
+            )
+        ).thenReturn(habit());
+
+        when(
+            skipRepository
+                .findByHabitIdAndMonthStart(
+                    HABIT_ID,
+                    LocalDate.of(2026, 7, 1)
+                )
+        ).thenReturn(
+            Optional.of(existingSkip)
+        );
+
+        HabitSkip result =
+            service.getCurrentMonthSkip(
+                OWNER_ID,
+                HABIT_ID,
+                SKIPPED_ON
+            );
+
+        assertThat(result)
+            .isSameAs(existingSkip);
+
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void rejectsRemovalWhenCurrentStreakDependsOnSkip() {
+        LocalDate today =
+            LocalDate.of(2026, 7, 7);
+        LocalDate skippedOn =
+            LocalDate.of(2026, 7, 5);
+
+        Habit habit = habit();
+        HabitSkip existingSkip =
+            new HabitSkip(
+                HABIT_ID,
+                skippedOn
+            );
+
+        when(
+            habitMapper.findById(
+                OWNER_ID,
+                HABIT_ID
+            )
+        ).thenReturn(habit);
+
+        when(
+            skipRepository
+                .findByHabitIdAndMonthStart(
+                    HABIT_ID,
+                    LocalDate.of(2026, 7, 1)
+                )
+        ).thenReturn(
+            Optional.of(existingSkip)
+        );
+
+        when(
+            completionRepository
+                .findByHabitIdOrderByCompletedOnDesc(
+                    HABIT_ID
+                )
+        ).thenReturn(
+            List.of(
+                new HabitCompletion(
+                    HABIT_ID,
+                    LocalDate.of(2026, 7, 6)
+                ),
+                new HabitCompletion(
+                    HABIT_ID,
+                    LocalDate.of(2026, 7, 4)
+                )
+            )
+        );
+
+        when(
+            skipRepository
+                .findByHabitIdAndSkippedOnBetween(
+                    HABIT_ID,
+                    LocalDate.of(2026, 7, 4),
+                    today
+                )
+        ).thenReturn(
+            List.of(existingSkip)
+        );
+
+        assertThatThrownBy(
+            () ->
+                service.removeCurrentMonthSkip(
+                    OWNER_ID,
+                    HABIT_ID,
+                    today
+                )
+        )
+            .isInstanceOf(
+                HabitSkipInUseException.class
+            )
+            .hasMessageContaining(
+                skippedOn.toString()
+            );
+
+        verify(
+            skipRepository,
+            never()
+        ).delete(any());
+
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void allowsRemovalWhenSkippedDayWasAlsoCompleted() {
+        LocalDate today =
+            LocalDate.of(2026, 7, 7);
+        LocalDate skippedOn =
+            LocalDate.of(2026, 7, 5);
+
+        HabitSkip existingSkip =
+            new HabitSkip(
+                HABIT_ID,
+                skippedOn
+            );
+
+        when(
+            habitMapper.findById(
+                OWNER_ID,
+                HABIT_ID
+            )
+        ).thenReturn(habit());
+
+        when(
+            skipRepository
+                .findByHabitIdAndMonthStart(
+                    HABIT_ID,
+                    LocalDate.of(2026, 7, 1)
+                )
+        ).thenReturn(
+            Optional.of(existingSkip)
+        );
+
+        when(
+            completionRepository
+                .findByHabitIdOrderByCompletedOnDesc(
+                    HABIT_ID
+                )
+        ).thenReturn(
+            List.of(
+                new HabitCompletion(
+                    HABIT_ID,
+                    LocalDate.of(2026, 7, 6)
+                ),
+                new HabitCompletion(
+                    HABIT_ID,
+                    skippedOn
+                ),
+                new HabitCompletion(
+                    HABIT_ID,
+                    LocalDate.of(2026, 7, 4)
+                )
+            )
+        );
+
+        when(
+            skipRepository
+                .findByHabitIdAndSkippedOnBetween(
+                    HABIT_ID,
+                    LocalDate.of(2026, 7, 4),
+                    today
+                )
+        ).thenReturn(
+            List.of(existingSkip)
+        );
+
+        service.removeCurrentMonthSkip(
+            OWNER_ID,
+            HABIT_ID,
+            today
+        );
+
+        verify(skipRepository)
+            .delete(existingSkip);
+
+        verify(eventPublisher)
+            .publishEvent(
+                isA(DashboardChangedEvent.class)
+            );
+    }
+
+    @Test
+    void removesCurrentMonthSkipAndInvalidatesDashboard() {
+        Habit habit = habit();
+
+        HabitSkip existingSkip =
+            new HabitSkip(
+                HABIT_ID,
+                SKIPPED_ON
+            );
+
+        when(
+            habitMapper.findById(
+                OWNER_ID,
+                HABIT_ID
+            )
+        ).thenReturn(habit);
+
+        when(
+            skipRepository
+                .findByHabitIdAndMonthStart(
+                    HABIT_ID,
+                    LocalDate.of(2026, 7, 1)
+                )
+        ).thenReturn(
+            Optional.of(existingSkip)
+        );
+
+        service.removeCurrentMonthSkip(
+            OWNER_ID,
+            HABIT_ID,
+            SKIPPED_ON
+        );
+
+        verify(skipRepository)
+            .delete(existingSkip);
+
+        verify(eventPublisher)
+            .publishEvent(
+                isA(DashboardChangedEvent.class)
+            );
+    }
+
+    @Test
+    void allowsRemovalWhenDeadStreakDoesNotDependOnSkip() {
+        LocalDate today =
+            LocalDate.of(2026, 7, 20);
+        LocalDate skippedOn =
+            LocalDate.of(2026, 7, 5);
+
+        HabitSkip existingSkip =
+            new HabitSkip(
+                HABIT_ID,
+                skippedOn
+            );
+
+        when(
+            habitMapper.findById(
+                OWNER_ID,
+                HABIT_ID
+            )
+        ).thenReturn(habit());
+
+        when(
+            skipRepository
+                .findByHabitIdAndMonthStart(
+                    HABIT_ID,
+                    LocalDate.of(2026, 7, 1)
+                )
+        ).thenReturn(
+            Optional.of(existingSkip)
+        );
+
+        when(
+            completionRepository
+                .findByHabitIdOrderByCompletedOnDesc(
+                    HABIT_ID
+                )
+        ).thenReturn(
+            List.of(
+                new HabitCompletion(
+                    HABIT_ID,
+                    LocalDate.of(2026, 7, 11)
+                ),
+                new HabitCompletion(
+                    HABIT_ID,
+                    LocalDate.of(2026, 7, 10)
+                )
+            )
+        );
+
+        when(
+            skipRepository
+                .findByHabitIdAndSkippedOnBetween(
+                    HABIT_ID,
+                    LocalDate.of(2026, 7, 10),
+                    today
+                )
+        ).thenReturn(List.of());
+
+        service.removeCurrentMonthSkip(
+            OWNER_ID,
+            HABIT_ID,
+            today
+        );
+
+        verify(skipRepository)
+            .delete(existingSkip);
+
+        verify(eventPublisher)
+            .publishEvent(
+                isA(DashboardChangedEvent.class)
+            );
+    }
+
+    @Test
+    void rejectsRemovalWhenLongestStreakDependsOnSkip() {
+        LocalDate today =
+            LocalDate.of(2026, 7, 20);
+        LocalDate skippedOn =
+            LocalDate.of(2026, 7, 5);
+
+        HabitSkip existingSkip =
+            new HabitSkip(
+                HABIT_ID,
+                skippedOn
+            );
+
+        when(
+            habitMapper.findById(
+                OWNER_ID,
+                HABIT_ID
+            )
+        ).thenReturn(habit());
+
+        when(
+            skipRepository
+                .findByHabitIdAndMonthStart(
+                    HABIT_ID,
+                    LocalDate.of(2026, 7, 1)
+                )
+        ).thenReturn(
+            Optional.of(existingSkip)
+        );
+
+        when(
+            completionRepository
+                .findByHabitIdOrderByCompletedOnDesc(
+                    HABIT_ID
+                )
+        ).thenReturn(
+            List.of(
+                new HabitCompletion(
+                    HABIT_ID,
+                    LocalDate.of(2026, 7, 15)
+                ),
+                new HabitCompletion(
+                    HABIT_ID,
+                    LocalDate.of(2026, 7, 6)
+                ),
+                new HabitCompletion(
+                    HABIT_ID,
+                    LocalDate.of(2026, 7, 4)
+                )
+            )
+        );
+
+        when(
+            skipRepository
+                .findByHabitIdAndSkippedOnBetween(
+                    HABIT_ID,
+                    LocalDate.of(2026, 7, 4),
+                    today
+                )
+        ).thenReturn(
+            List.of(existingSkip)
+        );
+
+        assertThatThrownBy(
+            () ->
+                service.removeCurrentMonthSkip(
+                    OWNER_ID,
+                    HABIT_ID,
+                    today
+                )
+        )
+            .isInstanceOf(
+                HabitSkipInUseException.class
+            );
+
+        verify(
+            skipRepository,
+            never()
+        ).delete(any());
+
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void doesNotRemoveSkipFromPreviousMonth() {
+        LocalDate today =
+            LocalDate.of(2026, 8, 3);
+
+        when(
+            habitMapper.findById(
+                OWNER_ID,
+                HABIT_ID
+            )
+        ).thenReturn(habit());
+
+        when(
+            skipRepository
+                .findByHabitIdAndMonthStart(
+                    HABIT_ID,
+                    LocalDate.of(2026, 8, 1)
+                )
+        ).thenReturn(Optional.empty());
+
+        assertThatThrownBy(
+            () ->
+                service.removeCurrentMonthSkip(
+                    OWNER_ID,
+                    HABIT_ID,
+                    today
+                )
+        )
+            .isInstanceOf(
+                HabitSkipNotFoundException.class
+            )
+            .hasMessageContaining("2026-08");
+
+        verify(
+            skipRepository,
+            never()
+        ).delete(any());
+
+        verifyNoInteractions(
+            completionRepository,
+            eventPublisher
+        );
     }
 
     private Habit habit() {

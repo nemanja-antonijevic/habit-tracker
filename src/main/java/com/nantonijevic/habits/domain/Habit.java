@@ -116,6 +116,12 @@ public class Habit {
         return lastCompletedAt;
     }
 
+    public record StreakSnapshot(
+        int currentStreak,
+        int longestStreak
+    ) {
+    }
+
     // Undoes the completion made today (the only one this can undo, per the guards below) and
     // recomputes both currentStreak and longestStreak from the remaining completion history,
     // walking consecutive scheduled days so a gap correctly breaks a run. currentStreak is gated
@@ -171,14 +177,59 @@ public class Habit {
 
         this.completionCount--;
 
+        StreakSnapshot snapshot =
+            calculateStreaks(
+                remainingCompletionDates,
+                today,
+                skippedDates
+            );
+
         if (remainingCompletionDates.isEmpty()) {
             this.lastCompletedAt = null;
-            this.currentStreak = 0;
-            this.longestStreak = 0;
-            return;
+        } else {
+            LocalDate latestCompletedDate =
+                remainingCompletionDates
+                    .stream()
+                    .max(LocalDate::compareTo)
+                    .orElseThrow();
+
+            this.lastCompletedAt =
+                latestCompletedDate
+                    .atStartOfDay(zone)
+                    .toInstant();
         }
 
-        List<LocalDate> completedDatesAsc = remainingCompletionDates.stream()
+        this.currentStreak =
+            snapshot.currentStreak();
+        this.longestStreak =
+            snapshot.longestStreak();
+    }
+
+    public StreakSnapshot calculateStreaks(
+        List<LocalDate> completionDates,
+        LocalDate today,
+        Set<LocalDate> skippedDates
+    ) {
+        Objects.requireNonNull(
+            completionDates,
+            "completionDates must not be null"
+        );
+        Objects.requireNonNull(
+            today,
+            "today must not be null"
+        );
+        Objects.requireNonNull(
+            skippedDates,
+            "skippedDates must not be null"
+        );
+
+        if (completionDates.isEmpty()) {
+            return new StreakSnapshot(0, 0);
+        }
+
+        List<LocalDate> completedDatesAsc =
+            completionDates
+                .stream()
                 .sorted()
                 .toList();
 
@@ -186,7 +237,9 @@ public class Habit {
         int currentRun = 0;
         LocalDate previousDate = null;
 
-        for (LocalDate completedDate : completedDatesAsc) {
+        for (LocalDate completedDate
+            : completedDatesAsc) {
+
             if (previousDate != null
                 && isStreakAliveGiven(
                 previousDate,
@@ -198,11 +251,15 @@ public class Habit {
                 currentRun = 1;
             }
 
-            longest = Math.max(longest, currentRun);
+            longest = Math.max(
+                longest,
+                currentRun
+            );
             previousDate = completedDate;
         }
 
-        LocalDate latestCompletedDate = completedDatesAsc.getLast();
+        LocalDate latestCompletedDate =
+            completedDatesAsc.getLast();
 
         boolean currentStreakIsAlive =
             isStreakAliveGiven(
@@ -211,9 +268,12 @@ public class Habit {
                 skippedDates
             );
 
-        this.lastCompletedAt = latestCompletedDate.atStartOfDay(zone).toInstant();
-        this.currentStreak = currentStreakIsAlive ? currentRun : 0;
-        this.longestStreak = longest;
+        return new StreakSnapshot(
+            currentStreakIsAlive
+                ? currentRun
+                : 0,
+            longest
+        );
     }
 
     public boolean complete(

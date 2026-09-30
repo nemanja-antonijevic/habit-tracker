@@ -1,10 +1,14 @@
 package com.nantonijevic.habits.service;
 
 import com.nantonijevic.habits.domain.Habit;
+import com.nantonijevic.habits.domain.HabitCompletion;
 import com.nantonijevic.habits.domain.HabitNotFoundException;
 import com.nantonijevic.habits.domain.HabitSkip;
 import com.nantonijevic.habits.domain.HabitSkipAlreadyUsedException;
+import com.nantonijevic.habits.domain.HabitSkipInUseException;
+import com.nantonijevic.habits.domain.HabitSkipNotFoundException;
 import com.nantonijevic.habits.event.DashboardChangedEvent;
+import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitMapper;
 import com.nantonijevic.habits.repository.HabitSkipRepository;
 import org.springframework.context.ApplicationEventPublisher;
@@ -14,8 +18,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 public class HabitSkipService {
@@ -28,6 +35,9 @@ public class HabitSkipService {
 
     private final HabitSkipRepository skipRepository;
 
+    private final HabitCompletionRepository
+        completionRepository;
+
     private final ApplicationEventPublisher
         eventPublisher;
 
@@ -36,11 +46,13 @@ public class HabitSkipService {
     public HabitSkipService(
         HabitMapper habitMapper,
         HabitSkipRepository skipRepository,
+        HabitCompletionRepository completionRepository,
         ApplicationEventPublisher eventPublisher,
         Clock clock
     ) {
         this.habitMapper = habitMapper;
         this.skipRepository = skipRepository;
+        this.completionRepository = completionRepository;
         this.eventPublisher = eventPublisher;
         this.clock = clock;
     }
@@ -114,6 +126,92 @@ public class HabitSkipService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public HabitSkip getCurrentMonthSkip(
+        Long ownerId,
+        Long habitId,
+        LocalDate today
+    ) {
+        Optional.ofNullable(
+                habitMapper.findById(
+                    ownerId,
+                    habitId
+                )
+            )
+            .orElseThrow(
+                () -> new HabitNotFoundException(
+                    habitId
+                )
+            );
+
+        LocalDate monthStart =
+            today.withDayOfMonth(1);
+
+        return skipRepository
+            .findByHabitIdAndMonthStart(
+                habitId,
+                monthStart
+            )
+            .orElseThrow(
+                () -> new HabitSkipNotFoundException(
+                    habitId,
+                    today
+                )
+            );
+    }
+
+    @Transactional
+    public void removeCurrentMonthSkip(
+        Long ownerId,
+        Long habitId,
+        LocalDate today
+    ) {
+        Habit habit = Optional.ofNullable(
+                habitMapper.findById(
+                    ownerId,
+                    habitId
+                )
+            )
+            .orElseThrow(
+                () -> new HabitNotFoundException(
+                    habitId
+                )
+            );
+
+        LocalDate monthStart =
+            today.withDayOfMonth(1);
+
+        HabitSkip skip = skipRepository
+            .findByHabitIdAndMonthStart(
+                habitId,
+                monthStart
+            )
+            .orElseThrow(
+                () ->
+                    new HabitSkipNotFoundException(
+                        habitId,
+                        today
+                    )
+            );
+
+        if (currentStreakDependsOnSkip(
+            habit,
+            skip,
+            today
+        )) {
+            throw new HabitSkipInUseException(
+                habitId,
+                skip.skippedOn()
+            );
+        }
+
+        skipRepository.delete(skip);
+
+        eventPublisher.publishEvent(
+            new DashboardChangedEvent()
+        );
+    }
+
     private boolean isMonthlyConstraintViolation(
         Throwable throwable
     ) {
@@ -135,5 +233,60 @@ public class HabitSkipService {
         }
 
         return false;
+    }
+
+    private boolean currentStreakDependsOnSkip(
+        Habit habit,
+        HabitSkip skip,
+        LocalDate today
+    ) {
+        List<LocalDate> completionDates =
+            completionRepository
+                .findByHabitIdOrderByCompletedOnDesc(
+                    skip.habitId()
+                )
+                .stream()
+                .map(
+                    HabitCompletion::getCompletedOn
+                )
+                .sorted()
+                .toList();
+
+        if (completionDates.isEmpty()) {
+            return false;
+        }
+
+        Set<LocalDate> skippedDates =
+            new HashSet<>(
+                skipRepository
+                    .findByHabitIdAndSkippedOnBetween(
+                        skip.habitId(),
+                        completionDates.getFirst(),
+                        today
+                    )
+                    .stream()
+                    .map(HabitSkip::skippedOn)
+                    .toList()
+            );
+
+        Habit.StreakSnapshot withSkip =
+            habit.calculateStreaks(
+                completionDates,
+                today,
+                skippedDates
+            );
+
+        skippedDates.remove(
+            skip.skippedOn()
+        );
+
+        Habit.StreakSnapshot withoutSkip =
+            habit.calculateStreaks(
+                completionDates,
+                today,
+                skippedDates
+            );
+
+        return !withSkip.equals(withoutSkip);
     }
 }

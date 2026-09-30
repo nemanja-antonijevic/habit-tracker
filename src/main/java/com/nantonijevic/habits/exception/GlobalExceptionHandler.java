@@ -2,6 +2,8 @@ package com.nantonijevic.habits.exception;
 
 import com.nantonijevic.habits.client.InvalidApiKeyException;
 import com.nantonijevic.habits.domain.HabitNotFoundException;
+import com.nantonijevic.habits.domain.HabitSkipInUseException;
+import com.nantonijevic.habits.domain.HabitSkipNotFoundException;
 import com.nantonijevic.habits.domain.HabitVersionConflictException;
 import com.nantonijevic.habits.domain.InvalidHabitStateException;
 import com.nantonijevic.habits.domain.HabitSkipAlreadyUsedException;
@@ -34,6 +36,30 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.CONFLICT)
     public ErrorResponse handle(HabitVersionConflictException e) {
         return new ErrorResponse(e.getMessage());
+    }
+
+    @ExceptionHandler(
+        HabitSkipInUseException.class
+    )
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ErrorResponse handle(
+        HabitSkipInUseException exception
+    ) {
+        return new ErrorResponse(
+            exception.getMessage()
+        );
+    }
+
+    @ExceptionHandler(
+        HabitSkipNotFoundException.class
+    )
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ErrorResponse handle(
+        HabitSkipNotFoundException exception
+    ) {
+        return new ErrorResponse(
+            exception.getMessage()
+        );
     }
 
     @ExceptionHandler(
