@@ -27,7 +27,12 @@ public final class TestApiClientOwner {
                     CURRENT_TIMESTAMP, TRUE)
             """,
             ownerId,
-            "c".repeat(64)
+            uniqueApiKeyHash(ownerId)
         );
+    }
+
+    // api_key_hash is unique, so each owner id needs its own 64-char hash.
+    private static String uniqueApiKeyHash(Long ownerId) {
+        return String.format("%064x", ownerId);
     }
 }
