@@ -149,6 +149,21 @@ curl -s -X POST http://localhost:8080/habits/1/complete -H "$KEY"
 curl -s -i -X POST http://localhost:8080/habits/1/skip -H "$KEY"
 
 # Symmetrically: completing a day already skipped -> 400
+
+# Read this month's skip -> 200 {"skippedOn": "..."}; 404 if none used this month
+curl -s -i http://localhost:8080/habits/1/skip -H "$KEY"
+
+# Take back the skip -> 204; the month's allowance is free again
+# 404 if there is no skip this month (also on a repeated DELETE)
+# 409 if the streak (current or longest) depends on the skip
+curl -s -i -X DELETE http://localhost:8080/habits/1/skip -H "$KEY"
+
+# Full cycle: skip -> read -> remove -> read (404) -> skip again (201)
+curl -s -X POST   http://localhost:8080/habits/1/skip -H "$KEY"
+curl -s           http://localhost:8080/habits/1/skip -H "$KEY"
+curl -s -X DELETE http://localhost:8080/habits/1/skip -H "$KEY"
+curl -s -i        http://localhost:8080/habits/1/skip -H "$KEY"
+curl -s -X POST   http://localhost:8080/habits/1/skip -H "$KEY"
 ```
 
 ## Archive

@@ -58,6 +58,8 @@ Filtering applies to all endpoints that return `HabitResponse`, including pagina
 | 15 | `GET` | `/habits/stats` | Cross-habit dashboard summary over all active habits | Write + read model (Kafka projection) |
 | 16 | `GET` | `/habits/{id}/completion-rate` | Completion rate over a date window | Read model (Kafka projection) |
 | 17 | `POST` | `/habits/{id}/skip` | Forgive one scheduled day this calendar month without breaking the streak | Write + event |
+| 18 | `GET` | `/habits/{id}/skip` | Read this calendar month's skip | Write (direct read) |
+| 19 | `DELETE` | `/habits/{id}/skip` | Remove this calendar month's skip, freeing the month's allowance | Write + event |
 
 ## Data model
 
@@ -108,7 +110,7 @@ Completion rate over a date window. Returned by endpoint 16.
 
 ### HabitSkipResponse
 
-One recorded skip. Returned by [endpoint 17](#17-skip-a-scheduled-day).
+One recorded skip. Returned by [endpoint 17](#17-skip-a-scheduled-day) and [endpoint 18](#18-read-this-months-skip).
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -128,11 +130,11 @@ Body of every error.
 |------|------|
 | `200 OK` | Success with a body |
 | `201 Created` | Habit created (with a `Location` header) |
-| `204 No Content` | Success with no body (delete) |
+| `204 No Content` | Success with no body (delete, remove skip) |
 | `400 Bad Request` | Validation failed, malformed JSON, or an illegal state transition (`InvalidHabitStateException`) |
 | `401 Unauthorized` | `X-Api-Key` missing, unknown, or belonging to a revoked client (`InvalidApiKeyException`). Raised by the interceptor before validation, so it takes precedence over `400` |
-| `404 Not Found` | Habit does not exist, or is owned by another client (`HabitNotFoundException`) — the two cases are deliberately indistinguishable |
-| `409 Conflict` | Version mismatch on update; on `complete`, only when the single automatic retry loses the optimistic-lock race again (`HabitVersionConflictException`); on `skip`, a skip already exists for that habit in the current calendar month (`HabitSkipAlreadyUsedException`) |
+| `404 Not Found` | Habit does not exist, or is owned by another client (`HabitNotFoundException`) — the two cases are deliberately indistinguishable. On the skip read and remove endpoints also when the habit has no skip in the current calendar month (`HabitSkipNotFoundException`) |
+| `409 Conflict` | Version mismatch on update; on `complete`, only when the single automatic retry loses the optimistic-lock race again (`HabitVersionConflictException`); on `skip`, a skip already exists for that habit in the current calendar month (`HabitSkipAlreadyUsedException`); on skip removal, the streak would change (`HabitSkipInUseException`) |
 
 `GlobalExceptionHandler` (`@RestControllerAdvice`) centralizes the exception-to-status mapping.
 
@@ -643,3 +645,46 @@ Skipping does not affect `completionCount`, does not appear in [history](#10-com
 | `400` | Habit is archived, today is not a scheduled day, or today was already completed |
 | `404` | Does not exist, or is owned by another client |
 | `409` | A skip already exists for this habit in the current calendar month |
+
+## 18. Read this month's skip
+
+```
+GET /habits/{id}/skip
+```
+
+Returns the skip recorded for this habit in the current calendar month (server clock). It answers "has this month's skip been used, and on which day" without having to trigger a `409` on [endpoint 17](#17-skip-a-scheduled-day).
+
+**Response:** `200 OK`, `HabitSkipResponse`.
+
+```json
+{ "skippedOn": "2026-07-08" }
+```
+
+| Status | Condition |
+|--------|-----------|
+| `200` | A skip exists in the current calendar month |
+| `404` | The habit does not exist or is owned by another client, or no skip has been used this month |
+
+Only the current calendar month is exposed. Skips from earlier months are kept as history and are not returned here.
+
+## 19. Remove this month's skip
+
+```
+DELETE /habits/{id}/skip
+```
+
+No body. Deletes the skip recorded in the current calendar month, so the month's single skip is available again and a new one can be recorded with [endpoint 17](#17-skip-a-scheduled-day). Use it to take back a skip pressed by mistake.
+
+**Only the current calendar month's skip can be removed.** Skips from earlier months are historical records and are not reachable through this endpoint. A repeated `DELETE` returns `404` (nothing left to remove), not an idempotent `204`.
+
+**Removal is refused when the streak depends on the skip.** The service recomputes `currentStreak` and `longestStreak` from the completion history twice, with and without the skip, using the same `Habit.calculateStreaks` calculation as [endpoint 7](#7-undo-todays-completion). If either value would change, the call returns `409` and nothing is deleted. This keeps the stored `longest_streak` derivable from completion and skip history. A skip that changes neither value is removable, including a redundant one whose day was completed afterwards and a skip on a streak that is already dead with or without it.
+
+On success the dashboard cache is invalidated (`DashboardChangedEvent`), because [due-today](#12-habits-due-today), its [count](#14-count-of-habits-due-today) and the [dashboard](#15-cross-habit-dashboard-stats) all depend on whether today is skipped.
+
+**Response:** `204 No Content`.
+
+| Status | Condition |
+|--------|-----------|
+| `204` | Skip removed |
+| `404` | The habit does not exist or is owned by another client, or there is no skip in the current calendar month (including a repeated `DELETE`) |
+| `409` | Removing the skip would change `currentStreak` or `longestStreak` |
