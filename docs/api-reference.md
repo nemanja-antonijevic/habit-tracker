@@ -108,6 +108,15 @@ Completion rate over a date window. Returned by endpoint 16.
 | `completed` | `long` | Of those, how many were actually completed |
 | `rate` | `number` (0..1, scale 4) \| `null` | `completed / scheduled`, rounded `HALF_UP` to 4 decimals; `null` when `scheduled` is `0` (rate is undefined, not `0`) |
 
+### WeekdayBreakdownResponse
+
+Counts for one day of the week. Returned by endpoint 20, as the value of a map keyed by `DayOfWeek` (`MONDAY` to `SUNDAY`).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `scheduled` | `long` | Number of times that weekday occurs in the effective window |
+| `completed` | `long` | Of those, how many were actually completed |
+
 ### HabitSkipResponse
 
 One recorded skip. Returned by [endpoint 17](#17-skip-a-scheduled-day) and [endpoint 18](#18-read-this-months-skip).
@@ -587,7 +596,7 @@ Behavior:
 GET /habits/{id}/completion-rate?from=2026-07-01&to=2026-07-31
 ```
 
-Returns how consistently a habit was kept over a date window: the ratio of completed scheduled days to total scheduled days. This is a historical consistency metric, not a current snapshot (see [endpoint 11](#11-habit-stats) for the snapshot).
+Returns how consistently a habit was kept over a date window: the ratio of completed scheduled days to total scheduled days. This is a historical consistency metric, not a current snapshot (see [endpoint 11](#11-habit-stats) for the snapshot). For the same window split by weekday, see [endpoint 20](#20-weekday-breakdown-over-a-window).
 
 Query parameters:
 
@@ -688,3 +697,46 @@ On success the dashboard cache is invalidated (`DashboardChangedEvent`), because
 | `204` | Skip removed |
 | `404` | The habit does not exist or is owned by another client, or there is no skip in the current calendar month (including a repeated `DELETE`) |
 | `409` | Removing the skip would change `currentStreak` or `longestStreak` |
+
+## 20. Weekday breakdown over a window
+
+```
+GET /habits/{id}/weekday-breakdown?from=2026-07-01&to=2026-07-12
+```
+
+Splits the window of [endpoint 16](#16-completion-rate-over-a-window) by day of the week: for every weekday in the habit's current schedule, how many times it occurred and how many of those were completed. Use it to see which days a habit is kept on and which it is missed on.
+
+Query parameters:
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `from` | `LocalDate` (`YYYY-MM-DD`) | yes | Start of the window (inclusive) |
+| `to` | `LocalDate` (`YYYY-MM-DD`) | yes | End of the window (inclusive) |
+
+**Response:** `200 OK`, a map of `DayOfWeek` to [`WeekdayBreakdownResponse`](#weekdaybreakdownresponse). For a habit scheduled on Wednesday and Friday, with a completion on Saturday 2026-07-04 that is ignored because Saturday is not scheduled:
+
+```json
+{
+  "WEDNESDAY": { "scheduled": 2, "completed": 1 },
+  "FRIDAY": { "scheduled": 2, "completed": 2 }
+}
+```
+
+| Status | Condition |
+|--------|-----------|
+| `200` | OK |
+| `400` | `from` after `to`, or a required parameter is missing / unparseable |
+| `404` | Habit does not exist, or is owned by another client |
+
+Behavior:
+- **Same calculation as endpoint 16.** Both endpoints run one shared window calculation (range check, owner lookup, clamp to the habit's age, counting, filtering by schedule). The `scheduled` and `completed` totals of endpoint 16 are the sums of the values returned here, so the two can never disagree.
+- **Only scheduled weekdays appear, and they always appear.** The keys are exactly the habit's current `scheduledDays`. A scheduled weekday that does not occur in the window is present with `{ "scheduled": 0, "completed": 0 }`, so the shape of the response does not depend on the window.
+- **Inclusive window, clamped to the habit's age.** Both `from` and `to` count, and the effective start is `max(from, habitCreatedDate)`. If the effective start is after `to`, every scheduled weekday is returned with zeros and the read model is not queried.
+- **Completions on unscheduled days are ignored.** A completion on a weekday that is no longer in the schedule does not appear in the response, as in endpoint 16.
+- **Read-only.** The endpoint changes nothing and publishes no `DashboardChangedEvent`.
+- **Eventual consistency.** Completed dates come from the read model `habit_completion_stats` (Kafka projection), so a very recent `complete` may not yet be reflected.
+
+### Known limitations
+
+- **Schedule history.** The breakdown is computed against the habit's **current** `scheduledDays` for the whole window, the same limitation as [endpoint 16](#known-limitation--schedule-history).
+- **The window is not bounded.** The service walks the window day by day, so the cost grows with its length, and a `to` far in the future (for example `9999-12-31`) means millions of iterations. Future days also count as scheduled. Only `from` is clamped (to the creation date); `to` is not.

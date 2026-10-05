@@ -188,6 +188,10 @@ curl -s "http://localhost:8080/habits/1/history?from=2024-01-10&to=2024-01-31" -
 # Completion rate over a window (both bounds required, inclusive)
 # -> { "scheduled": 4, "completed": 3, "rate": 0.7500 }; rate is null when nothing was scheduled
 curl -s "http://localhost:8080/habits/1/completion-rate?from=2026-07-01&to=2026-07-31" -H "$KEY"
+
+# Weekday breakdown over a window (both bounds required, inclusive)
+# -> { "WEDNESDAY": { "scheduled": 2, "completed": 1 }, "FRIDAY": { "scheduled": 2, "completed": 2 } }
+curl -s "http://localhost:8080/habits/1/weekday-breakdown?from=2026-07-01&to=2026-07-12" -H "$KEY"
 ```
 
 ## Due today
