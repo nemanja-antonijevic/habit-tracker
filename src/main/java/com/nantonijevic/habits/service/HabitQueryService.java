@@ -9,6 +9,7 @@ import com.nantonijevic.habits.domain.HabitSkip;
 import com.nantonijevic.habits.dto.HabitCompletionRateResponse;
 import com.nantonijevic.habits.dto.HabitDashboardResponse;
 import com.nantonijevic.habits.dto.HabitStatsView;
+import com.nantonijevic.habits.dto.WeekdayBreakdownResponse;
 import com.nantonijevic.habits.exception.InvalidDateRangeException;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
@@ -29,6 +30,8 @@ import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.util.Collections;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -197,76 +200,18 @@ public class HabitQueryService {
     }
 
     @Transactional(readOnly = true)
-    public HabitCompletionRateResponse getCompletionRate(
+    public Map<DayOfWeek, WeekdayBreakdownResponse>
+    getWeekdayBreakdown(
         Long ownerId,
         Long habitId,
         LocalDate from,
         LocalDate to
     ) {
-        if (from.isAfter(to)) {
-            throw new InvalidDateRangeException();
-        }
-
-        Habit habit = Optional.ofNullable(
-            habitMapper.findById(ownerId, habitId)
-        ).orElseThrow(
-            () -> new HabitNotFoundException(habitId)
-        );
-
-        LocalDate createdDate = LocalDate.ofInstant(
-            habit.getCreatedAt(),
-            clock.getZone()
-        );
-
-        LocalDate effectiveFrom =
-            from.isAfter(createdDate)
-                ? from
-                : createdDate;
-
-        if (effectiveFrom.isAfter(to)) {
-            return new HabitCompletionRateResponse(
-                0,
-                0,
-                null
-            );
-        }
-
-        Set<DayOfWeek> scheduledDays =
-            habit.getScheduledDays();
-
-        long scheduled = countScheduledOccurrences(
-            effectiveFrom,
-            to,
-            scheduledDays
-        );
-
-        List<LocalDate> completedDates =
-            completionStatRepository.findCompletedDatesInPeriod(
-                habitId,
-                effectiveFrom,
-                to
-            );
-
-        long completed = completedDates.stream()
-            .filter(date ->
-                scheduledDays.contains(date.getDayOfWeek())
-            )
-            .count();
-
-        BigDecimal rate =
-            scheduled == 0
-                ? null
-                : BigDecimal.valueOf(completed)
-                .divide(
-                    BigDecimal.valueOf(scheduled),
-                    4,
-                    RoundingMode.HALF_UP
-                );
-
-        return new HabitCompletionRateResponse(
-            scheduled,
-            completed,
-            rate
+        return completionWindowBreakdown(
+            ownerId,
+            habitId,
+            from,
+            to
         );
     }
 
@@ -321,6 +266,55 @@ public class HabitQueryService {
             aggregate.longestStreak(),
             aggregate.lastCompletedOn(),
             currentStreak
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public HabitCompletionRateResponse getCompletionRate(
+        Long ownerId,
+        Long habitId,
+        LocalDate from,
+        LocalDate to
+    ) {
+        Map<DayOfWeek, WeekdayBreakdownResponse>
+            breakdown =
+            completionWindowBreakdown(
+                ownerId,
+                habitId,
+                from,
+                to
+            );
+
+        long scheduled =
+            breakdown.values()
+                .stream()
+                .mapToLong(
+                    WeekdayBreakdownResponse::scheduled
+                )
+                .sum();
+
+        long completed =
+            breakdown.values()
+                .stream()
+                .mapToLong(
+                    WeekdayBreakdownResponse::completed
+                )
+                .sum();
+
+        BigDecimal rate =
+            scheduled == 0
+                ? null
+                : BigDecimal.valueOf(completed)
+                .divide(
+                    BigDecimal.valueOf(scheduled),
+                    4,
+                    RoundingMode.HALF_UP
+                );
+
+        return new HabitCompletionRateResponse(
+            scheduled,
+            completed,
+            rate
         );
     }
 
@@ -481,31 +475,6 @@ public class HabitQueryService {
         );
     }
 
-    private long countScheduledOccurrences(
-        LocalDate from,
-        LocalDate to,
-        Set<DayOfWeek> scheduledDays
-    ) {
-        long count = 0;
-        LocalDate date = from;
-
-        while (!date.isAfter(to)) {
-            if (scheduledDays.contains(
-                date.getDayOfWeek()
-            )) {
-                count++;
-            }
-
-            if (date.equals(to)) {
-                break;
-            }
-
-            date = date.plusDays(1);
-        }
-
-        return count;
-    }
-
     private int currentStreak(
         Habit habit,
         HabitCompletionStat latestStat,
@@ -526,5 +495,122 @@ public class HabitQueryService {
         return streakIsAlive
             ? latestStat.getCurrentStreak()
             : 0;
+    }
+
+    private Map<DayOfWeek, WeekdayBreakdownResponse>
+    completionWindowBreakdown(
+        Long ownerId,
+        Long habitId,
+        LocalDate from,
+        LocalDate to
+    ) {
+        if (from.isAfter(to)) {
+            throw new InvalidDateRangeException();
+        }
+
+        Habit habit = Optional.ofNullable(
+            habitMapper.findById(
+                ownerId,
+                habitId
+            )
+        ).orElseThrow(
+            () ->
+                new HabitNotFoundException(
+                    habitId
+                )
+        );
+
+        LocalDate createdDate =
+            LocalDate.ofInstant(
+                habit.getCreatedAt(),
+                clock.getZone()
+            );
+
+        LocalDate effectiveFrom =
+            from.isAfter(createdDate)
+                ? from
+                : createdDate;
+
+        Map<DayOfWeek, WeekdayBreakdownResponse>
+            breakdown =
+            new EnumMap<>(
+                DayOfWeek.class
+            );
+
+        for (DayOfWeek scheduledDay
+            : habit.getScheduledDays()) {
+
+            breakdown.put(
+                scheduledDay,
+                new WeekdayBreakdownResponse(
+                    0,
+                    0
+                )
+            );
+        }
+
+        if (effectiveFrom.isAfter(to)) {
+            return Collections.unmodifiableMap(
+                breakdown
+            );
+        }
+
+        LocalDate date = effectiveFrom;
+
+        while (!date.isAfter(to)) {
+            DayOfWeek day =
+                date.getDayOfWeek();
+
+            WeekdayBreakdownResponse current =
+                breakdown.get(day);
+
+            if (current != null) {
+                breakdown.put(
+                    day,
+                    new WeekdayBreakdownResponse(
+                        current.scheduled() + 1,
+                        current.completed()
+                    )
+                );
+            }
+
+            if (date.equals(to)) {
+                break;
+            }
+
+            date = date.plusDays(1);
+        }
+
+        List<LocalDate> completedDates =
+            completionStatRepository
+                .findCompletedDatesInPeriod(
+                    habitId,
+                    effectiveFrom,
+                    to
+                );
+
+        for (LocalDate completedDate
+            : completedDates) {
+
+            DayOfWeek day =
+                completedDate.getDayOfWeek();
+
+            WeekdayBreakdownResponse current =
+                breakdown.get(day);
+
+            if (current != null) {
+                breakdown.put(
+                    day,
+                    new WeekdayBreakdownResponse(
+                        current.scheduled(),
+                        current.completed() + 1
+                    )
+                );
+            }
+        }
+
+        return Collections.unmodifiableMap(
+            breakdown
+        );
     }
 }

@@ -801,4 +801,151 @@ class HabitQueryServiceTest {
         assertThat(dashboard.completedToday())
             .isZero();
     }
+
+    @Test
+    void weekdayBreakdownGroupsScheduledAndCompletedByCurrentWeekday() {
+        Long habitId = 42L;
+
+        Habit habit =
+            new Habit(
+                OWNER_ID,
+                "Read",
+                FIXED
+            );
+
+        LocalDate from =
+            LocalDate.of(2026, 7, 1);
+        LocalDate to =
+            LocalDate.of(2026, 7, 12);
+
+        habit.setScheduledDays(
+            EnumSet.of(
+                DayOfWeek.WEDNESDAY,
+                DayOfWeek.FRIDAY
+            )
+        );
+
+        when(
+            habitMapper.findById(
+                OWNER_ID,
+                habitId
+            )
+        ).thenReturn(habit);
+
+        when(
+            completionStatRepository
+                .findCompletedDatesInPeriod(
+                    habitId,
+                    from,
+                    to
+                )
+        ).thenReturn(
+            List.of(
+                LocalDate.of(2026, 7, 1),
+                LocalDate.of(2026, 7, 3),
+                LocalDate.of(2026, 7, 4),
+                LocalDate.of(2026, 7, 10)
+            )
+        );
+
+        var response =
+            habitQueryService
+                .getWeekdayBreakdown(
+                    OWNER_ID,
+                    habitId,
+                    from,
+                    to
+                );
+
+        assertThat(response)
+            .containsOnlyKeys(
+                DayOfWeek.WEDNESDAY,
+                DayOfWeek.FRIDAY
+            );
+
+        assertThat(
+            response.get(
+                DayOfWeek.WEDNESDAY
+            ).scheduled()
+        ).isEqualTo(2);
+
+        assertThat(
+            response.get(
+                DayOfWeek.WEDNESDAY
+            ).completed()
+        ).isEqualTo(1);
+
+        assertThat(
+            response.get(
+                DayOfWeek.FRIDAY
+            ).scheduled()
+        ).isEqualTo(2);
+
+        assertThat(
+            response.get(
+                DayOfWeek.FRIDAY
+            ).completed()
+        ).isEqualTo(2);
+    }
+
+    @Test
+    void weekdayBreakdownReturnsScheduledKeysWithoutQueryWhenWindowPredatesHabit() {
+        Long habitId = 42L;
+
+        Habit habit =
+            new Habit(
+                OWNER_ID,
+                "Read",
+                FIXED
+            );
+
+        habit.setScheduledDays(
+            EnumSet.of(
+                DayOfWeek.MONDAY,
+                DayOfWeek.WEDNESDAY
+            )
+        );
+
+        LocalDate from =
+            LocalDate.of(2000, 1, 1);
+        LocalDate to =
+            LocalDate.of(2000, 1, 31);
+
+        when(
+            habitMapper.findById(
+                OWNER_ID,
+                habitId
+            )
+        ).thenReturn(habit);
+
+        var response =
+            habitQueryService
+                .getWeekdayBreakdown(
+                    OWNER_ID,
+                    habitId,
+                    from,
+                    to
+                );
+
+        assertThat(response)
+            .containsOnlyKeys(
+                DayOfWeek.MONDAY,
+                DayOfWeek.WEDNESDAY
+            );
+
+        assertThat(
+            response.values()
+        ).allSatisfy(
+            value -> {
+                assertThat(value.scheduled())
+                    .isZero();
+                assertThat(value.completed())
+                    .isZero();
+            }
+        );
+
+        verifyNoInteractions(
+            completionStatRepository
+        );
+    }
 }

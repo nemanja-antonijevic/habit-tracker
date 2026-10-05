@@ -5,6 +5,7 @@ import com.nantonijevic.habits.client.ClientTier;
 import com.nantonijevic.habits.client.HabitResponseTransformer;
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.domain.HabitSkip;
+import com.nantonijevic.habits.dto.WeekdayBreakdownResponse;
 import com.nantonijevic.habits.service.HabitCommandService;
 import com.nantonijevic.habits.service.HabitQueryService;
 import com.nantonijevic.habits.service.HabitSkipService;
@@ -14,10 +15,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Clock;
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Map;
 
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -227,5 +231,61 @@ class HabitControllerTest {
             42L,
             expectedBusinessDate
         );
+    }
+
+    @Test
+    void weekdayBreakdownPassesOwnerAndRangeToQueryService() {
+        LocalDate from =
+            LocalDate.of(2026, 7, 1);
+        LocalDate to =
+            LocalDate.of(2026, 7, 31);
+
+        Map<DayOfWeek, WeekdayBreakdownResponse>
+            expected =
+            Map.of(
+                DayOfWeek.MONDAY,
+                new WeekdayBreakdownResponse(
+                    4,
+                    3
+                )
+            );
+
+        when(
+            habitQueryService
+                .getWeekdayBreakdown(
+                    OWNER_ID,
+                    42L,
+                    from,
+                    to
+                )
+        ).thenReturn(expected);
+
+        HabitController controller =
+            new HabitController(
+                habitCommandService,
+                habitQueryService,
+                Clock.systemUTC(),
+                habitResponseTransformer,
+                habitSkipService
+            );
+
+        var response =
+            controller.getWeekdayBreakdown(
+                42L,
+                from,
+                to,
+                CLIENT_CONTEXT
+            );
+
+        assertThat(response)
+            .isSameAs(expected);
+
+        verify(habitQueryService)
+            .getWeekdayBreakdown(
+                OWNER_ID,
+                42L,
+                from,
+                to
+            );
     }
 }

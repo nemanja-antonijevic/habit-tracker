@@ -16,6 +16,7 @@ import com.nantonijevic.habits.dto.HabitSkipResponse;
 import com.nantonijevic.habits.dto.HabitStatsResponse;
 import com.nantonijevic.habits.dto.HabitStatsView;
 import com.nantonijevic.habits.dto.UpdateHabitRequest;
+import com.nantonijevic.habits.dto.WeekdayBreakdownResponse;
 import com.nantonijevic.habits.service.HabitCommandService;
 import com.nantonijevic.habits.service.HabitQueryService;
 import com.nantonijevic.habits.service.HabitSkipService;
@@ -37,7 +38,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
 import java.time.Clock;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/habits")
@@ -361,6 +364,23 @@ public class HabitController {
             from,
             to
         );
+    }
+
+    @GetMapping("/{id}/weekday-breakdown")
+    public Map<DayOfWeek, WeekdayBreakdownResponse>
+    getWeekdayBreakdown(
+        @PathVariable Long id,
+        @RequestParam LocalDate from,
+        @RequestParam LocalDate to,
+        @ResolvedClientTier ClientContext context
+    ) {
+        return habitQueryService
+            .getWeekdayBreakdown(
+                context.clientId(),
+                id,
+                from,
+                to
+            );
     }
 
     @GetMapping("/due-today")

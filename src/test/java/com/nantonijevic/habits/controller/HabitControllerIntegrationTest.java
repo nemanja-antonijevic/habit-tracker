@@ -73,7 +73,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         STATS,
         UNCOMPLETE,
         HISTORY,
-        COMPLETION_RATE
+        COMPLETION_RATE,
+        WEEKDAY_BREAKDOWN
     }
 
     @Autowired
@@ -1202,6 +1203,13 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                     )
                         .param("from", "2026-08-01")
                         .param("to", "2026-08-31");
+                case WEEKDAY_BREAKDOWN ->
+                    get(
+                        "/habits/{id}/weekday-breakdown",
+                        foreignHabit.getId()
+                    )
+                        .param("from", "2026-08-01")
+                        .param("to", "2026-08-31");
             };
 
         perform(request)
@@ -1535,5 +1543,147 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                 jsonPath("$.skippedOn")
                     .value(today.toString())
             );
+    }
+
+    @Test
+    void weekdayBreakdownReturnsCountsForCurrentSchedule()
+        throws Exception {
+
+        Habit habit =
+            new Habit(
+                ownerId,
+                "Weekday report",
+                Instant.parse(
+                    "2024-01-01T00:00:00Z"
+                )
+            );
+
+        habit.setScheduledDays(
+            EnumSet.of(
+                DayOfWeek.WEDNESDAY,
+                DayOfWeek.FRIDAY
+            )
+        );
+
+        Habit saved =
+            repository.save(habit);
+
+        completionStatRepository.save(
+            new HabitCompletionStat(
+                saved.getId(),
+                LocalDate.of(2026, 7, 10),
+                4,
+                4
+            )
+        );
+
+        completionStatRepository.save(
+            new HabitCompletionStat(
+                saved.getId(),
+                LocalDate.of(2026, 7, 1),
+                1,
+                1
+            )
+        );
+
+        completionStatRepository.save(
+            new HabitCompletionStat(
+                saved.getId(),
+                LocalDate.of(2026, 7, 3),
+                2,
+                2
+            )
+        );
+
+        completionStatRepository.save(
+            new HabitCompletionStat(
+                saved.getId(),
+                LocalDate.of(2026, 7, 4),
+                3,
+                3
+            )
+        );
+
+        perform(
+            get(
+                "/habits/{id}/weekday-breakdown",
+                saved.getId()
+            )
+                .param("from", "2026-07-01")
+                .param("to", "2026-07-12")
+        )
+            .andExpect(status().isOk())
+            .andExpect(
+                jsonPath("$.length()")
+                    .value(2)
+            )
+            .andExpect(
+                jsonPath(
+                    "$.WEDNESDAY.scheduled"
+                ).value(2)
+            )
+            .andExpect(
+                jsonPath(
+                    "$.WEDNESDAY.completed"
+                ).value(1)
+            )
+            .andExpect(
+                jsonPath(
+                    "$.FRIDAY.scheduled"
+                ).value(2)
+            )
+            .andExpect(
+                jsonPath(
+                    "$.FRIDAY.completed"
+                ).value(2)
+            )
+            .andExpect(
+                jsonPath("$.SATURDAY")
+                    .doesNotExist()
+            );
+    }
+
+    @Test
+    void weekdayBreakdownReturns400WhenFromIsMissing()
+        throws Exception {
+
+        perform(
+            get(
+                "/habits/{id}/weekday-breakdown",
+                42L
+            )
+                .param("to", "2026-07-31")
+        )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void weekdayBreakdownReturns400WhenFromIsAfterTo()
+        throws Exception {
+
+        perform(
+            get(
+                "/habits/{id}/weekday-breakdown",
+                42L
+            )
+                .param("from", "2026-07-31")
+                .param("to", "2026-07-01")
+        )
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void weekdayBreakdownReturns404WhenHabitDoesNotExist()
+        throws Exception {
+
+        perform(
+            get(
+                "/habits/{id}/weekday-breakdown",
+                999_999L
+            )
+                .param("from", "2026-07-01")
+                .param("to", "2026-07-31")
+        )
+            .andExpect(status().isNotFound());
     }
 }
