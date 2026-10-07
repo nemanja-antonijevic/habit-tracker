@@ -102,23 +102,51 @@ Two details worth knowing before reading the chart:
 - **`Chart.yaml`'s `appVersion` is effectively dead as an image tag.** The template falls back to it (`image.tag | default .Chart.AppVersion`), but `values.yaml` always supplies a non-empty tag, so the fallback only fires if the tag is explicitly overridden to empty.
 - **Secrets are not modelled.** The MySQL password is passed as a literal in `values.yaml` and appears on the init container's command line. Acceptable for a local minikube run, not for a real cluster.
 
+## Architecture
+
+One Spring Boot service. A write is committed to MySQL first; everything derived from it (the Kafka stream, the stats projection, the dashboard cache) is updated **after commit**, so nothing downstream can observe a write that later rolls back. The trade-off runs the other way: there is no outbox, so if the process stops between the commit and the Kafka send, the committed event is never published and the stats projection misses it.
+
+```
+request ──► ClientAuthenticationInterceptor ──► HabitController
+            (API key hash → owner + tier,          │
+             uncached DB lookup)                   ├──► HabitCommandService / HabitSkipService ──► MySQL
+                                                   │        │ publishes Spring events in the transaction
+                                                   │        ▼  AFTER_COMMIT
+                                                   │    HabitEventKafkaPublisher ──► topic habit-completed
+                                                   │    DashboardCacheInvalidator ──► Redis (generation++, clear)
+                                                   │
+                                                   └──► HabitQueryService ──► MySQL + Redis (GET /habits/stats)
+
+topic habit-completed ──► HabitCompletedEventConsumer (group habit-stats)
+                          writes habit_completion_stats ──► DashboardChangedEvent ──► invalidator
+```
+
+- **Identity and scope.** Every `/habits/**` request passes `ClientAuthenticationInterceptor`, which resolves the API key hash to a `ClientContext` (owner and `ClientTier`). The owner scopes every habit query; the tier only shapes the response (`HabitResponseTransformer`), it does not gate operations. See [ADR 0001](docs/adr/0001-canonical-api-key-hash-format.md) and [ADR 0005](docs/adr/0005-scope-habits-to-api-client-owners.md).
+- **Commands and queries.** Writes go through `HabitCommandService` and `HabitSkipService`, reads through `HabitQueryService` ([ADR 0002](docs/adr/0002-separate-command-query-services.md)). It is CQS-oriented, not strict CQS: commands may return the updated habit.
+- **Two persistence styles, one database.** The `habits` table is mapped by MyBatis (`HabitMapper.xml`, `Habit` is a plain class), while completions, skips, the stats projection and API clients are JPA entities. Flyway owns the schema for both; Hibernate only validates it.
+- **Event flow.** Completing or uncompleting a habit publishes a `HabitCompletedEvent` / `HabitUncompletedEvent`; after commit it is sent to the `habit-completed` topic, keyed by habit id. Despite the topic name, it carries both event types. The consumer maintains the `habit_completion_stats` read model and treats a duplicate completion as already applied (unique constraint), so redelivery is safe.
+- **Dashboard cache.** `GET /habits/stats` is cached in Redis under `ownerId::generation::today` with a 5-minute TTL. Both the write side and the consumer publish `DashboardChangedEvent`; the invalidator advances the generation after commit, so a request that was in flight during the write cannot repopulate a stale entry under the new key ([ADR 0003](docs/adr/0003-invalidate-dashboard-cache-from-both-sides.md), including the per-path failure table). Operational details are under [Cache](#cache).
+- **Metrics.** Actuator exposes `health`, `metrics` and `prometheus`; `HabitCompletionMetrics` counts completions by outcome (first attempt, retried, conflict exhausted).
+
 ## Project layout
 
 ```
 src/main/java/com/nantonijevic/habits/
   HabitTrackerApplication.java   # Spring Boot entry point
+  client/                        # API key authentication, owner + tier context, tier-shaped responses
   controller/                    # REST endpoints (HabitController)
-  service/                       # HabitCommandService (writes) + HabitQueryService (reads)
-  domain/                        # @Entity classes + domain exceptions
+  service/                       # HabitCommandService + HabitSkipService (writes), HabitQueryService (reads), metrics
+  domain/                        # Habit (MyBatis-mapped) + JPA entities + domain exceptions
   dto/                           # request/response records
-  repository/                    # Spring Data JPA
+  repository/                    # MyBatis mapper for habits, Spring Data JPA for the rest
   event/                         # domain events, Kafka publisher/consumer
   cache/                         # dashboard cache: generation key, invalidator, cache failure policy
-  config/                        # Kafka producer/consumer + Redis cache config
+  config/                        # Kafka producer/consumer, Redis cache, clock
   exception/                     # GlobalExceptionHandler
 src/main/resources/
   application.yml                # MySQL datasource (prod) + Kafka
   db/migration/                  # Flyway migrations
+  mappers/HabitMapper.xml        # MyBatis statements for the habits table
 src/test/resources/
   application.yml                # H2 in-memory (test)
 ```
