@@ -113,7 +113,7 @@ src/main/java/com/nantonijevic/habits/
   dto/                           # request/response records
   repository/                    # Spring Data JPA
   event/                         # domain events, Kafka publisher/consumer
-  cache/                         # dashboard cache: generation key, invalidator, fail-open policy
+  cache/                         # dashboard cache: generation key, invalidator, cache failure policy
   config/                        # Kafka producer/consumer + Redis cache config
   exception/                     # GlobalExceptionHandler
 src/main/resources/
@@ -133,7 +133,7 @@ src/test/resources/
 
 - **Redis 7** via docker-compose caches the dashboard stats (`GET /habits/stats`) with a 5-minute TTL.
 - `maxmemory-policy` is pinned to `noeviction` in `docker-compose.yml` — the versioned generation key must never be evicted; this is a deliberate infrastructure decision, not a default.
-- Reads are **fail-open**: if Redis is down, the dashboard falls back to the database and logs a WARN — no user-facing failure.
+- Reads fall back to the database: a Redis `DataAccessException` on cache GET/PUT or on the generation read is logged as a WARN and the request is served from MySQL — no user-facing failure. Other exceptions and invalidation failures follow different rules; the full table is in [ADR 0003](docs/adr/0003-invalidate-dashboard-cache-from-both-sides.md).
 - No volume on purpose: the cache is derived data, the database stays the source of truth.
 - The compose app reaches Redis via `SPRING_DATA_REDIS_HOST=redis`; a host-run app uses the published `localhost:6379` port (Spring Boot default).
 - **Test:** the `*IT` integration tests (run via `./mvnw verify`) start their own Redis via Testcontainers and do not need the compose Redis.

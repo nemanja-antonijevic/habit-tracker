@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-07-20
+- Amended: 2026-10-07 (generation-read failure row)
 
 ## Context
 
@@ -32,10 +33,13 @@ Cache failure behavior is path-specific rather than uniformly fail-open:
 | Path | Behavior | Reachable in production |
 | --- | --- | --- |
 | Intercepted GET or PUT throws `DataAccessException` | Fail-open: log a warning and continue without the cache operation | Yes |
+| Reading the cache generation throws `DataAccessException` while building the dashboard key | Fail-open by key: `DashboardCacheKeyGenerator` logs a warning and returns a one-shot `bypass::UUID::ownerId::today` key, so the request is served from the database | Yes |
 | Programmatic dashboard invalidation throws `DataAccessException` while advancing the generation or clearing the cache | Fail-open: log a warning and continue after the business transaction has committed | Yes |
 | Programmatic dashboard invalidation throws another `RuntimeException` | Fail-closed: rethrow from the listener after commit | Yes |
 | Intercepted GET or PUT throws another `RuntimeException` | Fail-closed: rethrow the exception | Yes |
 | `CacheErrorHandler` handles an evict or clear failure | Fail-closed: rethrow the exception | No |
+
+Amendment 2026-10-07: the generation-read row was missing from the original table. It is the only path that changes the cache *key* rather than skipping a cache operation. The bypass key is not one-shot in storage: if the subsequent PUT succeeds, the result is written under a key no later request addresses and stays in Redis until TTL expiry. With `maxmemory-policy noeviction` such entries are bounded only by the 5-minute TTL and the request rate during the generation-read failure.
 
 The last row is structurally unreachable in the current application. Spring calls `handleCacheEvictError` and `handleCacheClearError` only through the cache interceptor's `@CacheEvict` path, while `src/main` contains no `@CacheEvict` operation. The programmatic `cache.clear()` in `DashboardCacheInvalidator` calls the `Cache` interface directly and is handled by the invalidator's local `DataAccessException` catch; it does not pass through `CacheErrorHandler`.
 
