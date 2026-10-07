@@ -6,12 +6,12 @@ import org.springframework.cache.Cache;
 import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.dao.DataAccessException;
 
-public class FailOpenCacheErrorHandler
+public class ReadWriteDataAccessFallbackCacheErrorHandler
     implements CacheErrorHandler {
 
     private static final Logger logger =
         LoggerFactory.getLogger(
-            FailOpenCacheErrorHandler.class
+            ReadWriteDataAccessFallbackCacheErrorHandler.class
         );
 
     @Override

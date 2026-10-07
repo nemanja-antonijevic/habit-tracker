@@ -33,7 +33,7 @@ import static org.mockito.ArgumentMatchers.any;
     "spring.kafka.listener.auto-startup=false",
     "spring.cache.type=redis"
 })
-class DashboardCacheFailOpenIntegrationTest {
+class DashboardCacheFailurePolicyIntegrationTest {
 
     private static final Long OWNER_ID = 501L;
 

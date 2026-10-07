@@ -1,7 +1,6 @@
 package com.nantonijevic.habits.config;
 
-import com.nantonijevic.habits.cache.FailOpenCacheErrorHandler;
-import com.nantonijevic.habits.client.ClientTier;
+import com.nantonijevic.habits.cache.ReadWriteDataAccessFallbackCacheErrorHandler;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.annotation.EnableCaching;
@@ -12,7 +11,6 @@ import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
-import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
@@ -69,6 +67,6 @@ public class RedisCacheConfig implements CachingConfigurer {
 
     @Override
     public CacheErrorHandler errorHandler() {
-        return new FailOpenCacheErrorHandler();
+        return new ReadWriteDataAccessFallbackCacheErrorHandler();
     }
 }

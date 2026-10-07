@@ -15,10 +15,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-class FailOpenCacheErrorHandlerTest {
+class ReadWriteDataAccessFallbackCacheErrorHandlerTest {
 
-    private final FailOpenCacheErrorHandler errorHandler =
-        new FailOpenCacheErrorHandler();
+    private final ReadWriteDataAccessFallbackCacheErrorHandler errorHandler =
+        new ReadWriteDataAccessFallbackCacheErrorHandler();
 
     @Test
     void cacheGetDataAccessFailureDoesNotEscape() {
@@ -95,7 +95,7 @@ class FailOpenCacheErrorHandlerTest {
 
         Logger logger =
             (Logger) LoggerFactory.getLogger(
-                FailOpenCacheErrorHandler.class
+                ReadWriteDataAccessFallbackCacheErrorHandler.class
             );
 
         ListAppender<ILoggingEvent> logAppender =
