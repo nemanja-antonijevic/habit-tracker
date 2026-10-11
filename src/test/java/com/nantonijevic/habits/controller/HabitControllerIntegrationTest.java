@@ -30,9 +30,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.EnumSet;
 
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItems;
@@ -74,7 +76,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         UNCOMPLETE,
         HISTORY,
         COMPLETION_RATE,
-        WEEKDAY_BREAKDOWN
+        WEEKDAY_BREAKDOWN,
+        MONTHLY_BREAKDOWN
     }
 
     @Autowired
@@ -1210,6 +1213,11 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                     )
                         .param("from", "2026-08-01")
                         .param("to", "2026-08-31");
+                case MONTHLY_BREAKDOWN ->
+                    get(
+                        "/habits/{id}/monthly-breakdown",
+                        foreignHabit.getId()
+                    );
             };
 
         perform(request)
@@ -1685,5 +1693,128 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                 .param("to", "2026-07-31")
         )
             .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void monthlyBreakdownReturnsChronologicalMonthsIncludingZeroMonth()
+        throws Exception {
+
+        LocalDate today =
+            LocalDate.now(APPLICATION_ZONE);
+
+        YearMonth firstMonth =
+            YearMonth.from(today)
+                .minusMonths(2);
+        YearMonth secondMonth =
+            firstMonth.plusMonths(1);
+        YearMonth currentMonth =
+            YearMonth.from(today);
+
+        LocalDate createdDate =
+            firstMonth.atDay(15);
+
+        Habit habit =
+            new Habit(
+                ownerId,
+                "Monthly report",
+                createdDate
+                    .atStartOfDay(
+                        APPLICATION_ZONE
+                    )
+                    .toInstant()
+            );
+
+        Habit saved =
+            repository.save(habit);
+
+        completionStatRepository.save(
+            new HabitCompletionStat(
+                saved.getId(),
+                createdDate,
+                1,
+                1
+            )
+        );
+
+        completionStatRepository.save(
+            new HabitCompletionStat(
+                saved.getId(),
+                firstMonth.atDay(20),
+                2,
+                2
+            )
+        );
+
+        completionStatRepository.save(
+            new HabitCompletionStat(
+                saved.getId(),
+                secondMonth.atDay(5),
+                3,
+                3
+            )
+        );
+
+        completionStatRepository.save(
+            new HabitCompletionStat(
+                saved.getId(),
+                secondMonth.atDay(10),
+                4,
+                4
+            )
+        );
+
+        completionStatRepository.save(
+            new HabitCompletionStat(
+                saved.getId(),
+                secondMonth.atDay(15),
+                5,
+                5
+            )
+        );
+
+        completionStatRepository.save(
+            new HabitCompletionStat(
+                saved.getId(),
+                today,
+                6,
+                6
+            )
+        );
+
+        perform(
+            get(
+                "/habits/{id}/monthly-breakdown",
+                saved.getId()
+            )
+        )
+            .andExpect(status().isOk())
+            .andExpect(
+                jsonPath("$.length()")
+                    .value(3)
+            )
+            .andExpect(
+                jsonPath(
+                    "$['%s'].completed"
+                        .formatted(firstMonth)
+                ).value(2)
+            )
+            .andExpect(
+                jsonPath(
+                    "$['%s'].completed"
+                        .formatted(secondMonth)
+                ).value(3)
+            )
+            .andExpect(
+                jsonPath(
+                    "$['%s'].completed"
+                        .formatted(currentMonth)
+                ).value(1)
+            )
+            .andExpect(
+                jsonPath(
+                    "$.*.completed",
+                    contains(2, 3, 1)
+                )
+            );
     }
 }

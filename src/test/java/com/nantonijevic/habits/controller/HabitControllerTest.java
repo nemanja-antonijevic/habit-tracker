@@ -5,6 +5,7 @@ import com.nantonijevic.habits.client.ClientTier;
 import com.nantonijevic.habits.client.HabitResponseTransformer;
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.domain.HabitSkip;
+import com.nantonijevic.habits.dto.MonthlyBreakdownResponse;
 import com.nantonijevic.habits.dto.WeekdayBreakdownResponse;
 import com.nantonijevic.habits.service.HabitCommandService;
 import com.nantonijevic.habits.service.HabitQueryService;
@@ -18,6 +19,7 @@ import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.Map;
 
@@ -286,6 +288,48 @@ class HabitControllerTest {
                 42L,
                 from,
                 to
+            );
+    }
+
+    @Test
+    void monthlyBreakdownPassesOwnerAndHabitToQueryService() {
+        Map<YearMonth, MonthlyBreakdownResponse>
+            expected =
+            Map.of(
+                YearMonth.of(2026, 1),
+                new MonthlyBreakdownResponse(3)
+            );
+
+        when(
+            habitQueryService
+                .getMonthlyBreakdown(
+                    OWNER_ID,
+                    42L
+                )
+        ).thenReturn(expected);
+
+        HabitController controller =
+            new HabitController(
+                habitCommandService,
+                habitQueryService,
+                Clock.systemUTC(),
+                habitResponseTransformer,
+                habitSkipService
+            );
+
+        var response =
+            controller.getMonthlyBreakdown(
+                42L,
+                CLIENT_CONTEXT
+            );
+
+        assertThat(response)
+            .isSameAs(expected);
+
+        verify(habitQueryService)
+            .getMonthlyBreakdown(
+                OWNER_ID,
+                42L
             );
     }
 }

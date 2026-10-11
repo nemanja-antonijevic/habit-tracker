@@ -9,6 +9,7 @@ import com.nantonijevic.habits.domain.HabitSkip;
 import com.nantonijevic.habits.dto.HabitCompletionRateResponse;
 import com.nantonijevic.habits.dto.HabitDashboardResponse;
 import com.nantonijevic.habits.dto.HabitStatsView;
+import com.nantonijevic.habits.dto.MonthlyBreakdownResponse;
 import com.nantonijevic.habits.dto.WeekdayBreakdownResponse;
 import com.nantonijevic.habits.exception.InvalidDateRangeException;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
@@ -30,8 +31,10 @@ import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -212,6 +215,76 @@ public class HabitQueryService {
             habitId,
             from,
             to
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public Map<YearMonth, MonthlyBreakdownResponse>
+    getMonthlyBreakdown(
+        Long ownerId,
+        Long habitId
+    ) {
+        Habit habit =
+            findOwnedHabit(
+                ownerId,
+                habitId
+            );
+
+        LocalDate createdDate =
+            habitCreationDate(habit);
+        LocalDate today =
+            LocalDate.now(clock);
+
+        if (createdDate.isAfter(today)) {
+            return Map.of();
+        }
+
+        Map<YearMonth, MonthlyBreakdownResponse>
+            breakdown =
+            new LinkedHashMap<>();
+
+        YearMonth firstMonth =
+            YearMonth.from(createdDate);
+        YearMonth currentMonth =
+            YearMonth.from(today);
+        YearMonth month = firstMonth;
+
+        while (!month.isAfter(currentMonth)) {
+            breakdown.put(
+                month,
+                new MonthlyBreakdownResponse(0)
+            );
+
+            month = month.plusMonths(1);
+        }
+
+        List<LocalDate> completedDates =
+            completionStatRepository
+                .findCompletedDatesInPeriod(
+                    habitId,
+                    createdDate,
+                    today
+                );
+
+        for (LocalDate completedDate
+            : completedDates) {
+
+            YearMonth completedMonth =
+                YearMonth.from(completedDate);
+
+            MonthlyBreakdownResponse monthBreakdown =
+                breakdown.get(completedMonth);
+
+            breakdown.put(
+                completedMonth,
+                new MonthlyBreakdownResponse(
+                    monthBreakdown.completed() + 1
+                )
+            );
+        }
+
+        return Collections.unmodifiableMap(
+            breakdown
         );
     }
 
@@ -497,6 +570,32 @@ public class HabitQueryService {
             : 0;
     }
 
+    private Habit findOwnedHabit(
+        Long ownerId,
+        Long habitId
+    ) {
+        return Optional.ofNullable(
+            habitMapper.findById(
+                ownerId,
+                habitId
+            )
+        ).orElseThrow(
+            () ->
+                new HabitNotFoundException(
+                    habitId
+                )
+        );
+    }
+
+    private LocalDate habitCreationDate(
+        Habit habit
+    ) {
+        return LocalDate.ofInstant(
+            habit.getCreatedAt(),
+            clock.getZone()
+        );
+    }
+
     private Map<DayOfWeek, WeekdayBreakdownResponse>
     completionWindowBreakdown(
         Long ownerId,
@@ -508,23 +607,14 @@ public class HabitQueryService {
             throw new InvalidDateRangeException();
         }
 
-        Habit habit = Optional.ofNullable(
-            habitMapper.findById(
+        Habit habit =
+            findOwnedHabit(
                 ownerId,
                 habitId
-            )
-        ).orElseThrow(
-            () ->
-                new HabitNotFoundException(
-                    habitId
-                )
-        );
+            );
 
         LocalDate createdDate =
-            LocalDate.ofInstant(
-                habit.getCreatedAt(),
-                clock.getZone()
-            );
+            habitCreationDate(habit);
 
         LocalDate effectiveFrom =
             from.isAfter(createdDate)

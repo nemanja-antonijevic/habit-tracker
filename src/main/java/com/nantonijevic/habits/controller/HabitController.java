@@ -15,6 +15,7 @@ import com.nantonijevic.habits.dto.HabitResponse;
 import com.nantonijevic.habits.dto.HabitSkipResponse;
 import com.nantonijevic.habits.dto.HabitStatsResponse;
 import com.nantonijevic.habits.dto.HabitStatsView;
+import com.nantonijevic.habits.dto.MonthlyBreakdownResponse;
 import com.nantonijevic.habits.dto.UpdateHabitRequest;
 import com.nantonijevic.habits.dto.WeekdayBreakdownResponse;
 import com.nantonijevic.habits.service.HabitCommandService;
@@ -40,6 +41,7 @@ import java.net.URI;
 import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.Map;
 
 @RestController
@@ -380,6 +382,19 @@ public class HabitController {
                 id,
                 from,
                 to
+            );
+    }
+
+    @GetMapping("/{id}/monthly-breakdown")
+    public Map<YearMonth, MonthlyBreakdownResponse>
+    getMonthlyBreakdown(
+        @PathVariable Long id,
+        @ResolvedClientTier ClientContext context
+    ) {
+        return habitQueryService
+            .getMonthlyBreakdown(
+                context.clientId(),
+                id
             );
     }
 

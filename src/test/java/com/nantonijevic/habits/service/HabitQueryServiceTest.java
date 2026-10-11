@@ -24,6 +24,7 @@ import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.EnumSet;
 import java.util.List;
@@ -947,5 +948,274 @@ class HabitQueryServiceTest {
         verifyNoInteractions(
             completionStatRepository
         );
+    }
+
+    @Test
+    void monthlyBreakdownReturnsEveryMonthFromCreationThroughToday() {
+        Long habitId = 42L;
+
+        Habit habit =
+            new Habit(
+                OWNER_ID,
+                "Read",
+                Instant.parse(
+                    "2026-01-15T12:00:00Z"
+                )
+            );
+
+        LocalDate createdDate =
+            LocalDate.of(2026, 1, 15);
+        LocalDate today =
+            LocalDate.of(2026, 3, 20);
+
+        when(clock.instant())
+            .thenReturn(
+                today
+                    .atStartOfDay(TEST_ZONE)
+                    .toInstant()
+            );
+
+        when(
+            habitMapper.findById(
+                OWNER_ID,
+                habitId
+            )
+        ).thenReturn(habit);
+
+        when(
+            completionStatRepository
+                .findCompletedDatesInPeriod(
+                    habitId,
+                    createdDate,
+                    today
+                )
+        ).thenReturn(
+            List.of(
+                LocalDate.of(2026, 1, 20),
+                LocalDate.of(2026, 2, 2),
+                LocalDate.of(2026, 2, 15)
+            )
+        );
+
+        var response =
+            habitQueryService
+                .getMonthlyBreakdown(
+                    OWNER_ID,
+                    habitId
+                );
+
+        assertThat(response.keySet())
+            .containsExactly(
+                YearMonth.of(2026, 1),
+                YearMonth.of(2026, 2),
+                YearMonth.of(2026, 3)
+            );
+
+        assertThat(
+            response.get(
+                YearMonth.of(2026, 1)
+            ).completed()
+        ).isEqualTo(1);
+
+        assertThat(
+            response.get(
+                YearMonth.of(2026, 2)
+            ).completed()
+        ).isEqualTo(2);
+
+        assertThat(
+            response.get(
+                YearMonth.of(2026, 3)
+            ).completed()
+        ).isZero();
+    }
+
+    @Test
+    void monthlyBreakdownCountsOffScheduleCompletionForArchivedHabit() {
+        Long habitId = 42L;
+
+        LocalDate completedOn =
+            LocalDate.of(2026, 1, 20);
+        LocalDate today =
+            LocalDate.of(2026, 2, 1);
+
+        Habit habit =
+            new Habit(
+                OWNER_ID,
+                "Archived habit",
+                Instant.parse(
+                    "2026-01-15T12:00:00Z"
+                )
+            );
+
+        habit.setScheduledDays(
+            EnumSet.of(
+                completedOn
+                    .getDayOfWeek()
+                    .plus(1)
+            )
+        );
+        habit.archive();
+
+        when(clock.instant())
+            .thenReturn(
+                today
+                    .atStartOfDay(TEST_ZONE)
+                    .toInstant()
+            );
+
+        when(
+            habitMapper.findById(
+                OWNER_ID,
+                habitId
+            )
+        ).thenReturn(habit);
+
+        when(
+            completionStatRepository
+                .findCompletedDatesInPeriod(
+                    habitId,
+                    LocalDate.of(2026, 1, 15),
+                    today
+                )
+        ).thenReturn(
+            List.of(completedOn)
+        );
+
+        var response =
+            habitQueryService
+                .getMonthlyBreakdown(
+                    OWNER_ID,
+                    habitId
+                );
+
+        assertThat(
+            response.get(
+                YearMonth.of(2026, 1)
+            ).completed()
+        ).isEqualTo(1);
+
+        assertThat(
+            response.get(
+                YearMonth.of(2026, 2)
+            ).completed()
+        ).isZero();
+
+        verifyNoInteractions(
+            skipRepository
+        );
+    }
+
+    @Test
+    void monthlyBreakdownReturnsEmptyWithoutReadModelQueryWhenHabitWasCreatedInFuture() {
+        Long habitId = 42L;
+
+        LocalDate today =
+            LocalDate.of(2026, 3, 20);
+
+        Habit habit =
+            new Habit(
+                OWNER_ID,
+                "Future habit",
+                Instant.parse(
+                    "2026-04-01T12:00:00Z"
+                )
+            );
+
+        when(clock.instant())
+            .thenReturn(
+                today
+                    .atStartOfDay(TEST_ZONE)
+                    .toInstant()
+            );
+
+        when(
+            habitMapper.findById(
+                OWNER_ID,
+                habitId
+            )
+        ).thenReturn(habit);
+
+        var response =
+            habitQueryService
+                .getMonthlyBreakdown(
+                    OWNER_ID,
+                    habitId
+                );
+
+        assertThat(response)
+            .isEmpty();
+
+        verifyNoInteractions(
+            completionStatRepository,
+            skipRepository
+        );
+    }
+
+    @Test
+    void monthlyBreakdownUsesBusinessClockZoneForMonthBoundaries() {
+        Long habitId = 42L;
+
+        ZoneId businessZone =
+            ZoneId.of(
+                "Pacific/Kiritimati"
+            );
+
+        Instant createdAt =
+            Instant.parse(
+                "2026-03-31T11:30:00Z"
+            );
+
+        Instant now =
+            Instant.parse(
+                "2026-03-31T12:30:00Z"
+            );
+
+        Habit habit =
+            new Habit(
+                OWNER_ID,
+                "Business-zone habit",
+                createdAt
+            );
+
+        when(clock.getZone())
+            .thenReturn(businessZone);
+
+        when(clock.instant())
+            .thenReturn(now);
+
+        when(
+            habitMapper.findById(
+                OWNER_ID,
+                habitId
+            )
+        ).thenReturn(habit);
+
+        when(
+            completionStatRepository
+                .findCompletedDatesInPeriod(
+                    habitId,
+                    LocalDate.of(2026, 4, 1),
+                    LocalDate.of(2026, 4, 1)
+                )
+        ).thenReturn(List.of());
+
+        var response =
+            habitQueryService
+                .getMonthlyBreakdown(
+                    OWNER_ID,
+                    habitId
+                );
+
+        assertThat(response.keySet())
+            .containsExactly(
+                YearMonth.of(2026, 4)
+            );
+
+        assertThat(
+            response.get(
+                YearMonth.of(2026, 4)
+            ).completed()
+        ).isZero();
     }
 }
