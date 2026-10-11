@@ -192,6 +192,11 @@ curl -s "http://localhost:8080/habits/1/completion-rate?from=2026-07-01&to=2026-
 # Weekday breakdown over a window (both bounds required, inclusive)
 # -> { "WEDNESDAY": { "scheduled": 2, "completed": 1 }, "FRIDAY": { "scheduled": 2, "completed": 2 } }
 curl -s "http://localhost:8080/habits/1/weekday-breakdown?from=2026-07-01&to=2026-07-12" -H "$KEY"
+
+# Monthly breakdown: completions per calendar month, from the creation month to the current one
+# No parameters; months without completions are present with 0; a habit created in the future -> {}
+# -> { "2026-07": { "completed": 2 }, "2026-08": { "completed": 0 }, "2026-09": { "completed": 3 }, "2026-10": { "completed": 1 } }
+curl -s http://localhost:8080/habits/1/monthly-breakdown -H "$KEY"
 ```
 
 ## Due today

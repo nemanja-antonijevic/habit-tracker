@@ -60,6 +60,8 @@ Filtering applies to all endpoints that return `HabitResponse`, including pagina
 | 17 | `POST` | `/habits/{id}/skip` | Forgive one scheduled day this calendar month without breaking the streak | Write + event |
 | 18 | `GET` | `/habits/{id}/skip` | Read this calendar month's skip | Write (direct read) |
 | 19 | `DELETE` | `/habits/{id}/skip` | Remove this calendar month's skip, freeing the month's allowance | Write + event |
+| 20 | `GET` | `/habits/{id}/weekday-breakdown` | Completion rate over a window, split by weekday | Read model (Kafka projection) |
+| 21 | `GET` | `/habits/{id}/monthly-breakdown` | Completions per calendar month, from creation to today | Read model (Kafka projection) |
 
 ## Data model
 
@@ -116,6 +118,14 @@ Counts for one day of the week. Returned by endpoint 20, as the value of a map k
 |-------|------|-------------|
 | `scheduled` | `long` | Number of times that weekday occurs in the effective window |
 | `completed` | `long` | Of those, how many were actually completed |
+
+### MonthlyBreakdownResponse
+
+Count for one calendar month. Returned by endpoint 21, as the value of a map keyed by month in ISO `YYYY-MM` form.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `completed` | `long` | Number of completions recorded in that month, within the habit's lifetime window |
 
 ### HabitSkipResponse
 
@@ -740,3 +750,44 @@ Behavior:
 
 - **Schedule history.** The breakdown is computed against the habit's **current** `scheduledDays` for the whole window, the same limitation as [endpoint 16](#known-limitation--schedule-history).
 - **The window is not bounded.** The service walks the window day by day, so the cost grows with its length, and a `to` far in the future (for example `9999-12-31`) means millions of iterations. Future days also count as scheduled. Only `from` is clamped (to the creation date); `to` is not.
+
+## 21. Monthly breakdown
+
+```
+GET /habits/{id}/monthly-breakdown
+```
+
+No parameters. Returns how many times the habit was completed in each calendar month, from the month it was created through the current month. Use it to see the shape of a habit over its whole life. For a chosen window split by weekday instead, see [endpoint 20](#20-weekday-breakdown-over-a-window).
+
+**Response:** `200 OK`, a map of month (`YYYY-MM`) to [`MonthlyBreakdownResponse`](#monthlybreakdownresponse), in ascending month order. For a habit created on 2026-07-20 with two completions in July, none in August, three in September and one on 2026-10-11 (today):
+
+```json
+{
+  "2026-07": { "completed": 2 },
+  "2026-08": { "completed": 0 },
+  "2026-09": { "completed": 3 },
+  "2026-10": { "completed": 1 }
+}
+```
+
+| Status | Condition |
+|--------|-----------|
+| `200` | OK |
+| `400` | `id` is not a number |
+| `401` | Missing or unknown `X-Api-Key` |
+| `404` | Habit does not exist, or is owned by another client |
+
+Behavior:
+- **Every month appears, including empty ones.** The keys are all months from the creation month to the current month, so a month without completions is present with `{ "completed": 0 }` and the shape does not depend on the data.
+- **The window is the habit's lifetime, in the business time zone.** It starts on the creation date and ends today, and both days count. Month boundaries and "today" come from the application `Clock` and its business time zone, not UTC. The first month counts only from the creation date, and the current month only through today.
+- **A habit created in the future returns `{}`.** The read model is not queried in that case.
+- **Archived habits stay readable.** There is no archive date to shorten the window, so an archived habit keeps trailing months with `0` up to the current month.
+- **Skips are not completions.** A [skip](#17-skip-a-scheduled-day) never adds to a month.
+- **The current schedule is not applied.** Unlike [endpoint 16](#16-completion-rate-over-a-window) and [endpoint 20](#20-weekday-breakdown-over-a-window), a completion on a weekday that is no longer in `scheduledDays` still counts, because the endpoint reports what happened, not what was due.
+- **Read-only.** The endpoint changes nothing, is not cached, and publishes no `DashboardChangedEvent`.
+- **Eventual consistency.** Completed dates come from the read model `habit_completion_stats` (Kafka projection), so a very recent `complete` may not yet be reflected.
+
+### Known limitations
+
+- **One entry per month, unpaginated.** A habit that is years old returns one entry for every month since its creation (12 per year).
+- **Out-of-window dates fail loudly.** The repository query is bounded to the creation date and today, so every returned date falls into a month of the response. If that contract were ever broken, the endpoint would return `500` rather than silently drop the completion.
