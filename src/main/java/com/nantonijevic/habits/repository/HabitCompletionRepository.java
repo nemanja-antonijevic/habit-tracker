@@ -32,4 +32,11 @@ public interface HabitCompletionRepository extends JpaRepository<HabitCompletion
             @Param("from") LocalDate from,
             @Param("to") LocalDate to,
             Pageable pageable);
+
+    List<HabitCompletion>
+    findByHabitIdAndCompletedOnBetweenOrderByCompletedOnAsc(
+        Long habitId,
+        LocalDate from,
+        LocalDate to
+    );
 }

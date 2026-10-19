@@ -4,6 +4,7 @@ import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
@@ -122,6 +123,14 @@ public class Habit {
     ) {
     }
 
+    public record StreakSeries(
+        LocalDate start,
+        LocalDate end,
+        int length,
+        boolean current
+    ) {
+    }
+
     // Undoes the completion made today (the only one this can undo, per the guards below) and
     // recomputes both currentStreak and longestStreak from the remaining completion history,
     // walking consecutive scheduled days so a gap correctly breaks a run. currentStreak is gated
@@ -210,6 +219,39 @@ public class Habit {
         LocalDate today,
         Set<LocalDate> skippedDates
     ) {
+        List<StreakSeries> series =
+            calculateStreakSeries(
+                completionDates,
+                today,
+                skippedDates
+            );
+
+        if (series.isEmpty()) {
+            return new StreakSnapshot(0, 0);
+        }
+
+        int longestStreak =
+            series.stream()
+                .mapToInt(StreakSeries::length)
+                .max()
+                .orElseThrow();
+
+        StreakSeries latestSeries =
+            series.getLast();
+
+        return new StreakSnapshot(
+            latestSeries.current()
+                ? latestSeries.length()
+                : 0,
+            longestStreak
+        );
+    }
+
+    public List<StreakSeries> calculateStreakSeries(
+        List<LocalDate> completionDates,
+        LocalDate today,
+        Set<LocalDate> skippedDates
+    ) {
         Objects.requireNonNull(
             completionDates,
             "completionDates must not be null"
@@ -224,7 +266,7 @@ public class Habit {
         );
 
         if (completionDates.isEmpty()) {
-            return new StreakSnapshot(0, 0);
+            return List.of();
         }
 
         List<LocalDate> completedDatesAsc =
@@ -233,47 +275,61 @@ public class Habit {
                 .sorted()
                 .toList();
 
-        int longest = 0;
-        int currentRun = 0;
-        LocalDate previousDate = null;
+        List<StreakSeries> series =
+            new ArrayList<>();
 
-        for (LocalDate completedDate
-            : completedDatesAsc) {
+        LocalDate start =
+            completedDatesAsc.getFirst();
+        LocalDate previousDate = start;
+        int length = 1;
 
-            if (previousDate != null
-                && isStreakAliveGiven(
+        for (int index = 1;
+             index < completedDatesAsc.size();
+             index++) {
+
+            LocalDate completedDate =
+                completedDatesAsc.get(index);
+
+            if (isStreakAliveGiven(
                 previousDate,
                 completedDate,
                 skippedDates
             )) {
-                currentRun++;
+                length++;
             } else {
-                currentRun = 1;
+                series.add(
+                    new StreakSeries(
+                        start,
+                        previousDate,
+                        length,
+                        false
+                    )
+                );
+
+                start = completedDate;
+                length = 1;
             }
 
-            longest = Math.max(
-                longest,
-                currentRun
-            );
             previousDate = completedDate;
         }
 
-        LocalDate latestCompletedDate =
-            completedDatesAsc.getLast();
-
-        boolean currentStreakIsAlive =
+        boolean current =
             isStreakAliveGiven(
-                latestCompletedDate,
+                previousDate,
                 today,
                 skippedDates
             );
 
-        return new StreakSnapshot(
-            currentStreakIsAlive
-                ? currentRun
-                : 0,
-            longest
+        series.add(
+            new StreakSeries(
+                start,
+                previousDate,
+                length,
+                current
+            )
         );
+
+        return List.copyOf(series);
     }
 
     public boolean complete(

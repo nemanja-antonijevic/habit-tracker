@@ -10,6 +10,7 @@ import com.nantonijevic.habits.dto.HabitCompletionRateResponse;
 import com.nantonijevic.habits.dto.HabitDashboardResponse;
 import com.nantonijevic.habits.dto.HabitStatsView;
 import com.nantonijevic.habits.dto.MonthlyBreakdownResponse;
+import com.nantonijevic.habits.dto.StreakSeriesResponse;
 import com.nantonijevic.habits.dto.WeekdayBreakdownResponse;
 import com.nantonijevic.habits.exception.InvalidDateRangeException;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
@@ -286,6 +287,88 @@ public class HabitQueryService {
         return Collections.unmodifiableMap(
             breakdown
         );
+    }
+
+    @Transactional(readOnly = true)
+    public List<StreakSeriesResponse> getStreakHistory(
+        Long ownerId,
+        Long habitId,
+        LocalDate from,
+        LocalDate to
+    ) {
+        if (from.isAfter(to)) {
+            throw new InvalidDateRangeException();
+        }
+
+        Habit habit =
+            findOwnedHabit(
+                ownerId,
+                habitId
+            );
+
+        LocalDate createdDate =
+            habitCreationDate(habit);
+        LocalDate today =
+            LocalDate.now(clock);
+
+        LocalDate effectiveFrom =
+            from.isAfter(createdDate)
+                ? from
+                : createdDate;
+
+        LocalDate effectiveTo =
+            to.isBefore(today)
+                ? to
+                : today;
+
+        if (effectiveFrom.isAfter(effectiveTo)) {
+            return List.of();
+        }
+
+        List<LocalDate> completionDates =
+            completionRepository
+                .findByHabitIdAndCompletedOnBetweenOrderByCompletedOnAsc(
+                    habitId,
+                    createdDate,
+                    today
+                )
+                .stream()
+                .map(HabitCompletion::getCompletedOn)
+                .toList();
+
+        if (completionDates.isEmpty()) {
+            return List.of();
+        }
+
+        Set<LocalDate> skippedDates =
+            skipRepository
+                .findByHabitIdAndSkippedOnBetween(
+                    habitId,
+                    createdDate,
+                    today
+                )
+                .stream()
+                .map(HabitSkip::skippedOn)
+                .collect(
+                    Collectors.toUnmodifiableSet()
+                );
+
+        return habit
+            .calculateStreakSeries(
+                completionDates,
+                today,
+                skippedDates
+            )
+            .stream()
+            .filter(
+                series ->
+                    !series.start()
+                        .isAfter(effectiveTo)
+                        && !series.end()
+                        .isBefore(effectiveFrom)
+            )
+            .map(StreakSeriesResponse::from)
+            .toList();
     }
 
     @Transactional(readOnly = true)

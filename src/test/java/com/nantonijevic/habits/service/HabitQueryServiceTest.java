@@ -1,11 +1,14 @@
 package com.nantonijevic.habits.service;
 
 import com.nantonijevic.habits.domain.Habit;
+import com.nantonijevic.habits.domain.HabitCompletion;
 import com.nantonijevic.habits.domain.HabitCompletionStat;
 import com.nantonijevic.habits.domain.HabitNotFoundException;
 import com.nantonijevic.habits.domain.HabitSkip;
 import com.nantonijevic.habits.dto.HabitCompletionRateResponse;
 import com.nantonijevic.habits.dto.HabitStatsView;
+import com.nantonijevic.habits.dto.StreakSeriesResponse;
+import com.nantonijevic.habits.exception.InvalidDateRangeException;
 import com.nantonijevic.habits.repository.HabitCompletionRepository;
 import com.nantonijevic.habits.repository.HabitCompletionStatRepository;
 import com.nantonijevic.habits.repository.HabitMapper;
@@ -1217,5 +1220,412 @@ class HabitQueryServiceTest {
                 YearMonth.of(2026, 4)
             ).completed()
         ).isZero();
+    }
+
+    @Test
+    void streakHistoryIncludesSeriesEndingExactlyAtWindowStart() {
+        Long habitId = 42L;
+
+        LocalDate day1 =
+            LocalDate.of(2026, 7, 1);
+        LocalDate day2 =
+            LocalDate.of(2026, 7, 2);
+        LocalDate today = day2.plusDays(1);
+
+        givenStreakHistory(
+            habitId,
+            day1,
+            today,
+            List.of(day1, day2)
+        );
+
+        var response =
+            habitQueryService
+                .getStreakHistory(
+                    OWNER_ID,
+                    habitId,
+                    day2,
+                    today
+                );
+
+        assertThat(response)
+            .containsExactly(
+                new StreakSeriesResponse(
+                    day1,
+                    day2,
+                    2,
+                    true
+                )
+            );
+    }
+
+    @Test
+    void streakHistoryIncludesSeriesStartingExactlyAtWindowEnd() {
+        Long habitId = 42L;
+        LocalDate day1 = LocalDate.of(2026, 7, 1);
+        LocalDate day2 = day1.plusDays(1);
+        LocalDate day4 = day1.plusDays(3);
+        LocalDate day5 = day1.plusDays(4);
+
+        givenStreakHistory(
+            habitId,
+            day1,
+            day5,
+            List.of(day1, day2, day4, day5)
+        );
+
+        var response =
+            habitQueryService.getStreakHistory(
+                OWNER_ID,
+                habitId,
+                day1.plusDays(2),
+                day4
+            );
+
+        assertThat(response)
+            .containsExactly(
+                new StreakSeriesResponse(day4, day5, 2, true)
+            );
+    }
+
+    @Test
+    void streakHistoryExcludesSeriesEndingBeforeWindowStart() {
+        Long habitId = 42L;
+        LocalDate day1 = LocalDate.of(2026, 7, 1);
+        LocalDate day2 = day1.plusDays(1);
+        LocalDate day3 = day1.plusDays(2);
+        LocalDate day4 = day1.plusDays(3);
+        LocalDate day5 = day1.plusDays(4);
+
+        givenStreakHistory(
+            habitId,
+            day1,
+            day5,
+            List.of(day1, day2, day4, day5)
+        );
+
+        var response =
+            habitQueryService.getStreakHistory(
+                OWNER_ID,
+                habitId,
+                day3,
+                day3
+            );
+
+        assertThat(response).isEmpty();
+    }
+
+    @Test
+    void streakHistoryExcludesSeriesStartingAfterWindowEnd() {
+        Long habitId = 42L;
+        LocalDate day1 = LocalDate.of(2026, 7, 1);
+        LocalDate day2 = day1.plusDays(1);
+        LocalDate day3 = day1.plusDays(2);
+        LocalDate day4 = day1.plusDays(3);
+        LocalDate day5 = day1.plusDays(4);
+
+        givenStreakHistory(
+            habitId,
+            day1,
+            day5,
+            List.of(day1, day2, day4, day5)
+        );
+
+        var response =
+            habitQueryService.getStreakHistory(
+                OWNER_ID,
+                habitId,
+                day3,
+                day3
+            );
+
+        assertThat(response).isEmpty();
+    }
+
+    @Test
+    void streakHistoryReturnsSeriesConnectedBySkipAcrossWindow() {
+        Long habitId = 42L;
+
+        LocalDate day1 =
+            LocalDate.of(2026, 7, 1);
+        LocalDate skippedDay =
+            LocalDate.of(2026, 7, 2);
+        LocalDate day3 =
+            LocalDate.of(2026, 7, 3);
+
+        Habit habit =
+            new Habit(
+                OWNER_ID,
+                "Read",
+                day1
+                    .atStartOfDay(TEST_ZONE)
+                    .toInstant()
+            );
+
+        when(clock.instant())
+            .thenReturn(
+                day3
+                    .atStartOfDay(TEST_ZONE)
+                    .toInstant()
+            );
+
+        when(
+            habitMapper.findById(
+                OWNER_ID,
+                habitId
+            )
+        ).thenReturn(habit);
+
+        when(
+            completionRepository
+                .findByHabitIdAndCompletedOnBetweenOrderByCompletedOnAsc(
+                    habitId,
+                    day1,
+                    day3
+                )
+        ).thenReturn(
+            List.of(
+                new HabitCompletion(
+                    habitId,
+                    day1
+                ),
+                new HabitCompletion(
+                    habitId,
+                    day3
+                )
+            )
+        );
+
+        when(
+            skipRepository
+                .findByHabitIdAndSkippedOnBetween(
+                    habitId,
+                    day1,
+                    day3
+                )
+        ).thenReturn(
+            List.of(
+                new HabitSkip(
+                    habitId,
+                    skippedDay
+                )
+            )
+        );
+
+        var response =
+            habitQueryService
+                .getStreakHistory(
+                    OWNER_ID,
+                    habitId,
+                    skippedDay,
+                    skippedDay
+                );
+
+        assertThat(response)
+            .containsExactly(
+                new StreakSeriesResponse(
+                    day1,
+                    day3,
+                    2,
+                    true
+                )
+            );
+    }
+
+    @Test
+    void streakHistoryRejectsRawInvertedRangeBeforeLookup() {
+        LocalDate from =
+            LocalDate.of(2026, 7, 2);
+        LocalDate to =
+            LocalDate.of(2026, 7, 1);
+
+        assertThatThrownBy(
+            () ->
+                habitQueryService
+                    .getStreakHistory(
+                        OWNER_ID,
+                        42L,
+                        from,
+                        to
+                    )
+        )
+            .isInstanceOf(
+                InvalidDateRangeException.class
+            );
+
+        verifyNoInteractions(
+            habitMapper,
+            completionRepository,
+            skipRepository
+        );
+    }
+
+    @Test
+    void streakHistoryReturnsEmptyForFutureWindowWithoutReadingHistory() {
+        Long habitId = 42L;
+
+        LocalDate createdDate =
+            LocalDate.of(2026, 7, 1);
+        LocalDate today =
+            LocalDate.of(2026, 7, 10);
+        LocalDate tomorrow =
+            today.plusDays(1);
+
+        Habit habit =
+            new Habit(
+                OWNER_ID,
+                "Read",
+                createdDate
+                    .atStartOfDay(TEST_ZONE)
+                    .toInstant()
+            );
+
+        when(clock.instant())
+            .thenReturn(
+                today
+                    .atStartOfDay(TEST_ZONE)
+                    .toInstant()
+            );
+
+        when(
+            habitMapper.findById(
+                OWNER_ID,
+                habitId
+            )
+        ).thenReturn(habit);
+
+        var response =
+            habitQueryService
+                .getStreakHistory(
+                    OWNER_ID,
+                    habitId,
+                    tomorrow,
+                    tomorrow
+                );
+
+        assertThat(response)
+            .isEmpty();
+
+        verifyNoInteractions(
+            completionRepository,
+            skipRepository
+        );
+    }
+
+    @Test
+    void streakHistoryDoesNotReadSkipsWhenThereAreNoCompletions() {
+        Long habitId = 42L;
+
+        LocalDate createdDate =
+            LocalDate.of(2026, 7, 1);
+        LocalDate today =
+            LocalDate.of(2026, 7, 10);
+
+        Habit habit =
+            new Habit(
+                OWNER_ID,
+                "Read",
+                createdDate
+                    .atStartOfDay(TEST_ZONE)
+                    .toInstant()
+            );
+
+        when(clock.instant())
+            .thenReturn(
+                today
+                    .atStartOfDay(TEST_ZONE)
+                    .toInstant()
+            );
+
+        when(
+            habitMapper.findById(
+                OWNER_ID,
+                habitId
+            )
+        ).thenReturn(habit);
+
+        when(
+            completionRepository
+                .findByHabitIdAndCompletedOnBetweenOrderByCompletedOnAsc(
+                    habitId,
+                    createdDate,
+                    today
+                )
+        ).thenReturn(List.of());
+
+        var response =
+            habitQueryService
+                .getStreakHistory(
+                    OWNER_ID,
+                    habitId,
+                    createdDate,
+                    today
+                );
+
+        assertThat(response)
+            .isEmpty();
+
+        verifyNoInteractions(
+            skipRepository
+        );
+    }
+
+    private void givenStreakHistory(
+        Long habitId,
+        LocalDate createdDate,
+        LocalDate today,
+        List<LocalDate> completionDates
+    ) {
+        Habit habit =
+            new Habit(
+                OWNER_ID,
+                "Read",
+                createdDate
+                    .atStartOfDay(TEST_ZONE)
+                    .toInstant()
+            );
+
+        when(clock.instant())
+            .thenReturn(
+                today
+                    .atStartOfDay(TEST_ZONE)
+                    .toInstant()
+            );
+
+        when(
+            habitMapper.findById(
+                OWNER_ID,
+                habitId
+            )
+        ).thenReturn(habit);
+
+        when(
+            completionRepository
+                .findByHabitIdAndCompletedOnBetweenOrderByCompletedOnAsc(
+                    habitId,
+                    createdDate,
+                    today
+                )
+        ).thenReturn(
+            completionDates
+                .stream()
+                .map(
+                    completedOn ->
+                        new HabitCompletion(
+                            habitId,
+                            completedOn
+                        )
+                )
+                .toList()
+        );
+
+        when(
+            skipRepository
+                .findByHabitIdAndSkippedOnBetween(
+                    habitId,
+                    createdDate,
+                    today
+                )
+        ).thenReturn(List.of());
     }
 }

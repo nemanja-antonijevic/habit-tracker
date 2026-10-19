@@ -16,6 +16,7 @@ import com.nantonijevic.habits.dto.HabitSkipResponse;
 import com.nantonijevic.habits.dto.HabitStatsResponse;
 import com.nantonijevic.habits.dto.HabitStatsView;
 import com.nantonijevic.habits.dto.MonthlyBreakdownResponse;
+import com.nantonijevic.habits.dto.StreakSeriesResponse;
 import com.nantonijevic.habits.dto.UpdateHabitRequest;
 import com.nantonijevic.habits.dto.WeekdayBreakdownResponse;
 import com.nantonijevic.habits.service.HabitCommandService;
@@ -42,6 +43,7 @@ import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -395,6 +397,22 @@ public class HabitController {
             .getMonthlyBreakdown(
                 context.clientId(),
                 id
+            );
+    }
+
+    @GetMapping("/{id}/streak-history")
+    public List<StreakSeriesResponse> getStreakHistory(
+        @PathVariable Long id,
+        @RequestParam LocalDate from,
+        @RequestParam LocalDate to,
+        @ResolvedClientTier ClientContext context
+    ) {
+        return habitQueryService
+            .getStreakHistory(
+                context.clientId(),
+                id,
+                from,
+                to
             );
     }
 

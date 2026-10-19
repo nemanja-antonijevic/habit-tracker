@@ -6,6 +6,7 @@ import com.nantonijevic.habits.client.HabitResponseTransformer;
 import com.nantonijevic.habits.domain.Habit;
 import com.nantonijevic.habits.domain.HabitSkip;
 import com.nantonijevic.habits.dto.MonthlyBreakdownResponse;
+import com.nantonijevic.habits.dto.StreakSeriesResponse;
 import com.nantonijevic.habits.dto.WeekdayBreakdownResponse;
 import com.nantonijevic.habits.service.HabitCommandService;
 import com.nantonijevic.habits.service.HabitQueryService;
@@ -21,6 +22,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
@@ -330,6 +332,62 @@ class HabitControllerTest {
             .getMonthlyBreakdown(
                 OWNER_ID,
                 42L
+            );
+    }
+
+    @Test
+    void streakHistoryPassesOwnerHabitAndRangeToQueryService() {
+        LocalDate from =
+            LocalDate.of(2026, 7, 1);
+        LocalDate to =
+            LocalDate.of(2026, 7, 31);
+
+        List<StreakSeriesResponse> expected =
+            List.of(
+                new StreakSeriesResponse(
+                    LocalDate.of(2026, 7, 3),
+                    LocalDate.of(2026, 7, 6),
+                    2,
+                    false
+                )
+            );
+
+        when(
+            habitQueryService
+                .getStreakHistory(
+                    OWNER_ID,
+                    42L,
+                    from,
+                    to
+                )
+        ).thenReturn(expected);
+
+        HabitController controller =
+            new HabitController(
+                habitCommandService,
+                habitQueryService,
+                Clock.systemUTC(),
+                habitResponseTransformer,
+                habitSkipService
+            );
+
+        var response =
+            controller.getStreakHistory(
+                42L,
+                from,
+                to,
+                CLIENT_CONTEXT
+            );
+
+        assertThat(response)
+            .isSameAs(expected);
+
+        verify(habitQueryService)
+            .getStreakHistory(
+                OWNER_ID,
+                42L,
+                from,
+                to
             );
     }
 }

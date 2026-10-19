@@ -461,4 +461,220 @@ public class HabitTest {
         assertThat(habit.getLongestStreak())
             .isEqualTo(2);
     }
+
+    @Test
+    void calculateStreaksReturnsZerosForEmptyHistory() {
+        Habit habit =
+            new Habit(
+                OWNER_ID,
+                "Read",
+                FIXED
+            );
+
+        Habit.StreakSnapshot snapshot =
+            habit.calculateStreaks(
+                List.of(),
+                LocalDate.of(2026, 7, 10),
+                Set.of()
+            );
+
+        assertThat(snapshot.currentStreak())
+            .isZero();
+
+        assertThat(snapshot.longestStreak())
+            .isZero();
+
+        assertThat(
+            habit.calculateStreakSeries(
+                List.of(),
+                LocalDate.of(2026, 7, 10),
+                Set.of()
+            )
+        )
+            .isEmpty();
+    }
+
+    @Test
+    void streakSeriesAndSnapshotAreDerivedFromTheSameRuns() {
+        Habit habit =
+            new Habit(
+                OWNER_ID,
+                "Read",
+                FIXED
+            );
+
+        LocalDate day1 =
+            LocalDate.of(2026, 7, 1);
+        LocalDate day2 =
+            LocalDate.of(2026, 7, 2);
+        LocalDate day4 =
+            LocalDate.of(2026, 7, 4);
+
+        List<LocalDate> completionDates =
+            List.of(
+                day4,
+                day1,
+                day2
+            );
+
+        List<Habit.StreakSeries> series =
+            habit.calculateStreakSeries(
+                completionDates,
+                day4,
+                Set.of()
+            );
+
+        Habit.StreakSnapshot snapshot =
+            habit.calculateStreaks(
+                completionDates,
+                day4,
+                Set.of()
+            );
+
+        assertThat(series)
+            .containsExactly(
+                new Habit.StreakSeries(
+                    day1,
+                    day2,
+                    2,
+                    false
+                ),
+                new Habit.StreakSeries(
+                    day4,
+                    day4,
+                    1,
+                    true
+                )
+            );
+
+        assertThat(
+            series.stream()
+                .mapToInt(
+                    Habit.StreakSeries::length
+                )
+                .max()
+                .orElseThrow()
+        )
+            .isEqualTo(
+                snapshot.longestStreak()
+            );
+
+        assertThat(
+            series.getLast().length()
+        )
+            .isEqualTo(
+                snapshot.currentStreak()
+            );
+    }
+
+    @Test
+    void calculateStreaksStartsNewRunAfterUnforgivenGap() {
+        Habit habit =
+            new Habit(
+                OWNER_ID,
+                "Read",
+                FIXED
+            );
+
+        LocalDate day1 =
+            LocalDate.of(2026, 7, 1);
+        LocalDate day2 =
+            LocalDate.of(2026, 7, 2);
+        LocalDate day4 =
+            LocalDate.of(2026, 7, 4);
+
+        Habit.StreakSnapshot snapshot =
+            habit.calculateStreaks(
+                List.of(
+                    day4,
+                    day1,
+                    day2
+                ),
+                day4,
+                Set.of()
+            );
+
+        assertThat(snapshot.currentStreak())
+            .isEqualTo(1);
+
+        assertThat(snapshot.longestStreak())
+            .isEqualTo(2);
+    }
+
+    @Test
+    void calculateStreaksConnectsCompletionsAcrossSkippedDay() {
+        Habit habit =
+            new Habit(
+                OWNER_ID,
+                "Read",
+                FIXED
+            );
+
+        LocalDate day1 =
+            LocalDate.of(2026, 7, 1);
+        LocalDate skippedDay =
+            LocalDate.of(2026, 7, 2);
+        LocalDate day3 =
+            LocalDate.of(2026, 7, 3);
+
+        Habit.StreakSnapshot snapshot =
+            habit.calculateStreaks(
+                List.of(
+                    day3,
+                    day1
+                ),
+                day3,
+                Set.of(skippedDay)
+            );
+
+        assertThat(snapshot.currentStreak())
+            .isEqualTo(2);
+
+        assertThat(snapshot.longestStreak())
+            .isEqualTo(2);
+    }
+
+    @Test
+    void calculateStreaksUsesScheduledDaysRatherThanCalendarAdjacency() {
+        Habit habit =
+            new Habit(
+                OWNER_ID,
+                "Workout",
+                FIXED
+            );
+
+        habit.setScheduledDays(
+            EnumSet.of(
+                DayOfWeek.MONDAY,
+                DayOfWeek.WEDNESDAY,
+                DayOfWeek.FRIDAY
+            )
+        );
+
+        LocalDate friday =
+            LocalDate.of(2026, 7, 3);
+        LocalDate monday =
+            LocalDate.of(2026, 7, 6);
+        LocalDate wednesday =
+            LocalDate.of(2026, 7, 8);
+        LocalDate today =
+            LocalDate.of(2026, 7, 10);
+
+        Habit.StreakSnapshot snapshot =
+            habit.calculateStreaks(
+                List.of(
+                    wednesday,
+                    friday,
+                    monday
+                ),
+                today,
+                Set.of()
+            );
+
+        assertThat(snapshot.currentStreak())
+            .isEqualTo(3);
+
+        assertThat(snapshot.longestStreak())
+            .isEqualTo(3);
+    }
 }

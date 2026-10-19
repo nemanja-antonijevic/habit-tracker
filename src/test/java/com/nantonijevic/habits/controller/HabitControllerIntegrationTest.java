@@ -77,7 +77,8 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
         HISTORY,
         COMPLETION_RATE,
         WEEKDAY_BREAKDOWN,
-        MONTHLY_BREAKDOWN
+        MONTHLY_BREAKDOWN,
+        STREAK_HISTORY
     }
 
     @Autowired
@@ -1218,6 +1219,19 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                         "/habits/{id}/monthly-breakdown",
                         foreignHabit.getId()
                     );
+                case STREAK_HISTORY ->
+                    get(
+                        "/habits/{id}/streak-history",
+                        foreignHabit.getId()
+                    )
+                        .param(
+                            "from",
+                            "2026-07-01"
+                        )
+                        .param(
+                            "to",
+                            "2026-07-31"
+                        );
             };
 
         perform(request)
@@ -1815,6 +1829,128 @@ class HabitControllerIntegrationTest extends AbstractIntegrationTest {
                     "$.*.completed",
                     contains(2, 3, 1)
                 )
+            );
+    }
+
+    @Test
+    void streakHistoryIncludesBothDatabaseBoundariesForArchivedHabit()
+        throws Exception {
+
+        LocalDate today =
+            LocalDate.now(APPLICATION_ZONE);
+        LocalDate createdDate =
+            today.minusDays(1);
+
+        Habit habit =
+            new Habit(
+                ownerId,
+                "Archived streak report",
+                createdDate
+                    .atStartOfDay(
+                        APPLICATION_ZONE
+                    )
+                    .toInstant()
+            );
+
+        habit.archive();
+
+        Habit saved =
+            repository.save(habit);
+
+        completionRepository.save(
+            new HabitCompletion(
+                saved.getId(),
+                createdDate
+            )
+        );
+
+        completionRepository.save(
+            new HabitCompletion(
+                saved.getId(),
+                today
+            )
+        );
+
+        perform(
+            get(
+                "/habits/{id}/streak-history",
+                saved.getId()
+            )
+                .param(
+                    "from",
+                    createdDate.toString()
+                )
+                .param(
+                    "to",
+                    today.toString()
+                )
+        )
+            .andExpect(status().isOk())
+            .andExpect(
+                jsonPath("$.length()")
+                    .value(1)
+            )
+            .andExpect(
+                jsonPath("$[0].start")
+                    .value(
+                        createdDate.toString()
+                    )
+            )
+            .andExpect(
+                jsonPath("$[0].end")
+                    .value(
+                        today.toString()
+                    )
+            )
+            .andExpect(
+                jsonPath("$[0].length")
+                    .value(2)
+            )
+            .andExpect(
+                jsonPath("$[0].current")
+                    .value(true)
+            );
+    }
+
+    @Test
+    void streakHistoryReturns400WhenRequiredParameterIsMissing()
+        throws Exception {
+
+        perform(
+            get(
+                "/habits/{id}/streak-history",
+                42L
+            )
+                .param(
+                    "to",
+                    "2026-07-31"
+                )
+        )
+            .andExpect(
+                status().isBadRequest()
+            );
+    }
+
+    @Test
+    void streakHistoryReturns400WhenFromIsAfterTo()
+        throws Exception {
+
+        perform(
+            get(
+                "/habits/{id}/streak-history",
+                42L
+            )
+                .param(
+                    "from",
+                    "2026-07-31"
+                )
+                .param(
+                    "to",
+                    "2026-07-01"
+                )
+        )
+            .andExpect(
+                status().isBadRequest()
             );
     }
 }
