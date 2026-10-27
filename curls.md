@@ -197,6 +197,12 @@ curl -s "http://localhost:8080/habits/1/weekday-breakdown?from=2026-07-01&to=202
 # No parameters; months without completions are present with 0; a habit created in the future -> {}
 # -> { "2026-07": { "completed": 2 }, "2026-08": { "completed": 0 }, "2026-09": { "completed": 3 }, "2026-10": { "completed": 1 } }
 curl -s http://localhost:8080/habits/1/monthly-breakdown -H "$KEY"
+
+# Streak history (both dates required, inclusive); returns whole streaks that intersect the window
+# Measured in a local Debug run on 2026-10-27 with a temporary H2-backed fixture:
+# a gap split the first run, while the skip on Oct 22 joined the later completions.
+curl -s "http://localhost:8080/habits/1/streak-history?from=2026-10-16&to=2026-10-27" -H "$KEY"
+# Observed: [{"start":"2026-10-16","end":"2026-10-17","length":2,"current":false},{"start":"2026-10-20","end":"2026-10-23","length":3,"current":false}]
 ```
 
 ## Due today

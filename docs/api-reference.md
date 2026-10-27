@@ -62,6 +62,7 @@ Filtering applies to all endpoints that return `HabitResponse`, including pagina
 | 19 | `DELETE` | `/habits/{id}/skip` | Remove this calendar month's skip, freeing the month's allowance | Write + event |
 | 20 | `GET` | `/habits/{id}/weekday-breakdown` | Completion rate over a window, split by weekday | Read model (Kafka projection) |
 | 21 | `GET` | `/habits/{id}/monthly-breakdown` | Completions per calendar month, from creation to today | Read model (Kafka projection) |
+| 22 | `GET` | `/habits/{id}/streak-history` | Streak series intersecting a date window | Write (direct read) |
 
 ## Data model
 
@@ -126,6 +127,18 @@ Count for one calendar month. Returned by endpoint 21, as the value of a map key
 | Field | Type | Description |
 |-------|------|-------------|
 | `completed` | `long` | Number of completions recorded in that month, within the habit's lifetime window |
+
+### StreakSeriesResponse
+
+One complete streak series intersecting the requested window. Returned by endpoint 22 in
+chronological order.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `start` | `string` (ISO-8601 date) | First completed date in the series |
+| `end` | `string` (ISO-8601 date) | Last completed date in the series |
+| `length` | `int` | Number of actual completion dates; a forgiven skip does not add to this count |
+| `current` | `boolean` | Whether this series is currently alive under the habit's streak rules |
 
 ### HabitSkipResponse
 
@@ -791,3 +804,61 @@ Behavior:
 
 - **One entry per month, unpaginated.** A habit that is years old returns one entry for every month since its creation (12 per year).
 - **Out-of-window dates fail loudly.** The repository query is bounded to the creation date and today, so every returned date falls into a month of the response. If that contract were ever broken, the endpoint would return `500` rather than silently drop the completion.
+
+## 22. Streak history
+
+```
+GET /habits/{id}/streak-history?from=YYYY-MM-DD&to=YYYY-MM-DD
+```
+
+Both date parameters are required and use ISO-8601 `YYYY-MM-DD` form. The endpoint returns each
+streak series that intersects the inclusive requested window. It is useful for seeing both intact
+runs and gaps in a habit's completion history.
+
+**Response:** `200 OK`, a chronological array of [`StreakSeriesResponse`](#streakseriesresponse).
+Each series is returned whole rather than clipped to the window. A series is included when
+`start <= effectiveTo` and `end >= effectiveFrom`; therefore, a series ending on `from` or starting
+on `to` is included, while one wholly outside the window is excluded.
+
+Example response observed in a local Debug run for a daily habit with one broken run and a later
+run bridged by a skip:
+
+```json
+[
+  { "start": "2026-10-16", "end": "2026-10-17", "length": 2, "current": false },
+  { "start": "2026-10-20", "end": "2026-10-23", "length": 3, "current": false }
+]
+```
+
+| Status | Condition |
+|--------|-----------|
+| `200` | OK; an empty effective window or no intersecting series returns `[]` |
+| `400` | Missing or malformed date parameter, or `from` is after `to` |
+| `401` | Missing, unknown, or revoked `X-Api-Key` |
+| `404` | Habit does not exist, or is owned by another client |
+
+Behavior:
+- **Validation and effective window.** The raw range is validated first, so `from > to` returns
+  `400`. Then `from` is clamped to the habit's creation date and `to` to today, using the
+  application clock and its business time zone. If the effective start is after the effective end,
+  the response is `[]` and neither completion nor skip history is read.
+- **Whole-history calculation, window selection afterward.** The direct repository read loads
+  completions from the habit's creation date through today, inclusive. The service calculates the
+  streak series from that full history and then applies the inclusive window intersection in Java.
+  The database bounds history; it does not apply the requested-window filter.
+- **Completion and skip semantics.** Completions come from the authoritative `habit_completions`
+  table. Skip dates can join scheduled gaps according to the existing domain streak rule, but a skip
+  does not increment `length`. Continuity uses the habit's current schedule, not historical schedule
+  versions; completions on unscheduled dates follow the existing domain rule.
+- **Current marker.** `current` is calculated from the completion history and skip dates using the
+  domain streak rule. `/stats` reads the Kafka-fed stats projection, so its current value may briefly
+  differ after a completion.
+- **Archived habits remain readable.** Ownership, not archive state, controls access.
+- **Read-only.** The endpoint is not cached and publishes no `DashboardChangedEvent`.
+
+### Known limitations
+
+- The full completion and skip histories are loaded for each request; the endpoint is unpaginated
+  and has no history cutoff.
+- Historical schedule changes are not retained for this calculation. The current schedule is used
+  throughout the requested history.

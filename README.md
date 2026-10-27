@@ -49,6 +49,8 @@ Docker-dependent tests (Redis and MySQL via Testcontainers) are named `*IT` and 
 
 - Full endpoint specification: [docs/api-reference.md](docs/api-reference.md)
 - Quick curl examples: [curls.md](curls.md)
+- `GET /habits/{id}/streak-history?from=YYYY-MM-DD&to=YYYY-MM-DD` returns complete streak runs
+  intersecting an inclusive date window; skips may bridge a run but do not count as completions.
 
 ## Design decisions
 
