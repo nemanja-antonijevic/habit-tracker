@@ -820,13 +820,13 @@ Each series is returned whole rather than clipped to the window. A series is inc
 `start <= effectiveTo` and `end >= effectiveFrom`; therefore, a series ending on `from` or starting
 on `to` is included, while one wholly outside the window is excluded.
 
-Example response observed in a local Debug run for a daily habit with one broken run and a later
-run bridged by a skip:
+Example response observed in a local Debug run on 2026-11-02 for a daily habit with one broken run
+and a later run bridged by a skip (`from=2026-10-19&to=2026-10-27`):
 
 ```json
 [
-  { "start": "2026-10-16", "end": "2026-10-17", "length": 2, "current": false },
-  { "start": "2026-10-20", "end": "2026-10-23", "length": 3, "current": false }
+  { "start": "2026-10-20", "end": "2026-10-21", "length": 2, "current": false },
+  { "start": "2026-10-23", "end": "2026-10-25", "length": 2, "current": false }
 ]
 ```
 
